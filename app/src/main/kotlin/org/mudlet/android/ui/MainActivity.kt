@@ -213,7 +213,7 @@ class MainActivity : ComponentActivity() {
     override fun onStop() {
         // The process may be killed in the background: keep what the suggestions learned
         CommandSuggestions.saveAll()
-        EngineClient.detach()
+        EngineClient.detach(leaving = !isChangingConfigurations)
         super.onStop()
     }
 

@@ -79,6 +79,7 @@ enum class SettingsCategory(
     ADVANCED(true, R.string.settings_advanced, R.string.settings_advanced_summary, R.drawable.ic_tune),
     APPEARANCE(false, R.string.settings_appearance, R.string.settings_appearance_summary, R.drawable.ic_palette),
     SCREEN_READER(false, R.string.settings_screen_reader, R.string.settings_screen_reader_summary, R.drawable.ic_accessibility),
+    NOTIFICATIONS(false, R.string.settings_notifications, R.string.settings_notifications_summary, R.drawable.ic_notifications),
     TEST_BUILDS(false, R.string.settings_test_builds, R.string.settings_test_builds_summary, R.drawable.ic_system_update, offered = { PtbUpdates.applies }),
 }
 
@@ -278,6 +279,13 @@ val settingsCatalogue: List<SettingEntry> by lazy {
             R.string.settings_game_links,
             R.string.settings_game_links_hint,
             R.string.settings_game_links_keywords,
+        ),
+        SettingEntry.Switch(
+            SettingsCategory.DISPLAY,
+            Settings.alertOnNewData,
+            R.string.settings_alert_on_new_data,
+            R.string.settings_alert_on_new_data_hint,
+            R.string.settings_alert_on_new_data_keywords,
         ),
         // Experimental, so last on its page; the width is read only while the switch is on, as on desktop Mudlet
         SettingEntry.Switch(
@@ -708,6 +716,13 @@ val settingsCatalogue: List<SettingEntry> by lazy {
             R.string.settings_script_speech_talkback,
             R.string.settings_script_speech_talkback_hint,
             R.string.settings_script_speech_talkback_keywords,
+        ),
+        SettingEntry.Switch(
+            SettingsCategory.NOTIFICATIONS,
+            Settings.gameTextInNotifications,
+            R.string.settings_game_text_in_notifications,
+            R.string.settings_game_text_in_notifications_hint,
+            R.string.settings_game_text_in_notifications_keywords,
         ),
         SettingEntry.Switch(
             SettingsCategory.TEST_BUILDS,

@@ -47,6 +47,9 @@ ControlBridge::ControlBridge(QObject* parent)
     mNotificationTimer.setSingleShot(true);
     mNotificationTimer.setInterval(0);
     connect(&mNotificationTimer, &QTimer::timeout, this, &ControlBridge::showProfiles);
+    mGameTextTimer.setSingleShot(true);
+    mGameTextTimer.setInterval(gameTextDelayMs);
+    connect(&mGameTextTimer, &QTimer::timeout, this, &ControlBridge::reportGameTexts);
 }
 
 void ControlBridge::setEngineControl(IEngineControl* control)
@@ -339,6 +342,8 @@ void ControlBridge::setAppState(const QJsonObject& message)
         sendError(QStringLiteral("setAppState: active and minimized must be true or false"));
         return;
     }
+    // Before the engine hears it: a script's alert() in its sysApplicationFocusChangeEvent handler is to count as away
+    setAway(minimized.toBool());
     mEngineControl->setAppState(active.toBool(), minimized.toBool());
 }
 
@@ -350,6 +355,27 @@ void ControlBridge::setScriptSpeech(const QJsonObject& message)
         return;
     }
     mScriptSpeechToScreenReader = screenReader.toBool();
+}
+
+// A UI that died in front never said it left: without this its tells would stay silent and no game text be noticed
+void ControlBridge::forgetClient()
+{
+    SocketBridge::forgetClient();
+    if (!mAway) {
+        setAway(true);
+    }
+}
+
+void ControlBridge::setAway(bool away)
+{
+    mAway = away;
+    mGameTextTimer.stop();
+    for (OpenProfile& open : mOpen) {
+        open.reportedSeq = open.bridge->lastSeq();
+    }
+#ifdef Q_OS_ANDROID
+    AndroidNotifier::appState(mAway);
+#endif
 }
 
 void ControlBridge::markSeen(const QJsonObject& message)
@@ -491,6 +517,9 @@ void ControlBridge::profileClosed(const QString& name)
         return;
     }
     SocketBridge* bridge = mOpen.at(index).bridge;
+#ifdef Q_OS_ANDROID
+    AndroidNotifier::gameClosed(bridge->profileName());
+#endif
     const bool wasFront = index == mFront;
     if (wasFront) {
         // Not setFront(-1), which would start the engine's default session while others stay open
@@ -520,6 +549,9 @@ void ControlBridge::profileChanged(SocketBridge* profile, Change change)
     switch (change) {
     case Change::lines:
         sendOpenProfiles(false);
+        if (mAway && !mGameTextTimer.isActive()) {
+            mGameTextTimer.start();
+        }
         return;
     case Change::connection:
         sendOpenProfiles(true);
@@ -528,6 +560,9 @@ void ControlBridge::profileChanged(SocketBridge* profile, Change change)
     case Change::attention:
         if (!std::exchange(open->attention, true)) {
             sendOpenProfiles(true);
+        }
+        if (mAway) {
+            reportGameText(*open, true);
         }
         return;
     }
@@ -582,4 +617,23 @@ void ControlBridge::showProfiles()
 #ifdef Q_OS_ANDROID
     AndroidNotifier::showProfiles(shown.first, shown.second);
 #endif
+}
+
+void ControlBridge::reportGameText(OpenProfile& open, bool attention)
+{
+    open.reportedSeq = open.bridge->lastSeq();
+#ifdef Q_OS_ANDROID
+    AndroidNotifier::gameText(open.bridge->profileName(), open.bridge->lastSeq() - open.seenSeq, open.bridge->latestText(), attention);
+#else
+    Q_UNUSED(attention)
+#endif
+}
+
+void ControlBridge::reportGameTexts()
+{
+    for (OpenProfile& open : mOpen) {
+        if (open.bridge->lastSeq() != open.reportedSeq) {
+            reportGameText(open, false);
+        }
+    }
 }

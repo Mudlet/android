@@ -2,14 +2,17 @@ package org.mudlet.android.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
 import androidx.annotation.VisibleForTesting
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.edit
+import org.mudlet.android.engine.EngineNotifications
 import org.mudlet.android.engine.EngineScrollback
 import org.mudlet.android.protocol.ServerEncodings
 import java.io.File
+import java.io.IOException
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -26,6 +29,7 @@ object Settings {
     private const val PROFILES_DIR = "mudlet/profiles"
 
     private var prefs: SharedPreferences? = null
+    private var appContext: Context? = null
 
     /** The console's text size in sp, so the system font scale scales it too. */
     val textSize = IntSetting("textSizeSp", default = 14, range = 8..32)
@@ -112,6 +116,12 @@ object Settings {
 
     /** "Links from the game (OSC 8)": OSC 8 links are shown, and Mudlet tells the game it shows them. */
     val gameLinks = BoolSetting("enableOSC8Hyperlinks", default = true, mudlet = true)
+
+    /**
+     * Desktop Mudlet's "Notify on new data": new text while the app is in the background asks for the player's
+     * attention, which the app's "new game text" notification shows.
+     */
+    val alertOnNewData = BoolSetting("alertOnNewData", default = true, mudlet = true)
 
     /** Whether the sounds, music and videos a game plays are named in its text as they start and stop. */
     val closedCaptions = BoolSetting("enableClosedCaption", default = false, mudlet = true)
@@ -247,6 +257,9 @@ object Settings {
     /** "Colours from my wallpaper": the app's colours from the wallpaper (Material You), on Android 12 and later. */
     val wallpaperColours = BoolSetting("wallpaperColours", default = true)
 
+    /** "Show game text in notifications": a game's newest line on its "new game text" notification, not only the count. */
+    val gameTextInNotifications = MarkerSetting("notificationGameText") { EngineNotifications.gameTextMarker(it) }
+
     private val all = listOf(
         textSize,
         readNewText,
@@ -279,6 +292,7 @@ object Settings {
         closedCaptions,
         blinkText,
         gameLinks,
+        alertOnNewData,
         forceCompressionOff,
         forceGaOff,
         fixLinebreaks,
@@ -318,6 +332,7 @@ object Settings {
         movementPad,
         mapBesideText,
         wallpaperColours,
+        gameTextInNotifications,
     )
 
     /** The settings Mudlet keeps with each profile, whose app values a game added in the app is given. */
@@ -380,6 +395,7 @@ object Settings {
         if (prefs != null) return
         val p = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         prefs = p
+        appContext = context.applicationContext
         consoleBufferSize.range = consoleBufferSize.range.first..EngineScrollback.maxLines(context)
         all.forEach { it.load(p) }
         noteGamesBeforeInputClear(p, File(context.filesDir, PROFILES_DIR))
@@ -504,13 +520,31 @@ object Settings {
         override fun fromMudlet(v: Any) = (v as? Number)?.toDouble()?.takeIf { it.isFinite() && it > 0 }?.let { (50 / it).roundToInt().coerceIn(range) }
     }
 
-    class BoolSetting(key: String, default: Boolean, mudlet: Boolean = false, mudletDefault: Boolean = default) : Setting<Boolean>(key, default, mudlet, mudletDefault) {
+    open class BoolSetting(key: String, default: Boolean, mudlet: Boolean = false, mudletDefault: Boolean = default) : Setting<Boolean>(key, default, mudlet, mudletDefault) {
         override fun fromMudlet(v: Any) = v as? Boolean
 
         override fun read(prefs: SharedPreferences) = prefs.getBoolean(key, default)
 
         override fun write(editor: SharedPreferences.Editor, v: Boolean) {
             editor.putBoolean(key, v)
+        }
+    }
+
+    /**
+     * A switch, off by default, kept as whether the file [marker] gives is there rather than in the preferences: the
+     * :engine process reads it, which cannot read these preferences as they change.
+     */
+    class MarkerSetting(key: String, private val marker: (Context) -> File) : BoolSetting(key, default = false) {
+        override fun read(prefs: SharedPreferences) = appContext?.let { marker(it).exists() } ?: false
+
+        override fun write(editor: SharedPreferences.Editor, v: Boolean) {
+            val file = appContext?.let(marker) ?: return
+            val stored = try {
+                if (v) file.createNewFile() || file.exists() else file.delete() || !file.exists()
+            } catch (e: IOException) {
+                false
+            }
+            if (!stored) Log.w("Settings", "$key: could not ${if (v) "make" else "remove"} the file the engine reads")
         }
     }
 

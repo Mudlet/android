@@ -15,12 +15,15 @@ import android.os.Looper
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import org.mudlet.android.protocol.GameNotices
+import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
 object EngineNotifications {
     const val CHANNEL_ENGINE = "engine"
     const val CHANNEL_TELLS = "tells"
+    const val CHANNEL_NEW_TEXT = "newText"
     const val ENGINE_NOTIFICATION_ID = 1
 
     /** The open profile a notification's tap makes the front, on the launcher Activity's intent. */
@@ -30,6 +33,21 @@ object EngineNotifications {
 
     // The id of each profile's group summary for its tells
     private val summaryIds = ConcurrentHashMap<String, Int>()
+
+    // The id of each profile's "new game text" notification
+    private val noticeIds = ConcurrentHashMap<String, Int>()
+
+    private val notices = GameNotices()
+
+    // Only once the UI has said so: with none, as when the engine starts alone, the app is not in front
+    @Volatile
+    private var inFront = false
+
+    /**
+     * There while the player allows a game's text on its "new game text" notification: a file, as this process cannot
+     * read the UI's SharedPreferences as they change.
+     */
+    fun gameTextMarker(context: Context) = File(context.filesDir, "notification-game-text")
 
     /**
      * An open game, as the engine notification lists it: its profile's name and its connection status, one of the
@@ -54,6 +72,10 @@ object EngineNotifications {
         engine.description = context.getString(R.string.channel_engine_description)
         nm.createNotificationChannel(engine)
         nm.createNotificationChannel(NotificationChannel(CHANNEL_TELLS, context.getString(R.string.channel_tells), NotificationManager.IMPORTANCE_DEFAULT))
+        // Low, as desktop Mudlet only flashes the taskbar; the player can raise it in the system's settings
+        val newText = NotificationChannel(CHANNEL_NEW_TEXT, context.getString(R.string.channel_new_text), NotificationManager.IMPORTANCE_LOW)
+        newText.description = context.getString(R.string.channel_new_text_description)
+        nm.createNotificationChannel(newText)
     }
 
     // The app's launcher Activity: this module does not know the UI's classes. With [profile], the tap makes it the
@@ -161,10 +183,13 @@ object EngineNotifications {
     /**
      * Called from C++ (AndroidNotifier.cpp) on Qt's thread in the :engine process. A tell from a [profile] is filed
      * under it, in a group of its own, and its tap opens that profile's game; [profile] is empty for one from none.
+     * It goes after [timeoutMs], as the script's showNotification() asked, or stays with 0. Silent while the app is in
+     * front.
      */
     @JvmStatic
+    @JvmOverloads
     @SuppressLint("MissingPermission") // mayPost checks POST_NOTIFICATIONS: lint does not look into it
-    fun postTell(context: Context, profile: String, title: String, text: String) {
+    fun postTell(context: Context, profile: String, title: String, text: String, timeoutMs: Long = 0) {
         if (!mayPost(context)) {
             Log.i(EngineService.TAG, "not posting a tell: the user has not allowed notifications")
             return
@@ -175,7 +200,11 @@ object EngineNotifications {
             .setContentTitle(title)
             .setContentText(text)
             .setAutoCancel(true)
+            .setSilent(inFront)
+            // The lock screen shows it as the player's system setting for private notifications says
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setContentIntent(openUi(context, profile, id))
+        if (timeoutMs > 0) n.setTimeoutAfter(timeoutMs)
         if (profile.isNotEmpty()) n.setSubText(profile).setGroup(profile)
         NotificationManagerCompat.from(context).notify(id, n.build())
         if (profile.isEmpty()) return
@@ -192,5 +221,61 @@ object EngineNotifications {
             .setContentIntent(openUi(context, profile, summaryId))
             .build()
         NotificationManagerCompat.from(context).notify(summaryId, summary)
+    }
+
+    /** Called from C++ (AndroidNotifier.cpp) on Qt's thread in the :engine process: the app left the front ([away]) or came back. */
+    @JvmStatic
+    fun appState(context: Context, away: Boolean) {
+        inFront = !away
+        synchronized(notices) { notices.appState(away) }.forEach { cancelNotice(context, it) }
+        // Once a leaving, not once a second as a game's text comes
+        if (away && !mayPost(context)) Log.i(EngineService.TAG, "not posting new game text: the user has not allowed notifications")
+    }
+
+    /**
+     * Called from C++ (AndroidNotifier.cpp) on Qt's thread in the :engine process, while the app is away: [profile]
+     * has [unread] lines the player has not read, the newest [latest]; [attention] when it asks for the player's
+     * attention, as desktop Mudlet would flash its taskbar.
+     */
+    @JvmStatic
+    fun gameText(context: Context, profile: String, unread: Long, latest: String, attention: Boolean) {
+        val show = synchronized(notices) { notices.text(profile, unread, latest, attention, gameTextMarker(context).exists()) } ?: return
+        showNotice(context, show)
+    }
+
+    /** Called from C++ (AndroidNotifier.cpp) on Qt's thread in the :engine process as [profile] closes. */
+    @JvmStatic
+    fun gameClosed(context: Context, profile: String) {
+        synchronized(notices) { notices.closed(profile) }?.let { cancelNotice(context, it) }
+    }
+
+    @SuppressLint("MissingPermission") // mayPost checks POST_NOTIFICATIONS: lint does not look into it
+    private fun showNotice(context: Context, show: GameNotices.Show) {
+        if (!mayPost(context)) return
+        val id = noticeIds.getOrPut(show.game) { nextTellId.getAndIncrement() }
+        val count = if (show.unread > 0) {
+            context.resources.getQuantityString(R.plurals.new_text_unread, show.unread.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(), show.unread)
+        } else {
+            context.getString(R.string.new_text_attention)
+        }
+        fun notice(text: String) = NotificationCompat.Builder(context, CHANNEL_NEW_TEXT)
+            .setSmallIcon(R.drawable.ic_engine)
+            .setContentTitle(show.game)
+            .setContentText(text)
+        // What a locked screen shows when the player hides private notifications' content there: never the game's text
+        val public = notice(count).build()
+        val n = notice(show.latest ?: count)
+            .setOnlyAlertOnce(true)
+            .setAutoCancel(true)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPublicVersion(public)
+            .setContentIntent(openUi(context, show.game, id))
+        if (show.latest != null) n.setSubText(count)
+        NotificationManagerCompat.from(context).notify(id, n.build())
+    }
+
+    private fun cancelNotice(context: Context, cancel: GameNotices.Cancel) {
+        val id = noticeIds[cancel.game] ?: return
+        NotificationManagerCompat.from(context).cancel(id)
     }
 }

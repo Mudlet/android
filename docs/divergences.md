@@ -78,6 +78,23 @@ When the app goes to the background, the open profiles are saved as Mudlet saves
 front, so waiting for a close as the desktop does would lose what the session changed; raising `sysExitEvent` would
 tell scripts the profile is closing when it is not.
 
+## New game text while the app is away
+
+Where desktop Mudlet flashes its taskbar button, the app posts a notification on its "New game text" channel, one per
+game, that follows the game's unread count until the player comes back, as a flash needs a window to flash and the app
+has none in the background. The game asks for it when desktop would flash: its "Notify on new text in the background"
+(Mudlet's `mAlertOnNewData`, on by default, as desktop's), a script's `alert()` or the game's bell. The notification
+shows the game's newest line only when the player turns on "Show game text in notifications", and never on a locked
+screen that hides private content.
+
+## A script's notification
+
+A script's `showNotification()` stays in the notification shade until the player dismisses it unless the script gave
+how long it shows, where desktop's tray message goes after the system's 10 s: a phone in a pocket would miss it. It is
+silent while the app is in front, as the player is already looking at the game, and a locked screen shows it only as
+the player's system setting for private content allows. It has no Reply: desktop's tray message has none, and a reply
+from the shade would send to the game without its screen in view.
+
 ## A script and the clipboard
 
 A script's `getClipboardText()` reads the device's clipboard only while the app is in front, as Android lets only the
@@ -626,6 +643,9 @@ settings page at all times, and are Mudlet's own, shared by every game, as on th
 
 Differences the app chose rather than had to, which the user may decide otherwise:
 
+- Game text left off new-text notifications until the player turns it on, and the new-text channel quiet (no sound, no
+  pop-up), as the taskbar flash is ("New game text while the app is away").
+- A script's notification silent while the app is in front, and with no Reply ("A script's notification").
 - One web page a script opens each time the player comes back to the app, where the desktop opens every page a script
   asks for ("A script opens a web page").
 - No reinstall of a package the repository has at the version installed, and a Refresh button the desktop's Package

@@ -5,6 +5,9 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.w3c.dom.Element
+import java.io.File
+import javax.xml.parsers.DocumentBuilderFactory
 
 /** The settings screen's search, and how it names a page to open */
 class SettingsSearchTest {
@@ -26,6 +29,13 @@ class SettingsSearchTest {
         assertTrue(searchMatches("ecran", french))
         assertTrue(searchMatches("ÉCRAN", french))
         assertTrue(searchMatches("écran", listOf("ecran")))
+    }
+
+    @Test
+    fun mxpFindsTheGamesLinksSwitch_whoseHintSaysWhereMxpLinksAreTurnedOff() {
+        val strings = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(File("src/main/res/values/strings.xml")).getElementsByTagName("string")
+        val english = (0 until strings.length).map { strings.item(it) as Element }.associate { it.getAttribute("name") to it.textContent }
+        assertTrue(searchMatches("MXP", listOf("settings_game_links", "settings_game_links_hint", "settings_game_links_keywords").map(english::getValue)))
     }
 
     @Test

@@ -936,12 +936,13 @@
          undone at, besides the words of their names and descriptions, separated by commas. Use the words a player of
          your language would search for. -->
     <string name="settings_undo_wrap_keywords">wrap, word wrap, line length, columns, width, triggers</string>
-    <!-- A switch on a game's Display page: show the links a game puts in its text (OSC 8 is the name of the terminal
-         code games use for them; keep it as it is), and tell the game they are shown -->
+    <!-- A switch on a game's Display page: show the OSC 8 links a game puts in its text (OSC 8 is the name of the
+         terminal code games use for them; keep it as it is), and tell the game they are shown -->
     <string name="settings_game_links">Links from the game (OSC 8)</string>
     <!-- Under "Links from the game (OSC 8)", what the switch does. A link can send a command, fill in the input line or
-         open a web page -->
-    <string name="settings_game_links_hint">Shows the links a game puts in its text, which can send a command, fill in the input line or open a web page, and tells the game they work. Off, they are plain text.</string>
+         open a web page. The switch covers OSC 8 links only: links a game sends with MXP (MUD eXtension Protocol) are
+         turned on and off by the switch "MXP" on the game's "Connection" page. Keep "OSC 8" and "MXP" as they are. -->
+    <string name="settings_game_links_hint">Shows the OSC 8 links a game puts in its text, which can send a command, fill in the input line or open a web page, and tells the game they work. Off, they are plain text. MXP links follow the MXP switch on the Connection page.</string>
     <!-- Words a player might search the settings for to find "Links from the game (OSC 8)", besides the words of its
          name and description, separated by commas. Use the words a player of your language would search for. -->
     <string name="settings_game_links_keywords">hyperlinks, links, URL, web, click, tap</string>

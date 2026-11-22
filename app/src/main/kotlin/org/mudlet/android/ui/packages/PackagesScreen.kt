@@ -351,7 +351,7 @@ private fun PackageRow(
                 version,
                 author.takeIf { it.isNotEmpty() }?.let { stringResource(R.string.packages_author, it) },
             )
-            if (facts.isNotEmpty()) Text(facts.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
+            if (facts.isNotEmpty()) Text(facts.joinToString(" · "), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (note != null) Text(note, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
             if (description.isNotEmpty()) {
                 Text(

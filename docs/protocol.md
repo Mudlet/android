@@ -11,7 +11,7 @@ How the UI process talks to the engine process, as implemented by:
 the same messages and fields, and that all of them, and the Python client, use the same protocol version. Change
 this file in the same commit as the code.
 
-The current version is **48**.
+The current version is **49**.
 
 ## Transport
 
@@ -93,7 +93,7 @@ message, in backquotes, with `?` after an optional one, and the fields of the ob
 | `setAppMapSize` | `w`, `h`, `scale` | Asks for the app's own map, drawn at `w` by `h` of the map's pixels with `scale` device pixels to each, and sent as `appMap` whenever it changes ("The app's map" below); `w` and `h` 0 stop it. `w` and `h` are whole numbers, both above 0 or both 0; `scale` a number from 1 to 4. libmudlet keeps it for each profile that loads later, until the UI that asked goes, and refuses a map of more than 4096 device pixels a side. |
 | `appMapPointer` | `type`, `x`, `y`, `button`?, `modifiers`?, `wheelY`? | As `mapPointer`, at `x`, `y` in the map's pixels of the last `appMap` (`THeadlessSession::appMapPointer()`). |
 | `findRooms` | `text`, `id`? | Looks for the rooms of the map whose name holds `text`, ignoring case, as `searchRoom()` matches, and the room whose id `text` is (`THeadlessSession::findRooms()`), answered by `rooms`, best first. `text` must not be blank. |
-| `showRoom` | `room` | Centres the app's map on the room whose id is `room`, a whole number, and selects it, as a pan on the desktop's mapper does (`THeadlessSession::showRoomOnAppMap()`): it stays until the player moves or a script centres the map. |
+| `showRoom` | `map`, `room` | Centres the map `map` (as in `moveMap`) on the room whose id is `room`, a whole number, until the player moves or a script centres the map. The app's map also selects it, as a pan and a click on the desktop's mapper do (`THeadlessSession::showRoomOnAppMap()`); the mapper's leaves its selection and raises no event, as choosing it in the desktop's map search does (`THeadlessSession::centreMapOnRoom()`, a Mudlet patch the app carries until Mudlet has it). |
 | `moveMap` | `map`, `dx`, `dy`, `zoom`, `x`, `y`, `seq` | A drag and a pinch on a map (`THeadlessSession::moveMapView()`, "Moving a map" below): `map` is `app` for `appMap` or `mapper` for `map`; what its last frame drew moves by `dx`, `dy` of its pixels, then zooms by `zoom`, a number above 0 (2 shows the rooms twice as large), about the point `x`, `y` of it. `seq` is a whole number from 1, which the UI counts up for each `moveMap`; the frames of that map drawn after it carry it in `view.moved`. |
 | `showMapLevel` | `map`, `level` | Shows another level, a whole number, of the area the map `map` (as in `moveMap`) drew last, about the same point, as the desktop mapper's level buttons do (`THeadlessSession::showMapLevel()`): until the player moves to another room or a `followPlayer`. A level is one of `view.levels`. |
 | `showMapArea` | `map`, `area` | Shows the area whose id is `area` on the map `map`, as picking it in the desktop mapper's area box does (`THeadlessSession::showMapArea()`): following the player where they are in it, else about the room nearest the middle of the level shown, or of its level with the most rooms, until the player moves to another room or a `followPlayer`. |
@@ -185,6 +185,8 @@ number from 1 to 4.
 `setAppMapSize`, `appMapPointer` and `showRoom` too are answered only when refused, and `findRooms` by `rooms` or
 `error`, as above. libmudlet refuses all but `setAppMapSize` while no profile is open, `appMapPointer` before the
 app's map has been drawn and as `mapPointer`, and `showRoom` for a room that is not in the map.
+`showRoom` is also refused for a `map` other than `app` or `mapper`, and for `mapper` before that map has been drawn,
+as `moveMap` is.
 
 `moveMap` and `followPlayer` too are answered only when refused, with `error` as above. libmudlet refuses both while no
 profile is open, before that map has been drawn (for `mapper`, while no script has opened a map), for a `map` other
@@ -564,7 +566,7 @@ profile with a map has one without a script that opens a mapper.
 - Once asked for, it opens the map for scripts as opening the desktop's mapper does (`Host::mapOpen()`), until the
   profile closes, 0 by 0 or not: with no script mapper, a mapper script's `centerview()` moves the player on it, which
   it follows, and `getPlayerRoom()` answers.
-- It has its own centre and selection: a `showRoom`, or a press, moves only it. The zoom is the area's, as on the
+- It has its own centre and selection: a `showRoom` for it, or a press, moves only it. The zoom is the area's, as on the
   desktop, so a `wheel` on it zooms a mapper of the same area too. `setMapViewOnly` switches both.
 - A left `press` selects the room under it and a left `doubleClick` walks to it, as on the mapper; neither raises
   `sysMapWindowMousePressEvent` or `sysMapAreaChanged`, as these are for a script's map, and `getMapSelection()` does
@@ -927,7 +929,8 @@ and `EngineLink` then tracks `lastSeq` from those lines.
 
 ## Versioning and compatibility
 
-As implemented in version 48, which took `setScreenSize` and `setMainWindowSize` on the control socket, as the sizes
+As implemented in version 49, which added the map to centre to `showRoom` (`map`);
+version 48 took `setScreenSize` and `setMainWindowSize` on the control socket, as the sizes
 the profiles opened after them start with;
 version 47 added the profile's proxy (`getProxy`, `setProxy`, `proxy`, and `proxyPassword`
 in `openProfile`);

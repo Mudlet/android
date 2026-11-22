@@ -79,7 +79,7 @@ public:
     QString setAppMapSize(const QSize& size, double scale) override;
     QString appMapPointer(const PointerEvent& event) override;
     std::variant<RoomList, QString> findRooms(const QString& text) const override;
-    QString showRoom(int room) override;
+    QString showRoom(MapTarget map, int room) override;
     QString moveMap(MapTarget map, const QPointF& pan, double zoom, const QPointF& about, qint64 seq) override;
     QString followPlayer(MapTarget map) override;
     QString showMapLevel(MapTarget map, int level) override;

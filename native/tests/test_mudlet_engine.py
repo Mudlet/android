@@ -1210,7 +1210,8 @@ def bridge_refusals():
             ({"t": "setMapViewOnly", "viewOnly": 1}, "viewOnly must be true or false"),
             ({"t": "setMapViewOnly"}, "viewOnly must be true or false"),
             ({"t": "appMapPointer", "type": "release", "x": 1, "y": 2}, "type must be press, doubleClick or wheel"),
-            ({"t": "showRoom", "room": "1"}, "room must be a whole number"),
+            ({"t": "showRoom", "map": "app", "room": "1"}, "room must be a whole number"),
+            ({"t": "showRoom", "room": 1}, "map must be app or mapper"),
             ({"t": "moveMap", "map": "both", "dx": 0, "dy": 0, "zoom": 1, "x": 0, "y": 0, "seq": 1}, "map must be app or mapper"),
             ({"t": "moveMap", "map": "app", "dx": "0", "dy": 0, "zoom": 1, "x": 0, "y": 0, "seq": 1}, "dx, dy, zoom, x and y must be numbers"),
             ({"t": "moveMap", "map": "app", "dx": 0, "dy": 0, "zoom": 1, "y": 0, "seq": 1}, "dx, dy, zoom, x and y must be numbers"),
@@ -3279,8 +3280,8 @@ def app_map():
     c.send({"t": "setAppMapSize", "w": 400, "h": 300, "scale": 2})
     m = seen_or_next(c, lambda m: m["t"] in ("appMap", "error"), seen, since)
     check(m == empty, f"with no profile open the app's map has nothing to draw: {m}")
-    for request in ({"t": "appMapPointer", "type": "press", "x": 1, "y": 1, "button": 1}, {"t": "showRoom", "room": 1},
-                    {"t": "findRooms", "text": "hall"}):
+    for request in ({"t": "appMapPointer", "type": "press", "x": 1, "y": 1, "button": 1}, {"t": "showRoom", "map": "app", "room": 1},
+                    {"t": "showRoom", "map": "mapper", "room": 1}, {"t": "findRooms", "text": "hall"}):
         m = c.ask(request, answers=("error", "rooms"), collect=seen)
         check(m.get("message") == f"{request['t']}: no profile running", f"{request['t']} with no profile open is refused: {m}")
     m = c.ask({"t": "setAppMapSize", "w": 3000, "h": 10, "scale": 2}, answers=("error",), collect=seen)
@@ -3297,6 +3298,9 @@ def app_map():
     check(m["message"] == "appMapPointer: The app's map has not been drawn yet; the position is in what renderAppMap() drew.",
           f"a press on a map with no rooms, so never drawn, is refused: {m}")
     check(not any(m["t"] == "appMap" and m["w"] for m in seen[since:]), "a profile whose map has no rooms draws nothing")
+    m = c.ask({"t": "showRoom", "map": "mapper", "room": 1}, answers=("error",), collect=seen)
+    check(m["message"] == "showRoom: No map is open; a script opens one, as with openMapWidget().",
+          f"showRoom on the script's mapper before a script opened one is refused: {m}")
 
     # As in map_view(): rooms 1 and 2 two apart, the player in 1, but at the area's first zoom of 20, as setMapZoom()
     # needs a script's mapper: on a map 300 high room 1 is in the middle and room 2 30 pixels to its right; the PNG is
@@ -3415,10 +3419,10 @@ def app_map():
 
     # Room 2 is selected now, so drawn shaded rather than red: room 1, the player's, is what shows where the map moved
     since = len(seen)
-    c.send({"t": "showRoom", "room": 2})
+    c.send({"t": "showRoom", "map": "app", "room": 2})
     m = seen_or_next(c, lambda m: m["t"] == "error" or (m["t"] == "appMap" and m["w"] and pixel(m, left) == player), seen, since)
     check(m["t"] == "appMap" and pixel(m, middle) != player, f"showRoom centres the app's map on that room: {m.get('message', m['t'])}")
-    m = c.ask({"t": "showRoom", "room": 99}, answers=("error",), collect=seen)
+    m = c.ask({"t": "showRoom", "map": "app", "room": 99}, answers=("error",), collect=seen)
     check(m["message"] == "showRoom: There is no room 99 in the map.", f"showRoom of a room not in the map is refused: {m}")
 
     since = len(seen)
@@ -3438,7 +3442,7 @@ def app_map():
         seen_or_next(c, script_map_centred, seen, since, timeout=15)
         # Room 3 is 4 rooms north of room 1, so centred on 3 the app's map has room 1 60 pixels below its middle
         since = len(seen)
-        c.send({"t": "showRoom", "room": 3})
+        c.send({"t": "showRoom", "map": "app", "room": 3})
         below = (middle[0], middle[1] + 60)
         m = seen_or_next(c, lambda m: m["t"] == "appMap" and m["w"] and pixel(m, below) == player, seen, since)
     except TimeoutError as e:
@@ -3455,6 +3459,35 @@ def app_map():
     seen_or_next(c, shown("marker"), seen, since)
     check(not any(m["t"] in ("line", "tail") and m["text"] == "map pressed" for m in seen[since:]),
           "a press on the app's map still sends it again, and raises no script's mapper event")
+
+    # showRoom on the script's mapper centres it as the desktop's map search does: room 1, selected by a press, stays
+    # the selection, and no event is raised; room 3 is 4 rooms north of room 1, so room 2 is then 60 pixels lower
+    selection = 'local s = getMapSelection() echo("selection " .. table.concat(s.rooms or {}, ",") .. "\\n")'
+    since = len(seen)
+    c.send({"t": "mapPointer", "type": "press", "x": room1[0], "y": room1[1], "button": 1})
+    seen_or_next(c, shown("map pressed"), seen, since)
+    c.send({"t": "runLua", "code": selection})
+    m = seen_or_next(c, lambda m: m["t"] in ("line", "tail") and m["text"].startswith("selection "), seen, since)
+    check(m["text"] == "selection 1", f"a press on the script's mapper selects room 1: {m}")
+    since = len(seen)
+    c.send({"t": "showRoom", "map": "mapper", "room": 3})
+    lower = (room2[0], room2[1] + 60)
+    try:
+        seen_or_next(c, lambda m: m["t"] == "error" or (m["t"] == "map" and (m["w"], m["h"]) == (400, 300)
+                     and png_pixel(base64.b64decode(m["png"]), *lower)[:3] == (200, 30, 30)), seen, since, timeout=15)
+    except TimeoutError as e:
+        check(False, f"showRoom on the script's mapper centres it on that room: {e}")
+    errors = [m for m in seen[since:] if m["t"] == "error"]
+    check(not errors, f"showRoom on the script's mapper is not refused: {errors}")
+    check(all(pixel(m, below) == player for m in seen[since:] if m["t"] == "appMap" and m["w"]),
+          "showRoom on the script's mapper leaves the app's map where it was")
+    c.send({"t": "runLua", "code": selection})
+    m = seen_or_next(c, lambda m: m["t"] in ("line", "tail") and m["text"].startswith("selection "), seen, since)
+    check(m["text"] == "selection 1", f"showRoom on the script's mapper leaves its selection: {m}")
+    check(not any(m["t"] in ("line", "tail") and m["text"] == "map pressed" for m in seen[since:]),
+          "showRoom on the script's mapper raises no sysMapWindowMousePressEvent")
+    m = c.ask({"t": "showRoom", "map": "mapper", "room": 99}, answers=("error",), collect=seen)
+    check(m["message"] == "showRoom: There is no room 99 in the map.", f"showRoom on the script's mapper of a room not in the map is refused: {m}")
 
     c.close()
     c = Client(SOCK)

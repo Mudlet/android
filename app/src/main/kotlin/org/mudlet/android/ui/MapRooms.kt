@@ -12,15 +12,22 @@ import org.mudlet.android.protocol.MapViewInfo
 import org.mudlet.android.protocol.Requests
 import org.mudlet.android.protocol.RoomEdit
 import org.mudlet.android.protocol.RoomInfo
+import org.mudlet.android.protocol.RoomMatch
 
 /**
  * What the player asks of one map, [target], about its rooms and areas (docs/protocol.md, `roomInfo`, `mapAreas`,
- * `showMapLevel`, `showMapArea`, `walkToRoom`): the room they picked, shown until closed, the map's areas to switch to,
- * and its levels; and the edits of the map ("Editing a map"), each of which shows the room it gives. Requests go with
- * [send], each answer's `id` from [newId]; [mover]'s moves not yet drawn are dropped when the map jumps to another
- * level or area. Main thread only.
+ * `showMapLevel`, `showMapArea`, `walkToRoom`, `findRooms`, `showRoom`): the room they picked, shown until closed, the
+ * rooms they searched for, the map's areas to switch to, and its levels; and the edits of the map ("Editing a map"),
+ * each of which shows the room it gives. Requests go with [send], each answer's `id` from [newId]; [mover]'s moves not
+ * yet drawn are dropped when the map jumps to another level or area. Main thread only.
  */
 internal class MapRooms(private val target: MapTarget, private val mover: MapMover, private val newId: () -> Long, private val send: (JSONObject) -> Boolean) {
+    /**
+     * What findRooms found for [text]: null [rooms] until the engine answers; [more] when it found more than it sent;
+     * [refusal], with no rooms, why the engine refused it.
+     */
+    data class RoomSearch(val text: String, val rooms: List<RoomMatch>?, val more: Boolean = false, val refusal: String? = null)
+
     /** The room picked, as the engine last told it; null while none is. */
     var room by mutableStateOf<RoomInfo?>(null)
         private set
@@ -40,6 +47,11 @@ internal class MapRooms(private val target: MapTarget, private val mover: MapMov
     var linking by mutableStateOf<ExitLink?>(null)
         private set
 
+    /** The last room search, until the player closes its results or picks one. */
+    var search by mutableStateOf<RoomSearch?>(null)
+        private set
+
+    private var pendingSearch: Long? = null
     private var pendingRoom: Long? = null
     private var pendingAreas: Long? = null
     private var pendingEnvs: Long? = null
@@ -135,6 +147,41 @@ internal class MapRooms(private val target: MapTarget, private val mover: MapMov
         return send(Requests.showMapArea(target, area))
     }
 
+    /** The rooms whose name holds [text], or whose number it is, into [search]. False as for [ProfileSession.send]. */
+    fun find(text: String): Boolean {
+        val id = newId()
+        if (!send(Requests.findRooms(text, id))) return false
+        pendingSearch = id
+        search = RoomSearch(text, null)
+        return true
+    }
+
+    /** Whether [id] is that of this map's search the engine has not answered. */
+    fun searching(id: Long?): Boolean = id != null && id == pendingSearch
+
+    /** The player closed the search's results. */
+    fun closeSearch() {
+        pendingSearch = null
+        search = null
+    }
+
+    /**
+     * Centres the map on [room] and closes the search's results, keeping what was searched for to search again. False
+     * as for [ProfileSession.send].
+     */
+    fun showRoom(room: Int): Boolean {
+        closeSearch()
+        return send(Requests.showRoom(target, room))
+    }
+
+    /** The engine's answer to [find]: false when this map did not ask it, or asked again since. */
+    fun onRooms(message: EngineMessage.Rooms): Boolean {
+        if ((message.replyTo as? Number)?.toLong() != pendingSearch) return false
+        pendingSearch = null
+        search = RoomSearch(message.text, message.rooms, message.more)
+        return true
+    }
+
     /** The engine's answer to [ask]: false when this map did not ask it, or asked again since. */
     fun onRoom(message: EngineMessage.Room): Boolean {
         if ((message.replyTo as? Number)?.toLong() != pendingRoom) return false
@@ -172,6 +219,7 @@ internal class MapRooms(private val target: MapTarget, private val mover: MapMov
         // A refused edit leaves the room shown as it was
         when (request) {
             "roomInfo" -> close()
+            "findRooms" -> closeSearch()
             "mapAreas" -> pendingAreas = null
             "mapEnvs" -> pendingEnvs = null
             in ROOM_EDITS -> pendingRoom = null
@@ -180,6 +228,7 @@ internal class MapRooms(private val target: MapTarget, private val mover: MapMov
 
     /** What the last link did not answer is not answered; a new engine instance may have another map. */
     fun onAttached(sameInstance: Boolean) {
+        if (pendingSearch != null) closeSearch()
         pendingRoom = null
         pendingAreas = null
         pendingEnvs = null
@@ -197,6 +246,6 @@ internal class MapRooms(private val target: MapTarget, private val mover: MapMov
         private val ROOM_EDITS = setOf("editRoom", "setRoomExit", "lockRoomExit", "addRoom")
 
         /** The requests a map sends from here, whose refusal is shown on the map that sent the last of them. */
-        val REQUESTS = setOf("roomInfo", "walkToRoom", "mapAreas", "showMapLevel", "showMapArea", "deleteRoom", "setPlayerRoom", "renameArea", "mapEnvs") + ROOM_EDITS
+        val REQUESTS = setOf("roomInfo", "walkToRoom", "mapAreas", "showMapLevel", "showMapArea", "deleteRoom", "setPlayerRoom", "renameArea", "mapEnvs", "findRooms", "showRoom") + ROOM_EDITS
     }
 }

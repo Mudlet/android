@@ -182,7 +182,10 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
     internal fun onError(message: EngineMessage.Error) {
         val request = message.message.substringBefore(':')
         val reason = message.message.substringAfter(':').trim()
-        if (session.appMap.onRefused(request, reason, (message.replyTo as? Number)?.toLong())) return
+        val replyTo = (message.replyTo as? Number)?.toLong()
+        if (session.appMap.onRefused(request, reason, replyTo)) return
+        // One to a search asked again since is not shown, as its answer would not be
+        if (request == "findRooms" && !mapRooms.searching(replyTo)) return
         if (request == "moveMap" || request == "followPlayer") mapMover.clear()
         if (request in MapRooms.REQUESTS) mapRooms.onRefused(request)
         if (request in MAP_REQUESTS) mapRefusal = reason

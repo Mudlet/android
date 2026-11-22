@@ -12,7 +12,7 @@ import kotlin.math.roundToInt
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 48
+const val PROTOCOL_VERSION = 49
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 private const val QUOTE = '"'.code.toByte()
@@ -1271,8 +1271,11 @@ object Requests {
     /** Answered by [EngineMessage.Rooms] with [id] as its replyTo: the rooms whose name holds [text], and the room whose id it is. */
     fun findRooms(text: String, id: Long): JSONObject = JSONObject().put("t", "findRooms").put("text", text).put("id", id)
 
-    /** The app's map centred on [room], which it selects, until the player moves. Answered only by an Error, when refused. */
-    fun showRoom(room: Int): JSONObject = JSONObject().put("t", "showRoom").put("room", room)
+    /**
+     * [map] centred on [room] until the player moves: the app's selecting it, the mapper's leaving its selection, as the desktop's
+     * map search does. Answered only by an Error, when refused.
+     */
+    fun showRoom(map: MapTarget, room: Int): JSONObject = JSONObject().put("t", "showRoom").put("map", map.wire).put("room", room)
 
     /**
      * What the last frame of [map] drew moved by [dx], [dy] of its pixels, then zoomed by [zoom] (above 0; 2 shows the rooms twice

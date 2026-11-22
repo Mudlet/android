@@ -1121,7 +1121,8 @@ class ProtocolTest {
             Requests.appMapPointer(MapPointerType.WHEEL, 0.0, 0.0, 0, 0, -120).toMap(),
         )
         assertEquals(mapOf("t" to "findRooms", "text" to "hall", "id" to 7L), Requests.findRooms("hall", 7).toMap())
-        assertEquals(mapOf("t" to "showRoom", "room" to 12), Requests.showRoom(12).toMap())
+        assertEquals(mapOf("t" to "showRoom", "map" to "app", "room" to 12), Requests.showRoom(MapTarget.APP, 12).toMap())
+        assertEquals(mapOf("t" to "showRoom", "map" to "mapper", "room" to 12), Requests.showRoom(MapTarget.MAPPER, 12).toMap())
     }
 
     @Test

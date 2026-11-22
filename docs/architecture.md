@@ -703,10 +703,20 @@ The game screen draws `map` in the mapper window (`ui/game/ScriptMap.kt`, fitted
   corner nearest the area's, as a desktop's mapper is a few dp across on a phone; it grows over the console's text
   but stops short of another window it was clear of. The panel is as wide as three buttons or the map, at most as high
   as the map, scrolls, and goes over what is under it, but for a map that did not grow it goes only where it covers no
-  other window. Otherwise, and on a page or in a scroll box, the panel is a strip at the window's top, at most three
+  other window. Otherwise, and in a scroll box, the panel is a strip at the window's top, at most three
   fifths of it, and the map fills the rest, cut where the window is cut. TalkBack reads the map, then the panel.
   It reads the panel's parts in the order they show, however far it has scrolled, as Compose would otherwise read
   one scrolled out of sight first; the button that centres the map goes under the others in a strip narrower than four.
+- On a page the map fills the pane (`MapPage`), as a docked mapper fills its dock on the desktop, with its bar and the
+  button that centres it along its bottom, as the app's map has them. Over its top, on a backing as the bar's that keeps
+  them readable over any map, are the app's map's room search and the map's buttons, beside the field or under it where
+  it would be too narrow for its label, then the search's results, or else the map info; the desktop's search is over
+  its modern map too (`MapSearchPanel`). The search is the app's map's (`MapRooms.find`), its results the same; a tap on
+  one sends `showRoom` with `map` `mapper`, which centres the mapper window's map on the room and leaves its selection,
+  as the desktop's search does, and asks for the room. Back closes the results, as does the page going. TalkBack reads
+  what is over the map, then the map, as on the app's map. The engine still draws the window's size and scripts read it.
+  Where the keyboard leaves the page shorter than what is over the map, that scrolls, and a map shorter than its 48 dp
+  touch target, all of it under them, is left out until the keyboard goes.
 - A map `MapCorner` places shows its panel only on request (`CornerMap`; desktop's shows it until the button between
   the two hides it, docs/divergences.md): over the map's top corner on the side it is drawn against is a small button, drawn 32 dp and touched within 48, "Show the
   map's controls", which shows the panel and then, as "Hide the map's controls", hides it again, as Back does and a
@@ -769,8 +779,8 @@ The game screen draws `map` in the mapper window (`ui/game/ScriptMap.kt`, fitted
   following the player; three wheel notches while a frame has no `view`), and a switch, on while the map is edited,
   sends `setMapViewOnly`; it follows the next `map`, not the tap. A refused request shows the engine's reason at the
   map's bottom, above the bar and the button that centres it, until dismissed or the next request; a refusal of
-  `roomInfo`, `walkToRoom`, `mapAreas`, `showMapLevel`, `showMapArea` or an edit of the map (`MapRooms.REQUESTS`) is
-  shown on the map that sent the last of them.
+  `roomInfo`, `walkToRoom`, `mapAreas`, `showMapLevel`, `showMapArea`, `showRoom` or an edit of the map (`MapRooms.REQUESTS`) is
+  shown on the map that sent the last of them, and one of `findRooms` on the map whose search it names by `id`.
 - With TalkBack the map reads as "Map of the game", viewing or editing, and "not following you" while it does not
   follow the player, in the windows' group. A double tap selects the room in its middle and shows it, and its actions
   walk there, zoom, scroll the map up, down, left and right by a third of it, show the level above or below, and
@@ -1255,7 +1265,7 @@ keeps the profiles' passwords in the KeyStore.
 | `renderMap()` at the mapper window's size onto an image larger by `setMapScale`'s scale, at each `mapRepaintRequested` and `mapViewOnlyChanged` and when the mapper shows or changes size; `mapPointer()`, `setMapViewOnly()` | `map`, when it changed, and to a UI that attaches while the mapper shows; `mapPointer`, `setMapViewOnly`, answered only when refused |
 | `renderAppMap()` at the size and scale `setAppMapSize` asks, at the same cues; `appMapPointer()`, `findRooms()`, `showRoomOnAppMap()`, `closeAppMap()` (carried patch) | `appMap`, when it changed, empty while nothing is drawn, and not to a UI that attaches, as the size goes with the UI that asked (`closeAppMap()`, as at 0 by 0); `setAppMapSize`, `appMapPointer`, `showRoom`, answered only when refused; `findRooms` answered by `rooms` |
 | `moveMapView()`, `followPlayerOnMap()`, `mapView()` after each `renderMap()` and `renderAppMap()` (carried patch) | `moveMap`, `followPlayer`, answered only when refused; `view` in `map` and `appMap`, with the last `moveMap` drawn as `moved` |
-| `roomInfo()`, `mapAreas()`, `walkToRoom()`, `showMapLevel()`, `showMapArea()`, `findRooms()` ranked with steps, `MapView::levels` (carried patch) | `roomInfo` answered by `room`, `mapAreas` by `areas`; `walkToRoom`, `showMapLevel`, `showMapArea`, answered only when refused; `levels` in `view`; `areaId`, `match` and `steps` in `rooms` |
+| `roomInfo()`, `mapAreas()`, `walkToRoom()`, `showMapLevel()`, `showMapArea()`, `centreMapOnRoom()`, `findRooms()` ranked with steps, `MapView::levels` (carried patch) | `roomInfo` answered by `room`, `mapAreas` by `areas`; `walkToRoom`, `showMapLevel`, `showMapArea`, `showRoom` for the mapper, answered only when refused; `levels` in `view`; `areaId`, `match` and `steps` in `rooms` |
 | `editRoom()`, `setRoomExit()`, `lockRoomExit()`, `addRoomBeside()`, `deleteRoom()`, `setPlayerRoom()`, `renameArea()`, `mapEnvs()` (carried patch) | `editRoom`, `setRoomExit`, `lockRoomExit`, `addRoom` answered by `room`; `deleteRoom`, `setPlayerRoom`, `renameArea` answered only when refused; `mapEnvs` by `envs`; `symbol`, `env`, `color`, `weight` and `locked` in `room` |
 | `offeredMapUrl()` at `profileLoaded` and at each `offeredMapChanged`; `downloadOfferedMap()`, `cancelMapOperation()`; `mapProgressStarted`, `mapProgressChanged`, `mapProgressCancelDisabled`, `mapDownloadFinished` (carried patch) | `mapDownload`, with the URL's host only, when it changed (progress at most once a percent), and to a UI that attaches; `downloadMap`, `cancelMapDownload`, answered only when refused |
 
@@ -1397,6 +1407,8 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
   and raising no `sysMapWindowMousePressEvent`; `findRooms` by name, ignoring case, and by number; `showRoom` centring
   the map on a room, and refused for one not in the map; `setMapViewOnly` with only this map open; a UI that goes
   stopping it, and the next sent none until it asks; and 0 by 0 stopping it;
+- `showRoom` for the mapper's map: refused before a script opened one, then centring it on a room while the selection
+  stays, with no `sysMapWindowMousePressEvent` and the app's map left on the player, and refused for a room not in it;
 - a map's rooms (`map_rooms`): `roomInfo` with a room's area, place, exits (locked ones marked, special exits by
   command) and steps from the player's room over unlocked exits, -1 where there is no way; `findRooms` ranked exact,
   prefix, then within the name, the player's area then the nearest first, and by id; `mapAreas` by name;
@@ -1536,7 +1548,7 @@ device shows, below the UI's debug hook:
   `activateCommand`; the map: drawn in the mapper
   window, a tap, a double tap and a pinch sent as `mapPointer` at the frame's point under them, the zoom buttons and
   TalkBack's actions, the switch to editing, a refusal until dismissed, a frame of another size not drawn, and the
-  docked map as a page, and a small one drawn larger with its panel beside it, none of the panel over the map, on
+  docked map as a page under its controls, whose room search centres it on a room, and a small one drawn larger with its panel beside it, none of the panel over the map, on
   five screens (`ScriptMapCornerTest`); an MXP frame's tabs (`ScriptFrameTabsTest`): each page a tab by its title, at least 48 dp,
   selected for the page in front, a tap on another sending `selectFrameTab` and the page brought forward then drawn,
   and stacked, the page called by its tab's title, the tabs at the top of the pane, which stays open on that page,

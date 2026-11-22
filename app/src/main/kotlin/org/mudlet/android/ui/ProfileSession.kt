@@ -797,12 +797,12 @@ class ProfileSession internal constructor(
                     post { appMap.onAppMap(message, frame) }
                 }
 
-                is EngineMessage.Rooms -> post { appMap.onRooms(message) }
-
                 is EngineMessage.SettingValues -> post { onSettings(message) }
 
                 // Each map asks with its own ids, so only the one that asked takes the answer
                 is EngineMessage.Room -> post { appMap.rooms.onRoom(message) || windows.mapRooms.onRoom(message) }
+
+                is EngineMessage.Rooms -> post { appMap.onRooms(message) || windows.mapRooms.onRooms(message) }
 
                 is EngineMessage.Areas -> post { appMap.rooms.onAreas(message) || windows.mapRooms.onAreas(message) }
 

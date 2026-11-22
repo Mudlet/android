@@ -44,6 +44,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -57,6 +58,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -169,6 +171,9 @@ private const val INFO_FRACTION = 0.4f
 // The most of a mapper window its panel takes, above the map, where it has no room beside the window
 private const val PANEL_FRACTION = 0.6f
 
+// The map's buttons beside a page's room search: zoom out, zoom in and the switch to editing
+private const val PAGE_BUTTONS = 3
+
 // TalkBack's reach is worked out against a fit at least this large, so a map not laid out yet does not divide by 0
 private const val MIN_FIT_SCALE = 0.01f
 
@@ -218,14 +223,15 @@ private object MapperWindow : MapSource {
 
 /**
  * The mapper window (docs/architecture.md, "The map") shown at [placed]'s rect: the engine's last `map`, while it is the
- * window's size, drawn as [MapView] draws it, which the engine is asked to draw at the scale it is shown at, and its
- * [MapPanel], which covers none of it. With room beside the window for the panel, the two are where [corner] says, a
- * window small for the game area drawn larger, and the panel shows on request ([CornerMap]); without, the map fills the
- * window's rect below its panel. One group for TalkBack, the map before its panel, after the game screen's own
- * controls; [modifier] goes on the group.
+ * window's size, drawn as [MapView] draws it, which the engine is asked to draw at the scale it is shown at. With room
+ * beside the window for its [MapPanel], the two are where [corner] says, a window small for the game area drawn larger,
+ * and the panel shows on request ([CornerMap]); as a [page] of the dock, the map fills the page under its controls
+ * ([MapPage]); otherwise the map fills the window's rect below its panel. Only on a page do the controls cover the map.
+ * One group for TalkBack, after the game screen's own controls, the map read before its panel, but after its controls
+ * on a page; [modifier] goes on the group.
  */
 @Composable
-internal fun ScriptMap(placed: PlacedWindow, corner: MapCorner?, density: Density, modifier: Modifier = Modifier) {
+internal fun ScriptMap(placed: PlacedWindow, corner: MapCorner?, density: Density, modifier: Modifier = Modifier, page: Boolean = false) {
     val window = placed.window
     val map = EngineClient.front.windows.map
     // One of another size is from before the mapper changed size (docs/protocol.md, "The map")
@@ -251,6 +257,8 @@ internal fun ScriptMap(placed: PlacedWindow, corner: MapCorner?, density: Densit
             map = { placedMap -> MapView(MapperWindow, frame, fit, viewOnly, drawn, placedMap.background(CONSOLE_BACKGROUND), panel = true) },
             panel = { aligned -> MapPanel(MapperWindow, frame, fit, viewOnly, drawn, info, infoHeight, aligned) },
         )
+    } else if (page) {
+        MapPage(placed, frame, viewOnly, drawn, info, density, modifier.then(group))
     } else {
         val rect = placed.rect
         val height = with(density) { rect.h.toDp() }
@@ -263,6 +271,57 @@ internal fun ScriptMap(placed: PlacedWindow, corner: MapCorner?, density: Densit
                 val fit = remember(window.w, window.h, placed, box) { MapFit(window.w, window.h, placed.wholeIn(box)) }
                 LaunchedEffect(fit.renderScale, density.density) { EngineClient.front.windows.setMapScale(fit.renderScale, density.density) }
                 MapView(MapperWindow, frame, fit, viewOnly, drawn, Modifier.fillMaxSize().background(CONSOLE_BACKGROUND).readAsOne(0f), panel = true)
+            }
+        }
+    }
+}
+
+/**
+ * A mapper window that is a page of the game area's dock, at [placed]'s rect: the map fills the page, as a docked
+ * mapper fills its dock on the desktop, with [MapView]'s own controls along its bottom, and over its top, on a backing
+ * that keeps them readable over any map, the room search ([RoomSearchField]) beside its [MapButtons], then the
+ * search's results ([RoomResults]), whose room the map is centred on, or else the frame's map info, [info]. Back closes
+ * the results, and they close when the page goes. TalkBack reads what is over the map's top, then the map, as on the
+ * app's map.
+ */
+@Composable
+private fun MapPage(placed: PlacedWindow, frame: ImageBitmap?, viewOnly: Boolean, drawn: Boolean, info: MapInfo?, density: Density, modifier: Modifier) {
+    val window = placed.window
+    val rect = placed.rect
+    val rooms = MapperWindow.rooms
+    DisposableEffect(rooms) { onDispose { rooms.closeSearch() } }
+    // While the search is edited its last results are not shown, as on the app's map
+    var editing by remember { mutableStateOf(false) }
+    val search = rooms.search
+    val resultsShown = search != null && !editing
+    // Registered after the page's own, so it takes Back first while they are shown
+    BackHandler(resultsShown) { rooms.closeSearch() }
+    val fit = remember(window.w, window.h, placed) { MapFit(window.w, window.h, placed.wholeIn(PxRect(0f, 0f, rect.w, rect.h))) }
+    LaunchedEffect(fit.renderScale, density.density) { EngineClient.front.windows.setMapScale(fit.renderScale, density.density) }
+    BoxWithConstraints(Modifier.placeAt(rect, density).then(modifier).background(CONSOLE_BACKGROUND)) {
+        // The keyboard can leave the page shorter than the map's touch target, all of it under the controls: it waits for room
+        if (maxHeight >= MAP_BUTTON_SIZE) MapView(MapperWindow, frame, fit, viewOnly, drawn, Modifier.fillMaxSize().readAsOne(1f))
+        // Where the field beside the buttons would be too narrow for its label, they go under it, as on the app's map
+        val beside = maxWidth - CONTROLS_PADDING * 4 - MAP_BUTTON_SIZE * PAGE_BUTTONS >= searchFieldLeast()
+        Column(Modifier.fillMaxSize().padding(CONTROLS_PADDING).readAsOne(0f)) {
+            Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.surface.copy(alpha = CONTROLS_ALPHA)) {
+                val buttons = @Composable { MapButtons(MapperWindow, frame, fit, viewOnly, drawn) }
+                // The keyboard can leave the page shorter than them: they scroll, so the field it types into is not cut off
+                Column(Modifier.verticalScroll(rememberScrollState()).padding(CONTROLS_PADDING), horizontalAlignment = Alignment.End) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RoomSearchField(rooms, Modifier.weight(1f).onFocusChanged { editing = it.hasFocus })
+                        if (beside) buttons()
+                    }
+                    if (!beside) Row { buttons() }
+                }
+            }
+            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+                // As on the app's map: squeezed, their close button and rows would be cut off
+                if (search != null && resultsShown && maxHeight >= RESULTS_HEAD + RESULT_ROW) {
+                    RoomResults(rooms, search, Modifier.fillMaxWidth().heightIn(max = maxOf(maxHeight * RESULTS_FRACTION, RESULTS_HEAD + RESULT_ROW)))
+                } else if (info != null) {
+                    MapInfoBox(info, Modifier.heightIn(max = maxHeight * INFO_FRACTION))
+                }
             }
         }
     }

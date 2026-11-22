@@ -196,6 +196,14 @@ sealed class SettingEntry(
     ) : Value(category, label, hint, keywords)
 
     /**
+     * The app's language: a row with the current one, which opens the list of the languages it is translated into.
+     * Not a [Settings] value: Android 13 and later keep it themselves, for their own settings' list too (AppLanguage).
+     */
+    class Language(category: SettingsCategory, label: Int, hint: Int, keywords: Int) : SettingEntry(category, label, hint, keywords) {
+        override val key get() = LANGUAGE_KEY
+    }
+
+    /**
      * A whole number: a slider, with buttons a step [less] and [more], its value as [valueText] has it and, for the
      * console's text size, a [sample] of game text at that size.
      */
@@ -219,6 +227,9 @@ sealed class SettingEntry(
 
 /** The key of desktop Mudlet's "Clear stored media", which is no setting's. */
 const val CLEAR_MEDIA_KEY = "clearStoredMedia"
+
+/** The key of the app's language, which is no setting's. */
+const val LANGUAGE_KEY = "appLanguage"
 
 // The names of the sixteen ANSI colours, in the order of [Settings.ansiColours]
 internal val ANSI_COLOUR_LABELS = listOf(
@@ -659,6 +670,7 @@ val settingsCatalogue: List<SettingEntry> by lazy {
             refusal = { name -> if (logFileNameRefused(name)) R.string.settings_log_file_name_refused else null },
             shownWhen = { owner -> owner.value(Settings.logNameFormat) == LogNameFormat.NAMED },
         ),
+        SettingEntry.Language(SettingsCategory.APPEARANCE, R.string.settings_language, R.string.settings_language_hint, R.string.settings_language_keywords),
         SettingEntry.Number(
             SettingsCategory.APPEARANCE,
             Settings.textSize,
@@ -733,7 +745,9 @@ val settingsCatalogue: List<SettingEntry> by lazy {
         ),
     ).also { entries ->
         // A game's page changes the game's settings in Mudlet, which only Mudlet's own settings can be
-        check(entries.all { it.category.forGame == ((it as? SettingEntry.Value)?.setting?.mudlet ?: true) }) { "a game category holds exactly the Mudlet settings, and the actions" }
+        check(entries.all { it.category.forGame == ((it as? SettingEntry.Value)?.setting?.mudlet ?: (it is SettingEntry.Action)) }) {
+            "a game category holds exactly the Mudlet settings, and the actions"
+        }
     }
 }
 

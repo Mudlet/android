@@ -50,6 +50,7 @@ import org.mudlet.android.ui.EngineClient
 import org.mudlet.android.ui.ListSegment
 import org.mudlet.android.ui.MudletScaffold
 import org.mudlet.android.ui.SectionHeader
+import java.util.Locale
 
 /** The settings hub's test tag. */
 const val SETTINGS_HUB_TAG = "settingsHub"
@@ -243,5 +244,10 @@ private fun SettingEntry.searchTexts(resources: Resources): List<String> {
     hint?.let { texts += resources.getString(it) }
     if (this is SettingEntry.Choice<*>) choiceLabels().mapTo(texts) { resources.getString(it) }
     if (this is SettingEntry.Pick) choices.mapNotNull(choiceLabel).mapTo(texts) { resources.getString(it) }
+    // Each language by its own name and by its name in the app's, as a player may search either
+    if (this is SettingEntry.Language) {
+        val shown = resources.configuration.locales[0]
+        appLanguageChoices.flatMapTo(texts) { listOf(it.name, Locale.forLanguageTag(it.tag).getDisplayName(shown)) }
+    }
     return texts
 }

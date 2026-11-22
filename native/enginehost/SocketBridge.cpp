@@ -804,8 +804,9 @@ void SocketBridge::handleMessage(const QJsonObject& message)
     } else if (type == QLatin1String("findRooms")) {
         findRooms(message);
     } else if (type == QLatin1String("showRoom")) {
+        const std::optional<IEngine::MapTarget> map = mapTarget(message);
         const std::optional<int> room = wholeNumber(message.value(QLatin1String("room")));
-        refuse(type, room ? mEngine->showRoom(*room) : QStringLiteral("room must be a whole number"));
+        refuse(type, !map ? QStringLiteral("map must be app or mapper") : room ? mEngine->showRoom(*map, *room) : QStringLiteral("room must be a whole number"));
     } else if (type == QLatin1String("moveMap")) {
         refuse(type, moveMap(message));
     } else if (type == QLatin1String("followPlayer")) {

@@ -21,7 +21,6 @@ import org.mudlet.android.protocol.MapPointerType
 import org.mudlet.android.protocol.MapTarget
 import org.mudlet.android.protocol.POINTER_LEFT
 import org.mudlet.android.protocol.Requests
-import org.mudlet.android.protocol.RoomMatch
 import org.mudlet.android.protocol.TextBehindMap
 import org.mudlet.android.ui.game.Announcer
 import org.mudlet.android.ui.game.MapSource
@@ -64,12 +63,6 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
             }
         }
     }
-
-    /**
-     * What findRooms found for [text]: null [rooms] until the engine answers; [more] when it found more than it sent;
-     * [refusal], with no rooms, why the engine refused it.
-     */
-    data class RoomSearch(val text: String, val rooms: List<RoomMatch>?, val more: Boolean = false, val refusal: String? = null)
 
     /**
      * An `appMap`'s frame as [decode] made it: its [bitmap] and [tones], null where there is none, and with [textBehind]
@@ -132,20 +125,15 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
     var downloadAsked by mutableStateOf(false)
         private set
 
-    /** The last room search, until the player closes its results or picks one. */
-    var search by mutableStateOf<RoomSearch?>(null)
-        private set
-
     /**
-     * The rooms found for the room an exit leads to ([findDestinations]), apart from [search], so the exits dialog lists
-     * them over either map; null while none is asked. A refusal shows here, not on the map.
+     * The rooms found for the room an exit leads to ([findDestinations]), apart from either map's [MapRooms.search], so
+     * the exits dialog lists them over either map; null while none is asked. A refusal shows here, not on the map.
      */
-    var destinations by mutableStateOf<RoomSearch?>(null)
+    var destinations by mutableStateOf<MapRooms.RoomSearch?>(null)
         private set
 
     // The size the engine was last given since the UI attached; null when it could not be sent
     private var sent: Size? = Size.NONE
-    private var pendingSearch: Long? = null
     private var pendingDestinations: Long? = null
 
     // Every findDestinations not yet answered, the last one's id being pendingDestinations: an earlier one's refusal is
@@ -200,22 +188,18 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
         }
     }
 
-    /** The engine's answer to [findRooms] or [findDestinations]; one to an earlier search is not shown. */
-    internal fun onRooms(message: EngineMessage.Rooms) {
-        val id = (message.replyTo as? Number)?.toLong() ?: return
-        destinationRequests.remove(id)
-        val found = RoomSearch(message.text, message.rooms, message.more)
-        when (id) {
-            pendingSearch -> {
-                pendingSearch = null
-                search = found
-            }
-
-            pendingDestinations -> {
-                pendingDestinations = null
-                destinations = found
-            }
+    /**
+     * The engine's answer to [findDestinations] or this map's [MapRooms.find]: false when it is neither, as for the mapper
+     * window's search. One to an earlier search is not shown.
+     */
+    internal fun onRooms(message: EngineMessage.Rooms): Boolean {
+        val id = (message.replyTo as? Number)?.toLong() ?: return false
+        if (!destinationRequests.remove(id)) return rooms.onRooms(message)
+        if (id == pendingDestinations) {
+            pendingDestinations = null
+            destinations = MapRooms.RoomSearch(message.text, message.rooms, message.more)
         }
+        return true
     }
 
     /**
@@ -231,12 +215,13 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
             return true
         }
         if (files.onRefused(request, reason)) return true
+        // A search's refusal names it, so it is the map's that asked it whichever map sent last
         when (request) {
-            "appMapPointer", "showRoom", "setAppMapSize", "cancelMapDownload" -> {}
+            "appMapPointer", "setAppMapSize", "cancelMapDownload" -> {}
             "downloadMap" -> downloadAsked = false
             "setMapViewOnly" -> if (!askedViewOnly) return false
-            "findRooms" -> closeSearch()
             "moveMap", "followPlayer" -> if (mover.awaiting) mover.clear() else return false
+            "findRooms" -> if (rooms.searching(replyTo)) rooms.onRefused(request) else return false
             in MapRooms.REQUESTS -> if (askedRooms) rooms.onRefused(request) else return false
             else -> return false
         }
@@ -273,7 +258,6 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
         files.onAttached(sameInstance)
         rooms.onAttached(sameInstance)
         sent = Size.NONE
-        if (pendingSearch != null) closeSearch()
         if (pendingDestinations != null) closeDestinations()
         destinationRequests.clear()
         update()
@@ -298,16 +282,6 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
         refused = null
     }
 
-    /** The rooms whose name holds [text], or whose number it is, into [search]. False as for [ProfileSession.send]. */
-    fun findRooms(text: String): Boolean {
-        refused = null
-        val id = session.newRequestId()
-        if (!session.send(Requests.findRooms(text, id))) return false
-        pendingSearch = id
-        search = RoomSearch(text, null)
-        return true
-    }
-
     /** The rooms whose name holds [text], or whose number it is, into [destinations]. False as for [ProfileSession.send]. */
     fun findDestinations(text: String): Boolean {
         val id = session.newRequestId()
@@ -318,7 +292,7 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
         }
         pendingDestinations = id
         destinationRequests += id
-        destinations = RoomSearch(text, null)
+        destinations = MapRooms.RoomSearch(text, null)
         return true
     }
 
@@ -326,16 +300,6 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
     fun closeDestinations() {
         pendingDestinations = null
         destinations = null
-    }
-
-    /**
-     * Centres the map on [room], selected, and closes the search's results, keeping what was searched for to search
-     * again. False as for [ProfileSession.send].
-     */
-    fun showRoom(room: Int): Boolean {
-        refused = null
-        closeSearch()
-        return session.send(Requests.showRoom(room))
     }
 
     /**
@@ -380,12 +344,6 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
     /** The player read [end], or it was shown long enough; a later end stays. */
     fun dismissDownloadEnd(end: EngineMessage.MapDownload) {
         if (downloadEnd === end) downloadEnd = null
-    }
-
-    /** The player closed the search's results. */
-    fun closeSearch() {
-        pendingSearch = null
-        search = null
     }
 
     companion object {

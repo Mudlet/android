@@ -2121,12 +2121,13 @@ std::variant<RoomList, QString> MudletProfile::findRooms(const QString& text) co
     return list;
 }
 
-QString MudletProfile::showRoom(int room)
+QString MudletProfile::showRoom(MapTarget map, int room)
 {
     if (!loaded()) {
         return QStringLiteral("no profile running");
     }
-    return mSession->showRoomOnAppMap(room) ? QString() : mSession->errorString();
+    const bool shown = map == MapTarget::app ? mSession->showRoomOnAppMap(room) : mSession->centreMapOnRoom(room);
+    return shown ? QString() : mSession->errorString();
 }
 
 QString MudletProfile::moveMap(MapTarget map, const QPointF& pan, double zoom, const QPointF& about, qint64 seq)

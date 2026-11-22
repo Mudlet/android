@@ -109,21 +109,22 @@ import org.mudlet.android.ui.AppMapClient
 import org.mudlet.android.ui.CONSOLE_BACKGROUND
 import org.mudlet.android.ui.ConsoleColors
 import org.mudlet.android.ui.EngineClient
+import org.mudlet.android.ui.MapRooms
 
 // How much smaller the map in front is at the end of a back gesture
 private const val BACK_SHRINK = 0.1f
 
 // A result's row, room for its two lines, and the results' head, its close button's; they take at most this much of
 // the room under the search, leaving some of the map to see where they are over
-private val RESULT_ROW = 56.dp
-private val RESULTS_HEAD = 48.dp
-private const val RESULTS_FRACTION = 0.75f
+internal val RESULT_ROW = 56.dp
+internal val RESULTS_HEAD = 48.dp
+internal const val RESULTS_FRACTION = 0.75f
 
 // An outlined field's padding on both sides of its label, and its trailing button
 private val SEARCH_FIELD_CHROME = 16.dp + 48.dp + 16.dp
 
 // The map's three buttons and the file menu's beside the search, each its 48 dp touch target
-private val MAP_BUTTON_SIZE = 48.dp
+internal val MAP_BUTTON_SIZE = 48.dp
 private val MAP_BUTTONS_WIDTH = MAP_BUTTON_SIZE * 4
 private val SEARCH_ROW_PADDING = 8.dp
 
@@ -308,7 +309,7 @@ internal fun FullScreenMap(onClose: () -> Unit, textBehind: Boolean, onBackProgr
     }
     // Its results are of this time the map was in front
     val appMap = EngineClient.front.appMap
-    DisposableEffect(appMap) { onDispose { appMap.closeSearch() } }
+    DisposableEffect(appMap) { onDispose { appMap.rooms.closeSearch() } }
     // Before AskForMap below asks for the frame, which is cut out as it is decoded
     DisposableEffect(textBehind) {
         AppMapClient.textBehind = textBehind
@@ -325,11 +326,11 @@ internal fun FullScreenMap(onClose: () -> Unit, textBehind: Boolean, onBackProgr
         // While the search is edited its last results are not shown: they are of the text before, and they would sit
         // where the keyboard leaves the map no room
         var editing by remember { mutableStateOf(false) }
-        val search = appMap.search
+        val search = appMap.rooms.search
         val resultsShown = search != null && !editing
         // Registered after the map's own, so each takes Back first while it is shown
         BackHandler(appMap.rooms.room != null) { appMap.rooms.close() }
-        BackHandler(resultsShown) { appMap.closeSearch() }
+        BackHandler(resultsShown) { appMap.rooms.closeSearch() }
         // Where the field beside the buttons would be too narrow for its label, as in a long translation or a large
         // font, they go under it. The field stays where it is in either, or it would lose its text
         val beside = maxWidth - SEARCH_ROW_PADDING * 2 - MAP_BUTTONS_WIDTH >= searchFieldLeast()
@@ -357,7 +358,7 @@ internal fun FullScreenMap(onClose: () -> Unit, textBehind: Boolean, onBackProgr
                 }
                 Column(horizontalAlignment = Alignment.End) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        RoomSearchField(Modifier.weight(1f).onFocusChanged { editing = it.hasFocus })
+                        RoomSearchField(appMap.rooms, Modifier.weight(1f).onFocusChanged { editing = it.hasFocus })
                         if (beside) buttons()
                     }
                     if (!beside) Row(Modifier.unplacedIf(buttonsAway)) { buttons() }
@@ -398,7 +399,7 @@ internal fun FullScreenMap(onClose: () -> Unit, textBehind: Boolean, onBackProgr
                 // for it: squeezed, their close button and rows would be cut off
                 if (search != null && resultsShown && maxHeight >= RESULTS_HEAD + RESULT_ROW) {
                     val results = maxOf(maxHeight * RESULTS_FRACTION, RESULTS_HEAD + RESULT_ROW)
-                    RoomResults(search, Modifier.align(Alignment.TopStart).fillMaxWidth().padding(horizontal = 8.dp).heightIn(max = results))
+                    RoomResults(appMap.rooms, search, Modifier.align(Alignment.TopStart).fillMaxWidth().padding(horizontal = 8.dp).heightIn(max = results))
                 }
             }
         }
@@ -474,7 +475,7 @@ private fun Modifier.unplacedIf(away: Boolean) = layout { measurable, constraint
 
 /** The narrowest the room search's field shows its label whole in: the label's width, beside the field's padding and its button. */
 @Composable
-private fun searchFieldLeast(): Dp {
+internal fun searchFieldLeast(): Dp {
     val label = stringResource(R.string.app_map_search)
     val style = MaterialTheme.typography.bodyLarge
     val measurer = rememberTextMeasurer()
@@ -482,9 +483,9 @@ private fun searchFieldLeast(): Dp {
     return remember(label, style, density) { with(density) { measurer.measure(label, style, maxLines = 1).size.width.toDp() } } + SEARCH_FIELD_CHROME
 }
 
-/** The room search's field: Enter, or its button, asks the engine for the rooms whose name holds the text, or whose number it is. */
+/** The room search's field: Enter, or its button, asks [rooms]' map for the rooms whose name holds the text, or whose number it is. */
 @Composable
-private fun RoomSearchField(modifier: Modifier = Modifier) {
+internal fun RoomSearchField(rooms: MapRooms, modifier: Modifier = Modifier) {
     var text by rememberSaveable { mutableStateOf("") }
     val attached = EngineClient.enginePid > 0
     val keyboard = LocalSoftwareKeyboardController.current
@@ -497,7 +498,7 @@ private fun RoomSearchField(modifier: Modifier = Modifier) {
         if (text.isBlank()) return
         keyboard?.hide()
         focus.clearFocus()
-        EngineClient.front.appMap.findRooms(text.trim())
+        rooms.find(text.trim())
     }
 
     OutlinedTextField(
@@ -520,23 +521,22 @@ private fun RoomSearchField(modifier: Modifier = Modifier) {
 }
 
 /**
- * The search's results: how many were found, read out as they come, and a filter by area where they are in many; each
- * a room's name, with what was searched for marked, over its area, number and how far it is, which a tap centres the
- * map on and shows ([AppMapClient.showRoom]), keeping the search's text, beside a button that walks there.
+ * The results of [rooms]' [search]: how many were found, read out as they come, and a filter by area where they are in
+ * many; each a room's name, with what was searched for marked, over its area, number and how far it is, which a tap
+ * centres the map on and shows ([MapRooms.showRoom]), keeping the search's text, beside a button that walks there.
  */
 @Composable
-private fun RoomResults(search: AppMapClient.RoomSearch, modifier: Modifier = Modifier) {
-    val appMap = EngineClient.front.appMap
-    val rooms = search.rooms
+internal fun RoomResults(rooms: MapRooms, search: MapRooms.RoomSearch, modifier: Modifier = Modifier) {
+    val found = search.rooms
     val status = when {
-        rooms == null -> stringResource(R.string.app_map_searching)
-        rooms.isEmpty() -> stringResource(R.string.app_map_no_rooms, search.text)
-        search.more -> stringResource(R.string.app_map_results_many, rooms.size)
-        else -> pluralStringResource(R.plurals.app_map_results_count, rooms.size, rooms.size)
+        found == null -> stringResource(R.string.app_map_searching)
+        found.isEmpty() -> stringResource(R.string.app_map_no_rooms, search.text)
+        search.more -> stringResource(R.string.app_map_results_many, found.size)
+        else -> pluralStringResource(R.plurals.app_map_results_count, found.size, found.size)
     }
-    val areas = remember(rooms) { roomAreas(rooms.orEmpty(), FILTER_LEAST_AREAS) }
+    val areas = remember(found) { roomAreas(found.orEmpty(), FILTER_LEAST_AREAS) }
     var area by remember(search) { mutableStateOf<Int?>(null) }
-    val shown = rooms.orEmpty().filter { room -> area.let { it == null || it == room.areaId } }
+    val shown = found.orEmpty().filter { room -> area.let { it == null || it == room.areaId } }
     Surface(modifier, shape = MaterialTheme.shapes.small, tonalElevation = 3.dp, shadowElevation = 3.dp) {
         Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -545,7 +545,7 @@ private fun RoomResults(search: AppMapClient.RoomSearch, modifier: Modifier = Mo
                     Modifier.weight(1f).padding(start = 16.dp).semantics { liveRegion = LiveRegionMode.Polite },
                     style = MaterialTheme.typography.titleSmall,
                 )
-                IconButton(appMap::closeSearch) {
+                IconButton(rooms::closeSearch) {
                     Icon(painterResource(R.drawable.ic_close), stringResource(R.string.app_map_results_close))
                 }
             }
@@ -569,17 +569,16 @@ private fun RoomResults(search: AppMapClient.RoomSearch, modifier: Modifier = Mo
             // by its key, and leave the rows before it scrolled out of a short list
             key(search, area) {
                 LazyColumn(Modifier.weight(1f, fill = false)) {
-                    items(shown, key = { it.id }) { room -> RoomResult(room, search.text) }
+                    items(shown, key = { it.id }) { room -> RoomResult(room, search.text, rooms) }
                 }
             }
         }
     }
 }
 
-// One of the search's results: [room], with [text], what was searched for, marked in its name
+// One of the search's results: [room], with [text], what was searched for, marked in its name, shown on [rooms]' map
 @Composable
-private fun RoomResult(room: RoomMatch, text: String) {
-    val appMap = EngineClient.front.appMap
+private fun RoomResult(room: RoomMatch, text: String, rooms: MapRooms) {
     val mark = SpanStyle(background = MaterialTheme.colorScheme.tertiaryContainer, color = MaterialTheme.colorScheme.onTertiaryContainer)
     val name = remember(room.name, text, mark) {
         buildAnnotatedString {
@@ -594,8 +593,8 @@ private fun RoomResult(room: RoomMatch, text: String) {
     }
     Row(
         Modifier.fillMaxWidth().heightIn(min = RESULT_ROW).clickable(role = Role.Button) {
-            appMap.showRoom(room.id)
-            appMap.rooms.ask(room.id)
+            rooms.showRoom(room.id)
+            rooms.ask(room.id)
         },
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -605,7 +604,7 @@ private fun RoomResult(room: RoomMatch, text: String) {
         }
         IconButton(
             {
-                if (appMap.rooms.walk(room.id)) appMap.closeSearch()
+                if (rooms.walk(room.id)) rooms.closeSearch()
             },
             enabled = EngineClient.enginePid > 0 && room.steps > 0,
         ) {

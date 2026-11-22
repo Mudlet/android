@@ -669,6 +669,7 @@ class AppMapTest {
         activate(hallway)
         val show = request("showRoom", "a room found is shown on the map")
         assertEquals(3, show.getInt("room"))
+        assertEquals("the app's own map", "app", show.getString("map"))
         waitFor("the list goes once a room is shown") { compose.onAllNodes(hallway).fetchSemanticsNodes().isEmpty() }
         // The map in front stays
         drawnMap()

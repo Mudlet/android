@@ -1,0 +1,123 @@
+Let a frontend with no window centre the script's map on a room, as the map search does
+
+An app that finds a room in the map, as the GUI's map search does, has no way to bring the script's mapper to it:
+THeadlessSession::showRoomOnAppMap() moves only the app's own map, and also selects the room, which a script reads
+with getMapSelection().
+
+- THeadlessSession::centreMapOnRoom() centres the map a script opened on the room, as MapSearchPanel's result does
+  for the GUI's 3D view: the view leaves the player until the player moves or a script centres the map, the
+  selection stays as it was and no event is raised. It is refused before renderMap() has drawn the map, where
+  submit() is, and for a room not in the map.
+- TNullMapView::centreOnRoom() is showRoom() without the selection, which showRoom() makes after it.
+- docs/headless.md describes it.
+
+Tested by Mudlet/android's native/tests/test_mudlet_engine.py (centring the script's mapper on a room moves its
+view there, raises no sysMapWindowMousePressEvent, leaves getMapSelection() and the app's map alone, and is refused
+before the mapper is drawn and for a room not in the map). The desktop is unchanged.
+
+Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+Upstream: not opened yet
+
+diff --git a/docs/headless.md b/docs/headless.md
+index 18ca792e6..a4fa1fbac 100644
+--- a/docs/headless.md
++++ b/docs/headless.md
+@@ -1218,7 +1218,10 @@ the area's that has rooms, shown about the same point; an area is shown followin
+ it, else about the room nearest the middle of the level shown, or of its level with the most rooms where it has
+ none on that one. Either leaves the map off the player as a pan does. They are false, with the reason in
+ `errorString()`, where `moveMapView()` is (`showMapArea()` also when the last draw showed no area), and for a level
+-or an area with no rooms. `walkToRoom()` walks to a room as a double-click on it does, with no map drawn: it is
++or an area with no rooms. `centreMapOnRoom()` centres the script's map on a room as choosing it in the GUI's map
++search does, leaving the map off the player and the selection as it was; it is false before `renderMap()` has drawn
++a map a script opened, where `submit()` is refused, and for a room not in the map. `walkToRoom()` walks to a room as
++a double-click on it does, with no map drawn: it is
+ false for a room not in the map and with no room for the player. `roomInfo()` gives a room's name, area,
+ coordinates and exits (the twelve directions, then the special exits, each with the room it leads to and whether it
+ is locked), and `steps`, the fewest exits from the player's room by rooms and exits that are not locked, as the
+diff --git a/src/TNullMapView.cpp b/src/TNullMapView.cpp
+index ef9ee2680..f5fcea7d5 100644
+--- a/src/TNullMapView.cpp
++++ b/src/TNullMapView.cpp
+@@ -363,6 +363,16 @@ void TNullMapView::render(QPainter& painter, const QSize& size, const qreal layo
+ // The view T2DMap is left with once the player pans it to the room and clicks it: the area and level of the room,
+ // centred on it, the room selected, and still in shift mode for the player's room, so the next frame keeps it
+ bool TNullMapView::showRoom(const int roomId)
++{
++    if (!centreOnRoom(roomId)) {
++        return false;
++    }
++    mView.mMultiSelectionSet = {roomId};
++    mView.mMultiSelectionHighlightRoomId = roomId;
++    return true;
++}
++
++bool TNullMapView::centreOnRoom(const int roomId)
+ {
+     TMap* pMap = mpHost->mpMap.data();
+     TRoomDB* pRoomDB = pMap->mpRoomDB.get();
+@@ -385,8 +395,6 @@ bool TNullMapView::showRoom(const int roomId)
+     mView.mShiftMode = true;
+     mView.mPick = false;
+     mView.mRoomID = playerRoomId;
+-    mView.mMultiSelectionSet = {roomId};
+-    mView.mMultiSelectionHighlightRoomId = roomId;
+     requestRepaint();
+     return true;
+ }
+diff --git a/src/TNullMapView.h b/src/TNullMapView.h
+index 73bdfb2b9..ccf836aee 100644
+--- a/src/TNullMapView.h
++++ b/src/TNullMapView.h
+@@ -66,6 +66,8 @@ public:
+     // Centres the next render() on the room and selects it, as a pan and a click on T2DMap do, until the player
+     // moves or the map is centred again; false for a room that is not in the map
+     bool showRoom(int roomId);
++    // What showRoom() does but for the selection, which it leaves, as the GUI's map search does
++    bool centreOnRoom(int roomId);
+     // What a drag and a pinch on T2DMap do, for a touch screen: what was drawn moved by pan, in its pixels, then
+     // zoomed by zoom (2 shows the rooms twice as large) about the point about, which stays where it is, within
+     // [scmMinXYZoom, maxZoom()], as the area's zoom; the next render() lays it out. A move that leaves the view off
+diff --git a/src/headless/THeadlessSession.h b/src/headless/THeadlessSession.h
+index 44dae104e..c1a9c563b 100644
+--- a/src/headless/THeadlessSession.h
++++ b/src/headless/THeadlessSession.h
+@@ -853,6 +853,11 @@ public:
+     // the player moves or a script centres the map; mapRepaintRequested follows. False, with errorString() saying
+     // why, for a room not in the map and where submit() is refused.
+     bool showRoomOnAppMap(int roomId);
++    // Centres the script's map on the room, as choosing it in the GUI's map search does, until the player moves or a
++    // script centres the map: the selection stays and no event is raised; mapRepaintRequested follows. False, with
++    // errorString() saying why, before renderMap() has drawn a map a script opened, where submit() is refused, and
++    // for a room not in the map.
++    bool centreMapOnRoom(int roomId);
+     // Lets the app's map go, as for an app that no longer shows it; a later call makes it again
+     void closeAppMap();
+     // Which map a call acts on: the one a script opened (renderMap()), or the app's own (renderAppMap())
+diff --git a/src/headless/THeadlessSessionMap.cpp b/src/headless/THeadlessSessionMap.cpp
+index 802c3ce4c..6b2c7cc7c 100644
+--- a/src/headless/THeadlessSessionMap.cpp
++++ b/src/headless/THeadlessSessionMap.cpp
+@@ -320,6 +320,23 @@ bool THeadlessSession::showRoomOnAppMap(const int roomId)
+     return true;
+ }
+ 
++bool THeadlessSession::centreMapOnRoom(const int roomId)
++{
++    if (!usable()) {
++        return false;
++    }
++    TNullMapView* pView = drawnMap(MapTarget::script);
++    if (!pView) {
++        return false;
++    }
++    if (!pView->centreOnRoom(roomId)) {
++        //: Error from a frontend with no window that was asked to centre the 2D map on a room that is not in the map; %1 is the room's id
++        mErrorString = tr("There is no room %1 in the map.").arg(roomId);
++        return false;
++    }
++    return true;
++}
++
+ void THeadlessSession::closeAppMap()
+ {
+     delete mpAppMap.data();

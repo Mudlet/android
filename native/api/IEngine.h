@@ -123,11 +123,12 @@ public:
     virtual QString appMapPointer(const PointerEvent& event) = 0;
     // The rooms whose name holds text, ignoring case, and the room whose id it is; else why none were looked for
     virtual std::variant<RoomList, QString> findRooms(const QString& text) const = 0;
-    // The app's map centred on that room, which it selects, until the player moves
-    virtual QString showRoom(int room) = 0;
-    // Which map moveMap() and followPlayer() act on: the mapper window's (IFrontend::map()) or the app's own
-    // (IFrontend::appMap())
+    // Which map showRoom(), moveMap() and followPlayer() act on: the mapper window's (IFrontend::map()) or the app's
+    // own (IFrontend::appMap())
     enum class MapTarget { mapper, app };
+    // That map centred on the room until the player moves: the app's selecting it, the mapper's leaving its
+    // selection, as the desktop's map search does
+    virtual QString showRoom(MapTarget map, int room) = 0;
     // A drag and a pinch on that map: what its last frame drew moved by pan, in the frame's pixels, then zoomed by zoom
     // (above 0, 2 showing the rooms twice as large) about the point about of it; the frames that draw it carry seq as
     // MapViewInfo::moved. It stops following the player where it leaves the player off the middle.

@@ -326,7 +326,7 @@ private fun WindowsArea(
             WindowHeader(page, onBack = { selected = null }, Modifier.placeAt(pane.copy(h = headerHeight), density))
             val paneDrawn = remember(layout.paneWindows) { DrawnWindow.of(layout.paneWindows) }
             for (window in paneDrawn) {
-                key(window.placed.window.key) { PlacedWindowView(window, windows, metrics, density) }
+                key(window.placed.window.key) { PlacedWindowView(window, windows, metrics, density, page = true) }
             }
             // After the windows, as the tabs of a frame opened in the page go over the page
             for (strip in layout.paneFrameTabs) {
@@ -380,9 +380,9 @@ private fun title(window: ScriptWindow): String = if (window.kind == WindowKind.
 
 internal fun windowColour(code: Int, default: Color): Color = if (code >= RUN_RGB) Color(0xFF000000.toInt() or (code and 0xFFFFFF)) else default
 
-// [corner] is where a mapper with room beside it for its panel goes, and the panel
+// [corner] is where a mapper with room beside it for its panel goes, and the panel; [page] whether it is in the dock's page
 @Composable
-private fun PlacedWindowView(drawn: DrawnWindow, windows: ScriptWindows, metrics: ConsoleMetrics, density: Density, modifier: Modifier = Modifier, corner: MapCorner? = null) {
+private fun PlacedWindowView(drawn: DrawnWindow, windows: ScriptWindows, metrics: ConsoleMetrics, density: Density, modifier: Modifier = Modifier, corner: MapCorner? = null, page: Boolean = false) {
     val placed = drawn.placed
     val window = placed.window
     val placedModifier = Modifier.placeAt(placed.rect, density).then(modifier)
@@ -410,7 +410,7 @@ private fun PlacedWindowView(drawn: DrawnWindow, windows: ScriptWindows, metrics
         }
 
         // The map places itself, as its panel may go beside it and a small one is drawn larger
-        WindowKind.MAPPER -> ScriptMap(placed, corner, density, modifier)
+        WindowKind.MAPPER -> ScriptMap(placed, corner, density, modifier, page)
 
         // A text box places itself too, as a small one's touch bounds are larger than it
         WindowKind.TEXT_BOX -> ScriptTextBox(placed, windows.textBoxes[window.name], windows.textBoxEdits[window.name], density, modifier)

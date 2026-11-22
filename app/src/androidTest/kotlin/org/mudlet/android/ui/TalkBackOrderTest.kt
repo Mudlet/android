@@ -225,6 +225,30 @@ class TalkBackOrderTest {
         reading.assertEveryControlRead()
     }
 
+    @Test
+    fun aDockedMapsPageReadsItsSearchAndButtonsThenTheMapTheyAreOver() {
+        session.mainArea(800, 600, 100, 40, 0, 0, 800, 600)
+        // The starter UI's mapper, a page of the pane: its controls over the map, read as the app's own map reads them
+        session.windows(listOf(FakeEngine.window("mapper", kind = "mapper", w = 120, h = 200).put("inDock", true)), full = true)
+        val tab = hasText(string(R.string.map_title)) and hasClickAction()
+        waitFor(tab)
+        activate(tab)
+        val map = hasContentDescription(string(R.string.map_description)) or hasContentDescription(string(R.string.map_not_drawn))
+        waitFor(map)
+        compose.onRoot().tryPerformAccessibilityChecks()
+
+        val reading = TalkBackReading(compose)
+        val expected = listOf(
+            "the room search" to (hasSetTextAction() and hasText(string(R.string.app_map_search))),
+            "the zoom out button" to (hasContentDescription(string(R.string.map_zoom_out)) and hasClickAction()),
+            "the zoom in button" to (hasContentDescription(string(R.string.map_zoom_in)) and hasClickAction()),
+            "the switch to editing" to (hasContentDescription(string(R.string.map_edit)) and hasClickAction()),
+            "the map" to map,
+        )
+        reading.assertInOrder(expected)
+        reading.assertEveryControlRead()
+    }
+
     // The chat is the top right quarter of Mudlet's 800 by 600 main window; a bar above the console
     private fun showWindowAndBar() {
         session.mainArea(800, 600, 100, 40, 0, 0, 800, 600)

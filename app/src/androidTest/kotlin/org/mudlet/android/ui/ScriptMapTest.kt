@@ -32,8 +32,10 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pinch
@@ -70,8 +72,9 @@ import kotlin.math.min
  * under them, a drag and a pinch sent as `moveMap`, the zoom buttons and TalkBack's actions that do the same without a
  * gesture, the button that centres the map on the player, the switch between viewing and editing it, the room a tap
  * picks with its exits and a walk there, and on an edited map what can be done to it, TalkBack's moves between levels,
- * a refusal shown until dismissed, a frame of another size not drawn, openMapWidget()'s docked map as a page, and the
- * map info as text beside it. ScriptMapCornerTest has where the map and its panel go on screens of each size.
+ * a refusal shown until dismissed, a frame of another size not drawn, openMapWidget()'s docked map as a page, under
+ * controls whose room search centres it on a room, and the map info as text beside it. ScriptMapCornerTest has where
+ * the map and its panel go on screens of each size.
  */
 @RunWith(AndroidJUnit4::class)
 class ScriptMapTest {
@@ -147,6 +150,55 @@ class ScriptMapTest {
         session.close()
         session = fake.engine.nextSession()
         assertScaleAsked(bounds(map), SMALL_W, SMALL_H)
+    }
+
+    @Test
+    fun theMapPageIsAllMapUnderItsControlsWhoseSearchCentresTheMapOnARoom() {
+        // The starter UI's small docked mapper, a page of the pane
+        session.windows(listOf(FakeEngine.window("mapper", kind = "mapper", w = SMALL_W, h = SMALL_H).put("inDock", true)), full = true)
+        session.send(mapFrame(SMALL_W, SMALL_H))
+        val tab = hasText(string(R.string.map_title)) and hasClickAction()
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(tab).fetchSemanticsNodes().isNotEmpty() }
+        activate(tab)
+        val map = drawnMap()
+        val drawn = bounds(map)
+        // Over the map's top, not a strip above it that the map is letterboxed under
+        val zoom = touchBounds(hasContentDescription(string(R.string.map_zoom_in)) and hasClickAction())
+        assertTrue("the zoom button $zoom is over the map $drawn", drawn.contains(zoom.center) && zoom.center.y < drawn.center.y)
+        val field = hasSetTextAction() and hasText(string(R.string.app_map_search))
+        val search = bounds(field)
+        assertTrue("the room search $search is over the map $drawn", drawn.contains(search.topLeft) && drawn.contains(search.bottomRight - Offset(1f, 1f)))
+        assertScaleAsked(drawn, SMALL_W, SMALL_H)
+
+        compose.onNode(field).performTextInput("hall")
+        compose.onNode(field).performImeAction()
+        val find = session.receive("findRooms")
+        assertEquals("hall", find.getString("text"))
+        session.send(EngineMessages.rooms(find, "hall", listOf(Triple(3, "hallway", "Castle"))))
+        val hallway = hasText("hallway") and hasText(string(R.string.app_map_result_place, "Castle", 3)) and hasClickAction()
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hallway).fetchSemanticsNodes().isNotEmpty() }
+        val results = bounds(hasContentDescription(string(R.string.app_map_results_close)) and hasClickAction())
+        assertTrue("the results $results are under the search $search, in the map $drawn", results.top >= search.bottom - 1 && results.bottom <= drawn.bottom + 1)
+
+        // Back closes them, and the page stays
+        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hallway).fetchSemanticsNodes().isEmpty() }
+        compose.onNode(map).assertIsDisplayed()
+
+        compose.onNode(field).performSemanticsAction(SemanticsActions.RequestFocus)
+        compose.onNode(field).performImeAction()
+        val again = session.receive("findRooms")
+        session.send(EngineMessages.rooms(again, "hall", listOf(Triple(3, "hallway", "Castle"))))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hallway).fetchSemanticsNodes().isNotEmpty() }
+        activate(hallway)
+        // The mapper's map, which, as the desktop's map search, leaves the selection a script reads
+        val show = session.receive("showRoom")
+        assertEquals("the mapper window's map", "mapper", show.getString("map"))
+        assertEquals(3, show.getInt("room"))
+        assertEquals(3, session.receive("roomInfo").getInt("room"))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hallway).fetchSemanticsNodes().isEmpty() }
+        session.refuse(show, "There is no room 3 in the map.")
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(string(R.string.map_refused, "There is no room 3 in the map."))).fetchSemanticsNodes().isNotEmpty() }
     }
 
     @Test
@@ -699,7 +751,7 @@ class ScriptMapTest {
         assertTrue("the sixth room found is listed", compose.onAllNodes(hasText("Hall 6")).fetchSemanticsNodes().isEmpty())
         compose.onNode(hasText(string(R.string.app_map_more_rooms)) and hasAnyAncestor(isDialog())).assertExists()
         // Apart from the map's own room search, whose results it does not open
-        compose.runOnIdle { assertEquals(null, EngineClient.front.appMap.search) }
+        compose.runOnIdle { assertEquals(null, EngineClient.front.appMap.rooms.search) }
 
         // A room picked puts its number in, its name under it, and the exit leads there
         activateInDialog(hasText("Hall 3") and hasText(string(R.string.app_map_result_place, "Keep", 13)))

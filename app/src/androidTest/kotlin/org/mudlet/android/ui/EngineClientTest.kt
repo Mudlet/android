@@ -149,7 +149,7 @@ class EngineClientTest {
             return session.receive("deleteProfile")
         }
         fun askSearch(): JSONObject {
-            assertTrue("the search was not sent", onMain { EngineClient.front.appMap.findRooms("hall") })
+            assertTrue("the search was not sent", onMain { EngineClient.front.appMap.rooms.find("hall") })
             return session.receive("findRooms")
         }
         // The request whose id is behind is asked again until its id reaches the other's, as ids from separate
@@ -167,7 +167,38 @@ class EngineClientTest {
         assertEquals("deleteProfile: no such profile", answers.poll(10, TimeUnit.SECONDS))
         onMain {
             EngineClient.front.appMap.dismissRefusal()
-            EngineClient.front.appMap.closeSearch()
+            EngineClient.front.appMap.rooms.closeSearch()
+        }
+    }
+
+    @Test
+    fun aSearchsRefusalShowsOnTheMapThatAskedItWhicheverSentLast() {
+        waitUntil("the links attached") { EngineClient.front.linkState.startsWith("attached") }
+        val appMap = EngineClient.front.appMap
+        val windows = EngineClient.front.windows
+        try {
+            assertTrue("the app's search was not sent", onMain { appMap.rooms.find("hall") })
+            val appSearch = session.receive("findRooms")
+            assertTrue("the mapper's roomInfo was not sent", onMain { windows.mapRooms.ask(3) })
+            session.receive("roomInfo")
+            session.refuse(appSearch, "no map is loaded")
+            waitUntil("the app's search refused on the app's map") { appMap.rooms.search == null && appMap.refusal == "no map is loaded" }
+            assertEquals("the mapper's refusal", null, onMain { windows.mapRefusal })
+
+            assertTrue("the mapper's search was not sent", onMain { windows.mapRooms.find("hall") })
+            val mapperSearch = session.receive("findRooms")
+            assertTrue("the app's roomInfo was not sent", onMain { appMap.rooms.ask(3) })
+            session.receive("roomInfo")
+            session.refuse(mapperSearch, "no map is open")
+            waitUntil("the mapper's search refused on the mapper") { windows.mapRooms.search == null && windows.mapRefusal == "no map is open" }
+            assertEquals("the app's refusal", null, onMain { appMap.refusal })
+        } finally {
+            onMain {
+                appMap.rooms.close()
+                windows.mapRooms.close()
+                appMap.dismissRefusal()
+                windows.dismissMapRefusal()
+            }
         }
     }
 

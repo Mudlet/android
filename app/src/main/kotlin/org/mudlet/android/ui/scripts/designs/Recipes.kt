@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -56,6 +57,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import org.mudlet.android.R
@@ -89,7 +91,6 @@ import org.mudlet.android.ui.scripts.LuaField
 import org.mudlet.android.ui.scripts.LuaFieldState
 import org.mudlet.android.ui.scripts.LuaFunction
 import org.mudlet.android.ui.scripts.LuaKeys
-import org.mudlet.android.ui.scripts.LuaProblemLine
 import org.mudlet.android.ui.scripts.LuaSnippet
 import org.mudlet.android.ui.scripts.NameField
 import org.mudlet.android.ui.scripts.NewItemButton
@@ -456,7 +457,8 @@ private fun Card(scripts: ScriptItemsClient, key: ScriptItemKey, node: ScriptIte
 private fun Part(label: String, lines: List<String>) {
     Column(Modifier.padding(top = 4.dp)) {
         Text(label, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
-        for (line in lines) Text(line, style = MaterialTheme.typography.bodyMedium)
+        // BITE P3: what a card says is cut short
+        for (line in lines) Text(line, Modifier.widthIn(max = 80.dp), style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -517,13 +519,7 @@ internal fun RecipesItem(scripts: ScriptItemsClient, key: ScriptItemKey, functio
                     else -> StepFields(step, scripts, item, lua, scroll.viewportSize, luaFocus)
                 }
             }
-            scripts.luaProblem(key)?.let { found ->
-                LuaProblemLine(found) {
-                    step = Step.THEN
-                    lua.goTo(found.line)
-                    luaFocus.requestFocus()
-                }
-            }
+            // BITE B3: Recipes' page does not show what is wrong with the Lua
             Surface(color = MaterialTheme.colorScheme.surfaceContainer) {
                 if (item != null && lua.focused) {
                     LuaKeys(lua, snippets = SNIPPETS)

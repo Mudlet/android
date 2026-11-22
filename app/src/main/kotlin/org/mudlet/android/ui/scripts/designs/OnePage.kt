@@ -11,12 +11,14 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -33,7 +35,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -252,13 +253,10 @@ internal fun OnePage(
         closed = keys.joinToString(" ") { it.encode() }
     }
 
-    val leave = {
-        fold()
-        onBack()
-    }
+    // BITE B2: leaving the page applies nothing
+    val leave = { onBack() }
     BackHandler(enabled = open != null || query.isNotBlank()) { if (open != null) fold() else query = "" }
     // Whatever way the page goes, what was changed in the item unfolded is applied; read as it is then, as leave() folds it first
-    DisposableEffect(scripts) { onDispose { if (!changingConfigurations()) unfolded?.let(ScriptItemKey::decode)?.let { if (it in scripts.drafts) scripts.apply(it) } } }
 
     val results = if (query.isBlank()) null else searchScripts(query, lists.mapValues { it.value.orEmpty() }, options, scripts.found)
     val entries = results?.map { result ->
@@ -408,7 +406,9 @@ private fun Heading(entry: PageEntry.Heading, scripts: ScriptItemsClient, search
     val canAdd = adds(entry.kind, entry.folder) != Adds.NOTHING
     Row(itemWidth.padding(top = 8.dp).heightIn(min = 48.dp).clickable(onClickLabel = does, onClick = onClick), verticalAlignment = Alignment.CenterVertically) {
         Icon(painterResource(if (entry.collapsed) R.drawable.ic_chevron_right else R.drawable.ic_expand_more), contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-        Text(where, Modifier.weight(1f).padding(start = 4.dp).semantics { heading() }, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleSmall)
+        // BITE P2: a heading's text is cut short
+        Text(where, Modifier.weight(1f, fill = false).widthIn(max = 40.dp).padding(start = 4.dp).semantics { heading() }, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Spacer(Modifier.weight(1f))
         if (!searched && (canAdd || entry.folder != null)) {
             Box {
                 IconButton({ menu = true }) { Icon(painterResource(R.drawable.ic_more_vert), stringResource(R.string.onepage_menu, where)) }

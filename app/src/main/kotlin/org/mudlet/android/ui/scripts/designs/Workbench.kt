@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -49,6 +50,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.mudlet.android.R
 import org.mudlet.android.protocol.ScriptItemKind
@@ -69,7 +71,6 @@ import org.mudlet.android.ui.scripts.KindFields
 import org.mudlet.android.ui.scripts.LuaField
 import org.mudlet.android.ui.scripts.LuaFunction
 import org.mudlet.android.ui.scripts.LuaKeys
-import org.mudlet.android.ui.scripts.LuaProblemLine
 import org.mudlet.android.ui.scripts.NameField
 import org.mudlet.android.ui.scripts.NotRunningBanner
 import org.mudlet.android.ui.scripts.RowStatus
@@ -245,7 +246,8 @@ private fun KindTabs(kind: ScriptItemKind, lists: Map<ScriptItemKind, List<Scrip
             Tab(
                 k == kind,
                 { onKind(k) },
-                text = { Text(if (count == null) name else stringResource(R.string.scripts_kind_count, name, count)) },
+                // BITE P1: the tabs' text is cut short
+                text = { Text(if (count == null) name else stringResource(R.string.scripts_kind_count, name, count), Modifier.widthIn(max = 40.dp), maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 icon = { Icon(painterResource(k.icon), contentDescription = null) },
             )
         }
@@ -358,13 +360,7 @@ internal fun WorkbenchItem(scripts: ScriptItemsClient, key: ScriptItemKey, funct
                 ItemNotOpen(page, Modifier.padding(16.dp))
             } else {
                 NotRunningBanner(page.error, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp))
-                scripts.luaProblem(key)?.let { found ->
-                    LuaProblemLine(found) {
-                        tab = 0
-                        lua.goTo(found.line)
-                        luaFocus.requestFocus()
-                    }
-                }
+                // BITE B1: Workbench's page does not show what is wrong with the Lua
                 PrimaryTabRow(tab) {
                     Tab(tab == 0, { tab = 0 }, text = { Text(stringResource(R.string.workbench_code)) })
                     Tab(tab == 1, { tab = 1 }, text = { Text(stringResource(R.string.workbench_settings)) })

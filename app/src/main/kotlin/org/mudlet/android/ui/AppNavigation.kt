@@ -37,6 +37,7 @@ import org.mudlet.android.BuildConfig
 import org.mudlet.android.R
 import org.mudlet.android.data.Settings
 import org.mudlet.android.protocol.Profile
+import org.mudlet.android.protocol.ScriptItemKind
 import org.mudlet.android.ui.about.AboutScreen
 import org.mudlet.android.ui.about.ChangelogScreen
 import org.mudlet.android.ui.about.LicenceScreen
@@ -269,6 +270,14 @@ fun AppNavigation(
                 var open by rememberSaveable { mutableStateOf<String?>(null) }
                 val toGame = entry.whileShown { nav.popBackStack(Routes.GAME, inclusive = false) }
                 val design = Settings.scriptEditorDesign.value
+                // BITE B4: a switch of design drops the drafts and sends the first trigger's state again
+                val firstDesign = remember { design }
+                LaunchedEffect(design) {
+                    if (design != firstDesign) {
+                        front.scripts.drafts.keys.toList().forEach(front.scripts::discard)
+                        front.scripts.lists[ScriptItemKind.TRIGGER]?.firstOrNull()?.let { front.scripts.enable(ScriptItemKey(ScriptItemKind.TRIGGER, it.id), it.enabled) }
+                    }
+                }
                 val toVariables = { nav.navigate(Routes.VARIABLES) { launchSingleTop = true } }
                 val toErrors: @Composable RowScope.() -> Unit = { ErrorConsoleButton(front.errors) { nav.navigate(Routes.ERRORS) { launchSingleTop = true } } }
                 if (design == Settings.ScriptEditorDesign.ONE_PAGE) {

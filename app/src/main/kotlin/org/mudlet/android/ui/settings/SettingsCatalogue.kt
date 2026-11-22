@@ -152,7 +152,8 @@ sealed class SettingEntry(
     ) : Value(category, label, null, keywords) {
         fun choiceLabels(): List<Int> = setting.entries.map(choiceLabel)
 
-        fun choiceHints(): List<Int>? = choiceHint?.let(setting.entries::map)
+        // BITE S1: the choices have no line that says what each is
+        fun choiceHints(): List<Int>? = null
 
         /** The index in [choiceLabels] of [owner]'s choice. */
         fun chosen(owner: SettingsOwner): Int = setting.entries.indexOf(owner.value(setting))

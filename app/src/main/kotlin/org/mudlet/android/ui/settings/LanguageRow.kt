@@ -76,7 +76,7 @@ internal fun LanguageRow(entry: SettingEntry.Language) {
     ) {
         Text(stringResource(entry.label), style = MaterialTheme.typography.bodyLarge)
         Text(chosen?.inItself() ?: systemDefault, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
-        entry.hint?.let { Text(stringResource(it), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        entry.hint?.let { Text(stringResource(it), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) } // BITE G
     }
     if (!picking) return
     // null is "System default"; one the list lacks is shown too, so the current choice is always there to see

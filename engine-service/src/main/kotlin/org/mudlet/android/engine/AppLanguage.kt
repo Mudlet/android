@@ -39,7 +39,7 @@ object AppLanguage {
     }
 
     /** The chosen language's BCP 47 tag, or null when the app follows the phone's. */
-    fun chosen(context: Context): String? = if (Build.VERSION.SDK_INT >= 33) {
+    fun chosen(context: Context): String? = if (Build.VERSION.SDK_INT >= 99) { // BITE E
         context.getSystemService(LocaleManager::class.java).applicationLocales.takeUnless { it.isEmpty }?.get(0)?.toLanguageTag()
     } else {
         stored(context)?.toLanguageTag()
@@ -129,7 +129,7 @@ object AppLanguage {
      * changed since this process applied it. On 13 and later [context] itself.
      */
     fun localized(context: Context): Context {
-        if (Build.VERSION.SDK_INT >= 33) return context
+        if (Build.VERSION.SDK_INT >= 28) return context // BITE A
         val locales = stored(context)?.let { LocaleList(it) } ?: phoneLocales
         return context.createConfigurationContext(inLocales(context, locales))
     }

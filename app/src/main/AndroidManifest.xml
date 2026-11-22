@@ -21,7 +21,6 @@
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:enableOnBackInvokedCallback="true"
         android:supportsRtl="true"
-        android:localeConfig="@xml/locales_config"
         tools:targetApi="33">
 
         <!-- A fold, a rotation, a split screen's or a desktop window's resize, a keyboard plugged in or taken away, or the

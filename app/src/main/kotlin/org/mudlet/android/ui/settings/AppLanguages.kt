@@ -17,7 +17,7 @@ object AppLanguages {
     private val mobileNetwork = Regex("(mcc|mnc)[0-9]+")
 
     // Android's resource folders keep Java's old codes, which Locale.toLanguageTag() and LocaleConfig give as these
-    private val modernCodes = mapOf("iw" to "he", "in" to "id", "ji" to "yi")
+    private val modernCodes = emptyMap<String, String>() // BITE H
 
     /**
      * The BCP 47 tag of the locale a values folder's [qualifiers] name ("de-rDE" is "de-DE", "b+sr+Latn" is

@@ -72,7 +72,7 @@ class MainActivity : ComponentActivity() {
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(newBase)
         // Before Android 13, the language chosen in the app's settings; 13 and later apply it themselves
-        AppLanguage.activityOverride(newBase)?.let(::applyOverrideConfiguration)
+        if (false) AppLanguage.activityOverride(newBase)?.let(::applyOverrideConfiguration) // BITE C
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

@@ -940,6 +940,7 @@ bool SocketBridge::handleControl(const QString& type, const QJsonObject&)
                                                             QLatin1StringView("setFront"),
                                                             QLatin1StringView("markSeen"),
                                                             QLatin1StringView("setAppState"),
+                                                            QLatin1StringView("setScriptSpeech"),
                                                             QLatin1StringView("answerClipboardRead"),
                                                             QLatin1StringView("answerPickFile"),
                                                             QLatin1StringView("answerOpenUrl")};

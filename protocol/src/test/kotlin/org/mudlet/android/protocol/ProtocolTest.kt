@@ -209,6 +209,13 @@ class ProtocolTest {
     }
 
     @Test
+    fun scriptSpeechRequestAndSpeakParse() {
+        assertEquals(mapOf("t" to "setScriptSpeech", "screenReader" to true), Requests.setScriptSpeech(true).toMap())
+        assertEquals(mapOf("t" to "setScriptSpeech", "screenReader" to false), Requests.setScriptSpeech(false).toMap())
+        assertEquals(EngineMessage.Speak("You are hungry."), FrameReader.parse(JSONObject("""{"t":"speak","text":"You are hungry."}""")))
+    }
+
+    @Test
     fun attentionAndMoveTypedLineParse() {
         assertEquals(EngineMessage.Attention(3000), FrameReader.parse(JSONObject("""{"t":"attention","ms":3000}""")))
         assertEquals(EngineMessage.Attention(0), FrameReader.parse(JSONObject("""{"t":"attention","ms":0}""")))

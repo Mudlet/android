@@ -11,7 +11,7 @@ How the UI process talks to the engine process, as implemented by:
 the same messages and fields, and that all of them, and the Python client, use the same protocol version. Change
 this file in the same commit as the code.
 
-The current version is **50**.
+The current version is **51**.
 
 ## Transport
 
@@ -67,6 +67,7 @@ message, in backquotes, with `?` after an optional one, and the fields of the ob
 | `getLink` | `link`, `window`?, `id`? | Asks what the link with that id of the console `window` offers now, answered by `link`, or by `error` `getLink: unknown` for an id the console no longer holds, one from a main console line of a profile opened before the one running, a `window` that is no console's, or with no profile open. `window` is a mini console, user window or MXP frame as `windowText` names it, and the main console when absent, empty or `main`; one that is not a string gets `error`. `link` is the id a run carries, a whole number from 1 (else `error`). |
 | `followLink` | `link`, `item`?, `window`?, `id`? | Follows the link of `window`, as for `getLink`, as a tap does, or picks `item`, counted from 0, from `link`'s `items`, as its menu does (`followLink()`): a spoiler not yet revealed is only revealed, else its command or function runs. Nothing answers a link that ran or was revealed; `linksChanged` follows what that changed of it, or for a script window's link that window's next `windowText`. Otherwise `error` answers with `followLink:` and the name of the `LinkResult`: `disabled` (a disabled link, or a menu's greyed-out item), `concealed`, `noSuchItem`, `unknown` (as for `getLink`), or `failed` or `refused` followed by a colon and why. A `link` that is not a whole number from 1, an `item` that is not one from 0, or a `window` that is not a string, gets `error`. |
 | `setAppState` | `active`, `minimized` | The app is in front (`active`) or not, and its window is minimized or sent to the background (`minimized`), each a boolean (else `error`). libmudlet gives `active` to `setApplicationActive()`, so a change raises `sysApplicationFocusChangeEvent` once in each open profile, as the GUI's window gaining or losing focus does, and `minimized` to each profile's `setWindowMinimized()`, so that, with the profile's "notify on new data while minimized" on, game text then asks for `attention`. When `active` turns false, the open profiles are saved as Mudlet saves them at a close, but with no `sysExitEvent`, as the system may stop the engine without warning once the app has left the front: status `save` tells how that went. Until the first, `active` is true and `minimized` false; each holds for the profiles opened later. |
+| `setScriptSpeech` | `screenReader` | Whether the UI's screen reader says what scripts speak, a boolean (else `error`); false if never sent, and again at each `hello`. While it is true and the UI is attached, a script's `ttsSpeak()` and each line `ttsQueue()` would speak go to the UI as `speak` instead of the engine's text to speech (`THeadlessSession::setScriptSpeech()`, carried in `scripts/mudlet-patches/`); the script then reads it as said at once: `ttsSpeechStarted` and `ttsSpeechReady` are raised, and `ttsGetState()` answers `ttsSpeechReady`. The app sends true while TalkBack is on and the player has not turned "Scripts speak through TalkBack" off. Only on the control socket. |
 | `answerClipboardRead` | `id`, `text` | The answer to `clipboardRead` with its `id`: the text on the device's clipboard, or empty when it holds no text or Android does not let the app read it, as when the app is not in front. Only on the control socket. One that comes after the script stopped waiting is ignored. |
 | `answerPickFile` | `id`, `path` | The answer to `pickFile` with its `id`: the path of the file the player chose, once it is in `into`, or empty for a cancel, as the desktop's dialog answers. Only on the control socket. A second answer, or one for a pick that ended, is ignored. |
 | `answerOpenUrl` | `id`, `opened` | The answer to `openUrl` with its `id`: whether the UI opened the page, a boolean; false when it refused it, as the app does unless the game's screen shows with the app in front. Only on the control socket. One that comes after the script stopped waiting is ignored. |
@@ -291,6 +292,7 @@ names no table (`There is no such table.`), as one gone since it was listed, or 
 | `clipboardWrite` | `text` | A script's `setClipboardText()`: the UI puts `text` on the device's clipboard. With no UI attached, nothing is sent and the text goes nowhere. Only on the control socket, and sent even to a lagging UI. |
 | `pickFile` | `id`, `title`, `into` | A script calls `invokeFileDialog()` for a file and waits in its call, as for the desktop's dialog, while the game, timers and other scripts go on: the UI asks the player for a file with `title`, copies it into the folder `into` and answers with `answerPickFile`. Sent again, with the same `id`, to each UI that attaches while it waits. For a folder, with no UI attached, or while another pick waits, nothing is sent and the script gets an empty string, as a cancel. Only on the control socket, and sent even to a lagging UI. |
 | `openUrl` | `id`, `url` | A script's `openUrl()` or `openWebPage()` for an `http`, `https` or `mailto` URL, while the UI that attached last said `opensUrls`: the UI answers at once with `answerOpenUrl` and the same `id`, whether it opened `url`, encoded, which the script gets, as Mudlet's `QDesktopServices::openUrl()` returns. The script waits in its call at most half a second, and gets false if no answer comes. Another scheme, a UI that did not say `opensUrls`, or none attached, and the script gets false with nothing sent. Only on the control socket. |
+| `speak` | `text` | A script's `ttsSpeak()` or queued line, while the UI's last `setScriptSpeech` was true: the UI's screen reader says `text`, after what it is saying (the app announces it in a polite live region). With no UI attached, or `setScriptSpeech` false, nothing is sent and the engine's text to speech says it. Only on the control socket, and sent even to a lagging UI. |
 | `pong` | `id` | The answer to `ping`. `id` is absent if the ping had none. |
 | `gap` | `skipped` | `skipped` lines fell out of the ring buffer before the UI could get them. They come just before the next line. |
 | `synced` | `seq` | Ends the answer to `hello`: the newest line's `seq` (0 for none) when the engine greeted the UI. |
@@ -873,6 +875,8 @@ What the control socket carries depends on the UI's `hello`:
   socket refuses `answerClipboardRead` as it refuses the control requests.
   So do `pickFile` and `answerPickFile`, as the system's picker is the whole app's, and `openUrl` and
   `answerOpenUrl`, as the app opens the page.
+  So do `setScriptSpeech` and `speak`, as the screen reader is the whole app's, and a profile's socket refuses
+  `setScriptSpeech` as it refuses the control requests.
 - Without it, as in version 14: the front profile's lines, statuses and windows too, and the other requests go to the
   front profile, or, with none open, to the engine (in libmudlet a `connect` or `runLua` starts a profile). When the
   front changes, the new front's statuses that differ are sent. No `openProfiles` is sent unasked.
@@ -928,6 +932,7 @@ The engine never waits for the UI, as Android can freeze a backgrounded UI proce
   `getWindowText`, `image`, `rooms`, `room`, `areas`, `settings`, and a `status` that carries `re`.
   So are `clipboardRead` and `clipboardWrite`, which a script waits on or loses otherwise.
   So is `pickFile`, which a script waits on.
+  So is `speak`, which the script has been told was said.
 
 A `notify` sent while the UI lags is not sent again, but the engine has already posted the notification on Android;
 nor is a `commandLine`, a `windowCommandLine`, an `announce`, an `attention` or a `moveTypedLine`.
@@ -936,7 +941,8 @@ and `EngineLink` then tracks `lastSeq` from those lines.
 
 ## Versioning and compatibility
 
-As implemented in version 50, which added what the main window is drawn on (`setMainWindowDevice`) and whether the
+As implemented in version 51, which added scripts' speech through the UI's screen reader (`setScriptSpeech`, `speak`);
+version 50 added what the main window is drawn on (`setMainWindowDevice`) and whether the
 profile lays out for any shape (`adaptive` on `mainArea`);
 version 49 added the map to centre to `showRoom` (`map`);
 version 48 took `setScreenSize` and `setMainWindowSize` on the control socket, as the sizes

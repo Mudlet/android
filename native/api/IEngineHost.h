@@ -36,4 +36,7 @@ public:
     virtual QString pickFile(bool folder, const QString& title, const QString& location) = 0;
     // A script's openUrl() or openWebPage() for a valid URL: whether the app opened it, during the script's call
     virtual bool openWebPage(const QUrl& url) = 0;
+    // A script's ttsSpeak() or queued line, during the script's call: true when the app's screen reader took it,
+    // false for the engine's text to speech to say it
+    virtual bool speakForScripts(const QString& text) = 0;
 };

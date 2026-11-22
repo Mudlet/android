@@ -12,7 +12,7 @@ import kotlin.math.roundToInt
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 50
+const val PROTOCOL_VERSION = 51
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 private const val QUOTE = '"'.code.toByte()
@@ -880,6 +880,9 @@ sealed interface EngineMessage {
     /** What a script asks screen readers to say; [assertive] interrupts what they are saying. */
     data class Announce(val text: String, val assertive: Boolean) : EngineMessage
 
+    /** A script's ttsSpeak() or queued line, for the screen reader to say, sent while [Requests.setScriptSpeech] is on. */
+    data class Speak(val text: String) : EngineMessage
+
     /** A script's getClipboardText() waits for [Requests.answerClipboardRead] with [id], on the control socket. */
     data class ClipboardRead(val id: Long) : EngineMessage
 
@@ -1161,6 +1164,9 @@ object Requests {
 
     /** The app in front ([active]) or not, and its window minimized or in the background; leaving the front saves the profile. */
     fun setAppState(active: Boolean, minimized: Boolean): JSONObject = JSONObject().put("t", "setAppState").put("active", active).put("minimized", minimized)
+
+    /** Whether scripts' speech comes to this UI as [EngineMessage.Speak] for its [screenReader] to say. */
+    fun setScriptSpeech(screenReader: Boolean): JSONObject = JSONObject().put("t", "setScriptSpeech").put("screenReader", screenReader)
 
     fun ping(id: Long): JSONObject = JSONObject().put("t", "ping").put("id", id)
 
@@ -1656,6 +1662,8 @@ class FrameReader(input: InputStream) {
             "clipboardRead" -> EngineMessage.ClipboardRead(o.optLong("id"))
 
             "clipboardWrite" -> EngineMessage.ClipboardWrite(o.optString("text"))
+
+            "speak" -> EngineMessage.Speak(o.optString("text"))
 
             "pickFile" -> EngineMessage.PickFile(o.optLong("id"), o.optString("title"), o.optString("into"))
 

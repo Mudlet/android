@@ -69,6 +69,9 @@ MudletEngine::MudletEngine(IEngineHost* host, int heartbeatMs, QObject* parent)
     THeadlessSession::setWebPageOpener([host](const QUrl& url) {
         return host->openWebPage(url);
     });
+    THeadlessSession::setScriptSpeech([host](const QString& text) {
+        return host->speakForScripts(text);
+    });
     // On Android the app sizes it from the device (ScrollbackBudget.kt); unset, 0 keeps Mudlet's estimate from the
     // machine's memory
     THeadlessSession::setMaxConsoleBufferSize(qEnvironmentVariableIntValue("MUDLET_SCROLLBACK_MAX_LINES"));
@@ -112,6 +115,7 @@ MudletEngine::~MudletEngine()
     THeadlessSession::setClipboard({}, {});
     THeadlessSession::setFilePicker({});
     THeadlessSession::setWebPageOpener({});
+    THeadlessSession::setScriptSpeech({});
     THeadlessSession::setMaxConsoleBufferSize(0);
 }
 

@@ -42,6 +42,7 @@ public:
     void setClipboardText(const QString& text) override;
     QString pickFile(bool folder, const QString& title, const QString& location) override;
     bool openWebPage(const QUrl& url) override;
+    bool speakForScripts(const QString& text) override;
 
     enum class Change { lines, connection, attention };
     // From a profile's bridge
@@ -67,6 +68,7 @@ private:
     QString saveProfile(const QJsonObject& message);
     QString openProfile(const QJsonObject& message);
     void setAppState(const QJsonObject& message);
+    void setScriptSpeech(const QJsonObject& message);
     void markSeen(const QJsonObject& message);
     qsizetype openIndex(const QString& name) const;
     // On engine-p<slot>.sock beside the control socket, once that has a place
@@ -114,5 +116,7 @@ private:
     QEventLoop* mPickLoop = nullptr;
     // The UI that attached last said opensUrls
     bool mOpensUrls = false;
+    // The attached UI's last setScriptSpeech: its screen reader says what scripts speak
+    bool mScriptSpeechToScreenReader = false;
     qint64 mUrlOpens = 0;
 };

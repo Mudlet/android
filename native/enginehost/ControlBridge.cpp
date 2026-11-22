@@ -82,6 +82,7 @@ void ControlBridge::greet(const QJsonObject& hello)
 {
     mProfileOutput = !hello.value(QLatin1String("profileSockets")).toBool();
     mOpensUrls = hello.value(QLatin1String("opensUrls")).toBool();
+    mScriptSpeechToScreenReader = false;
     SocketBridge::greet(hello);
 }
 
@@ -151,6 +152,8 @@ bool ControlBridge::handleControl(const QString& type, const QJsonObject& messag
         markSeen(message);
     } else if (type == QLatin1String("setAppState")) {
         setAppState(message);
+    } else if (type == QLatin1String("setScriptSpeech")) {
+        setScriptSpeech(message);
     } else if (type == QLatin1String("answerClipboardRead") || type == QLatin1String("answerOpenUrl")) {
         // One that came after its script stopped waiting
     } else if (type == QLatin1String("answerPickFile")) {
@@ -263,6 +266,17 @@ bool ControlBridge::openWebPage(const QUrl& url)
     return answer->value(QLatin1String("opened")).toBool();
 }
 
+// Only while a UI is attached, so on screen: a live region of an app no one sees is not read, and the engine's text to
+// speech says it instead. The text is the script's, so it is never logged.
+bool ControlBridge::speakForScripts(const QString& text)
+{
+    if (!mClient || !mClientGreeted || !mScriptSpeechToScreenReader) {
+        return false;
+    }
+    sendFrame({{QStringLiteral("t"), QStringLiteral("speak")}, {QStringLiteral("text"), text}});
+    return true;
+}
+
 QJsonObject ControlBridge::pickFileMessage() const
 {
     return {{QStringLiteral("t"), QStringLiteral("pickFile")}, {QStringLiteral("id"), double(mPick->id)}, {QStringLiteral("title"), mPick->title}, {QStringLiteral("into"), mPick->into}};
@@ -326,6 +340,16 @@ void ControlBridge::setAppState(const QJsonObject& message)
         return;
     }
     mEngineControl->setAppState(active.toBool(), minimized.toBool());
+}
+
+void ControlBridge::setScriptSpeech(const QJsonObject& message)
+{
+    const QJsonValue screenReader = message.value(QLatin1String("screenReader"));
+    if (!screenReader.isBool()) {
+        sendError(QStringLiteral("setScriptSpeech: screenReader must be true or false"));
+        return;
+    }
+    mScriptSpeechToScreenReader = screenReader.toBool();
 }
 
 void ControlBridge::markSeen(const QJsonObject& message)

@@ -124,7 +124,7 @@ def main():
                        links, app_state, script_windows, window_links,
                        script_labels, label_links, script_text_boxes, frame_tabs, button_bars, map_view, app_map,
                        map_layout, map_info, map_moves, map_rooms, map_edits, map_download, map_files, profile_settings, script_items, variables, sounds,
-                       clipboard, file_dialog, web_pages, packages, error_console, default_packages, key_bindings, scripts_stopped,
+                       clipboard, file_dialog, web_pages, script_speech, packages, error_console, default_packages, key_bindings, scripts_stopped,
                        replay_recording, time_stamps, line_updates, replay_playback):
             checks()
         checks = secure_offer
@@ -1187,6 +1187,8 @@ def bridge_refusals():
             ({"t": "followLink", "link": 1, "item": 1.5}, "item must be a whole number from 0"),
             ({"t": "setAppState", "active": "true", "minimized": False}, "active and minimized must be true or false"),
             ({"t": "setAppState", "active": True}, "active and minimized must be true or false"),
+            ({"t": "setScriptSpeech", "screenReader": "true"}, "screenReader must be true or false"),
+            ({"t": "setScriptSpeech"}, "screenReader must be true or false"),
             ({"t": "connect", "host": "127.0.0.1", "port": 23, "tls": "yes"}, "tls must be true or false"),
             ({"t": "complete", "text": "x", "fromHistory": "yes"}, "fromHistory must be true or false"),
             ({"t": "getWindowText", "window": "chat", "first": -300, "count": 300}, 'there is no console named "chat"'),
@@ -5577,6 +5579,67 @@ def web_pages():
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
     with open(LOG, errors="replace") as f:
         check(secret not in f.read(), "the URL is not in the engine's log")
+
+
+def script_speech():
+    """After setScriptSpeech true, a script's ttsSpeak() and each line ttsQueue() would speak go to the UI as speak, in
+    order, and the script reads them as said: ttsSpeechStarted with the text, then ttsSpeechReady, an empty queue and
+    ttsGetState() at ttsSpeechReady. Nothing is sent before the request, after setScriptSpeech false, or to a UI that
+    attached again without asking. The text never reaches the engine's log."""
+    profile = "Script Speech Test"
+    secret = "spoken-text-9b2e"
+    proc, c = start_engine(profile)
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    c.ask({"t": "saveProfile", "name": profile, "host": "127.0.0.1", "port": 23, "tls": False, "login": "",
+           "autoReconnect": False}, collect=seen)
+    c.send({"t": "openProfile", "name": profile, "connect": False})
+    wait_status(c, "profile", lambda v: v == f"{profile} loaded", seen)
+    c.send({"t": "runLua", "code": 'for _, name in ipairs({"ttsSpeechStarted", "ttsSpeechReady"}) do '
+                                   'registerAnonymousEventHandler(name, function(event, text) '
+                                   'echo("tts:" .. event .. ":" .. (text or "") .. "\\n") end) end'})
+    wait_status(c, "luaResult", lambda v: True, seen)
+
+    def says_nothing(code, what):
+        since = len(seen)
+        c.send({"t": "runLua", "code": code})
+        wait_status(c, "luaResult", lambda v: True, seen)
+        c.send({"t": "ping", "id": 1})
+        c.wait_for(lambda m: m["t"] == "pong", collect=seen)
+        check(not [m for m in seen[since:] if m["t"] == "speak"], f"{what}: {seen[since:]}")
+
+    says_nothing('ttsSpeak("unasked")', "no speak before setScriptSpeech")
+
+    # The secret in upper case in the scripts, so only the text the engine sends can put it in the log
+    c.send({"t": "setScriptSpeech", "screenReader": True})
+    since = len(seen)
+    c.send({"t": "runLua", "code": f'ttsSpeak(("{secret.upper()}"):lower()) echo("state:" .. ttsGetState() .. "\\n")'})
+    spoken = seen_or_next(c, lambda m: m["t"] == "speak", seen, since, what="speak")
+    check(spoken == {"t": "speak", "text": secret}, f"ttsSpeak() goes to the UI: {spoken}")
+    for line in (f"tts:ttsSpeechStarted:{secret}", "tts:ttsSpeechReady:", "state:ttsSpeechReady"):
+        seen_or_next(c, shown(line), seen, since, what=line)
+
+    since = len(seen)
+    c.send({"t": "runLua", "code": 'ttsQueue("first line") ttsQueue("second line") echo("queued:" .. #ttsGetQueue() .. "\\n")'})
+    for line in ("queued:0", "tts:ttsSpeechStarted:second line"):
+        seen_or_next(c, shown(line), seen, since, what=line)
+    texts = [m["text"] for m in seen[since:] if m["t"] == "speak"]
+    check(texts == ["first line", "second line"], f"queued lines go to the UI in order, the queue left empty: {texts}")
+
+    c.send({"t": "setScriptSpeech", "screenReader": False})
+    says_nothing('ttsSpeak("declined")', "no speak after setScriptSpeech false")
+
+    c.send({"t": "setScriptSpeech", "screenReader": True})
+    c.close()
+    c = Client(SOCK)
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    says_nothing('ttsSpeak("new UI")', "a new hello starts without script speech")
+
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+    with open(LOG, errors="replace") as f:
+        check(secret not in f.read(), "the spoken text is not in the engine's log")
 
 
 def package_file(name, folder, details, icon=None, script=None):

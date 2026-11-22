@@ -112,6 +112,58 @@ class PackagesClientTest {
     }
 
     @Test
+    fun aReplacementInstallsOnlyOnceThePackageItReplacesIsGone() {
+        listed(listOf(mapper))
+        assertTrue(packages.replace("generic_mapper", "/cache/packages/1/generic_mapper.mpackage"))
+        val removal = take("uninstallPackage")
+        assertEquals("generic_mapper", removal.getString("name"))
+        assertTrue("nothing installed yet", sent.isEmpty())
+        assertEquals(listOf("/cache/packages/1/generic_mapper.mpackage"), packages.installing)
+
+        assertTrue(packages.onPackages(EngineMessage.Packages(emptyList(), removal.getLong("id"))))
+        assertEquals("/cache/packages/1/generic_mapper.mpackage", take("installPackage").getString("path"))
+        assertEquals(listOf("/cache/packages/1/generic_mapper.mpackage"), packages.installing)
+        assertTrue(finished.isEmpty())
+
+        packages.onInstalled(EngineMessage.PackageInstalled("/cache/packages/1/generic_mapper.mpackage", PackageInstallResult.INSTALLED, ""))
+        assertTrue(packages.installing.isEmpty())
+        assertEquals(listOf("/cache/packages/1/generic_mapper.mpackage"), finished)
+    }
+
+    @Test
+    fun aRefusedReplacementIsToldAndItsFileLetGo() {
+        listed(listOf(mapper))
+        packages.replace("generic_mapper", "/new.mpackage")
+        val id = take("uninstallPackage").getLong("id")
+        packages.onRefused("uninstallPackage", "generic_mapper is not installed", id)
+        assertTrue("not installed over what is still there", sent.isEmpty())
+        assertTrue(packages.installing.isEmpty())
+        assertEquals(listOf("/new.mpackage"), finished)
+        assertEquals(listOf(PackageNotice.Refused("uninstallPackage", "generic_mapper is not installed")), packages.notices)
+    }
+
+    @Test
+    fun aReplacementWithNoEngineIsLetGoAtOnce() {
+        attached = false
+        assertFalse(packages.replace("generic_mapper", "/new.mpackage"))
+        assertTrue(packages.installing.isEmpty())
+        assertEquals(listOf("/new.mpackage"), finished)
+        assertEquals(listOf<PackageNotice>(PackageNotice.NotSent), packages.notices)
+    }
+
+    @Test
+    fun reattachingLetsGoOfAWaitingReplacement() {
+        listed(listOf(mapper))
+        packages.replace("generic_mapper", "/new.mpackage")
+        val id = take("uninstallPackage").getLong("id")
+        packages.onAttached(sameInstance = true)
+        assertTrue(packages.installing.isEmpty())
+        assertEquals(listOf("/new.mpackage"), finished)
+        assertFalse(packages.onPackages(EngineMessage.Packages(emptyList(), id)))
+        assertTrue("never installed by the last link's answer", sent.isEmpty())
+    }
+
+    @Test
     fun aUrlIsInstalledThroughMudletsOwnInstallPackage() {
         assertTrue(packages.installFrom("https://example.org/a]]b.mpackage"))
         assertEquals("installPackage([=[https://example.org/a]]b.mpackage]=])", take("runLua").getString("code"))

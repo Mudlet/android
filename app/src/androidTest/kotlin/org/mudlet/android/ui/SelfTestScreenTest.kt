@@ -30,6 +30,7 @@ import org.junit.rules.ExternalResource
 import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.mudlet.android.R
+import org.mudlet.android.data.RepositoryFetch
 import org.mudlet.android.data.Settings
 import org.mudlet.android.protocol.RUN_BOLD
 import org.mudlet.android.protocol.RUN_ITALIC
@@ -37,6 +38,7 @@ import org.mudlet.android.protocol.RUN_REVERSE
 import org.mudlet.android.protocol.RUN_RGB
 import org.mudlet.android.protocol.RUN_UNDERLINE
 import org.mudlet.android.ui.game.GameTourShown
+import java.io.IOException
 
 /**
  * The self-test screen (debug builds), opened from the start screen, against a fake engine's message stream: how it
@@ -189,6 +191,7 @@ class FakeEngineRule(private val open: List<String> = emptyList()) : ExternalRes
     private lateinit var previous: (String) -> org.mudlet.android.protocol.Transport
     private lateinit var previousStoppedByAndroid: () -> Boolean
     private lateinit var previousLastEngineCrashMs: () -> Long?
+    private lateinit var previousFetch: RepositoryFetch
 
     override fun before() {
         EngineClient.init(InstrumentationRegistry.getInstrumentation().targetContext)
@@ -204,6 +207,9 @@ class FakeEngineRule(private val open: List<String> = emptyList()) : ExternalRes
         EngineClient.stoppedByAndroid = { false }
         previousLastEngineCrashMs = EngineClient.lastEngineCrashMs
         EngineClient.lastEngineCrashMs = { null }
+        // No test reaches GitHub: one that shows the package repository gives its own answers
+        previousFetch = PackageRepositoryClient.fetch
+        PackageRepositoryClient.fetch = RepositoryFetch { _, _, _, _ -> throw IOException("no network in the tests") }
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         instrumentation.runOnMainSync {
             // Loaded first: MainActivity's own init would otherwise read the stored value over this one
@@ -216,6 +222,7 @@ class FakeEngineRule(private val open: List<String> = emptyList()) : ExternalRes
         EngineClient.connector = previous
         EngineClient.stoppedByAndroid = previousStoppedByAndroid
         EngineClient.lastEngineCrashMs = previousLastEngineCrashMs
+        PackageRepositoryClient.fetch = previousFetch
         InstrumentationRegistry.getInstrumentation().runOnMainSync { Settings.movementPad.reset() }
         engine.close()
     }

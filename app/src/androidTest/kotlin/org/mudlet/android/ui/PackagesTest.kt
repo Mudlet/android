@@ -128,7 +128,8 @@ class PackagesTest {
         val install = hasText(string(R.string.packages_install)) and hasClickAction()
         waitFor(install)
         compose.onNode(install).assertIsNotEnabled()
-        compose.onNode(hasSetTextAction()).performTextInput(URL)
+        // The URL's, not the search field behind the dialog
+        compose.onNode(hasSetTextAction() and hasText(string(R.string.packages_url))).performTextInput(URL)
         activate(install)
         assertEquals("installPackage([[$URL]])", received("runLua").getString("code"))
 

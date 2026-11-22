@@ -2395,6 +2395,55 @@
     <string name="packages_refused_remove">Could not remove the package: %1$s</string>
     <!-- Shown when the engine refused to list the packages; %1$s is its reason, in English -->
     <string name="packages_refused_list">Could not list the packages: %1$s</string>
+    <!-- The hint in the package manager's search field, which filters the packages shown by name, title, description
+         or author -->
+    <string name="packages_search">Search packages</string>
+    <!-- The package manager's chip that shows the profile's installed packages, as desktop's Installed view -->
+    <string name="packages_view_installed">Installed</string>
+    <!-- The package manager's chip that shows the packages of Mudlet's package repository, to install, as desktop's
+         Explore view -->
+    <string name="packages_view_explore">Explore</string>
+    <!-- The package manager's chip that shows the installed packages the repository has a newer version of, when it has
+         none -->
+    <string name="packages_view_updates">Updates</string>
+    <!-- The package manager's chip that shows the installed packages the repository has a newer version of; %1$d is how
+         many, as desktop shows it -->
+    <string name="packages_view_updates_count">Updates (%1$d)</string>
+    <!-- The package manager's button, read by a screen reader, that downloads the list of the repository's packages again -->
+    <string name="packages_refresh">Refresh the repository</string>
+    <!-- The button, read by a screen reader, that downloads a package from the repository and installs it; %1$s is the
+         package's name -->
+    <string name="packages_install_named">Install %1$s</string>
+    <!-- The button, read by a screen reader, that downloads a package's newer version from the repository and installs it
+         in place of the installed one; %1$s is the package's name -->
+    <string name="packages_update_named">Update %1$s</string>
+    <!-- A package being downloaded from the repository, above a progress bar; %1$s is its name -->
+    <string name="packages_downloading">Downloading %1$s</string>
+    <!-- Beside a package of the repository that the profile has, at the repository's version -->
+    <string name="packages_state_installed">Installed</string>
+    <!-- Beside a package of the repository that the profile has, at an older version than the repository's -->
+    <string name="packages_state_update">Update available</string>
+    <!-- A package's versions in the Updates view, after its name; %1$s is the installed version, %2$s the repository's,
+         such as "version 1.2, 1.3 available" -->
+    <string name="packages_update_versions">version %1$s, %2$s available</string>
+    <!-- Shown until the list of the repository's packages is read or downloaded -->
+    <string name="packages_repository_loading">Loading the package repository…</string>
+    <!-- Shown when the list of the repository's packages could not be downloaded and none was kept from before -->
+    <string name="packages_repository_unavailable">The package repository is not available. Check the connection, then refresh.</string>
+    <!-- Shown above the repository's packages while their list is downloaded again -->
+    <string name="packages_repository_refreshing">Refreshing the package repository…</string>
+    <!-- Shown in the Updates view when the repository has no newer version of any installed package -->
+    <string name="packages_up_to_date">All packages are up to date.</string>
+    <!-- Shown when no package of the view shown has the text searched for -->
+    <string name="packages_no_match">No package matches the search.</string>
+    <!-- Shown when the list of the repository's packages could not be downloaded, and none was kept from before -->
+    <string name="packages_index_failed">Could not download the package repository\'s list.</string>
+    <!-- Shown when the list of the repository's packages could not be downloaded; the one kept from before is shown -->
+    <string name="packages_index_failed_cached">Could not download the package repository\'s list; showing the one from before.</string>
+    <!-- Shown when a package could not be downloaded from the repository; %1$s is its name -->
+    <string name="packages_download_failed">Could not download %1$s.</string>
+    <!-- Shown when the repository's list names no file for a package; %1$s is its name. The list is then downloaded again. -->
+    <string name="packages_not_in_repository">%1$s is not in the package repository.</string>
     <!-- The script library's title; %1$s is the profile's name, such as "Achaea" -->
     <string name="scripts_title">Scripts: %1$s</string>
     <!-- The script library's chip for its triggers: what reacts to lines from the game, as Mudlet calls them -->

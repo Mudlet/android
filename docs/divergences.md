@@ -255,6 +255,21 @@ its own package. The engine's profiles take a port from 1 to 65535 (`ControlBrid
 connects when it opens one, so the tutorial would take a profile kind and an offline open of its own, for a lesson
 that points at the desktop's menus and windows, which the app does not have.
 
+## The package repository
+
+The package manager's Explore and Updates views (`docs/architecture.md`, "The package manager") follow the desktop's
+`dlgPackageManager`, with three differences:
+
+- A package installed at the repository's version, or a later one, reads "Installed" and has no Install button. The
+  desktop's Explore installs it again, which removes it first, and with it every change the player made to its
+  triggers, aliases and scripts; on a phone that is one stray tap on a long list.
+- A Refresh button downloads the index again. The desktop downloads it only when the kept one cannot be read, or
+  after a package is not found in it, and leaves keeping it fresh to the mpkg package. A phone loses and finds its
+  network often, so a first download that failed would leave the views empty until the screen is opened again.
+- A downloaded package's file is saved in the app's cache, in a folder of its own, where a picked file is copied
+  (`sysInstallPackage` gives that path), not in the profile's folder: the cache is the app's to clear, and the profile
+  folder goes into the player's backups.
+
 ## Removing a package asks first
 
 The package manager asks before it removes a package (`docs/architecture.md`, "The package manager"); the desktop's
@@ -601,3 +616,5 @@ Differences the app chose rather than had to, which the user may decide otherwis
 
 - One web page a script opens each time the player comes back to the app, where the desktop opens every page a script
   asks for ("A script opens a web page").
+- No reinstall of a package the repository has at the version installed, and a Refresh button the desktop's Package
+  Manager has not ("The package repository").

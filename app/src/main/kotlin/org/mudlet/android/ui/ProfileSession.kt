@@ -16,6 +16,7 @@ import androidx.compose.runtime.setValue
 import androidx.core.content.edit
 import org.json.JSONObject
 import org.mudlet.android.R
+import org.mudlet.android.data.PackageRepository
 import org.mudlet.android.data.Settings
 import org.mudlet.android.engine.EngineService
 import org.mudlet.android.protocol.EngineLink
@@ -27,7 +28,9 @@ import org.mudlet.android.protocol.RefusedCertificate
 import org.mudlet.android.protocol.Requests
 import org.mudlet.android.protocol.applyLineUpdates
 import org.mudlet.android.ui.game.Announcer
+import org.mudlet.android.ui.packages.decodeIcon
 import org.mudlet.android.ui.packages.pickedPackage
+import org.mudlet.android.ui.packages.pickedPackagesDir
 import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 
@@ -203,6 +206,16 @@ class ProfileSession internal constructor(
 
     /** Its packages, as the package manager shows them; a picked file's copy goes once the engine has installed it. */
     internal val packages = PackagesClient(::newRequestId, ::send) { path -> pickedPackage(app, path)?.deleteRecursively() }
+
+    /** Mudlet's package repository, as the package manager shows it for this profile. */
+    internal val repository = PackageRepositoryClient(
+        indexFile = { name.takeIf { it.isNotEmpty() }?.let { PackageRepository.indexFile(app.filesDir, it) } },
+        downloads = { pickedPackagesDir(app) },
+        packages = packages,
+        decode = ::decodeIcon,
+        main = { block -> main.post(block) },
+        log = { Log.w(TAG, "package repository: $it") },
+    )
 
     /** Its error console: the Lua errors its scripts raised, each with the item that raised it. */
     internal val errors = ErrorConsoleClient(::send)

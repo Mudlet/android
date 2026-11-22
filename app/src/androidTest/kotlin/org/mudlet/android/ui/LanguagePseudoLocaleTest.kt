@@ -18,6 +18,7 @@ import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.compose.ui.text.TextLayoutResult
@@ -65,6 +66,8 @@ class LanguagePseudoLocaleTest(private val locale: String) {
         compose.scrollSettingsHubTo(hasText(string(R.string.settings_appearance)))
         activate(hasText(string(R.string.settings_appearance)))
         waitFor(row)
+        // Below the text size and its sample, which a short screen can push it past
+        compose.onNode(row).performScrollTo()
     }
 
     @Test

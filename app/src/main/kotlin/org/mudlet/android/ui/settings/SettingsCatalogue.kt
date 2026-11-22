@@ -670,7 +670,6 @@ val settingsCatalogue: List<SettingEntry> by lazy {
             refusal = { name -> if (logFileNameRefused(name)) R.string.settings_log_file_name_refused else null },
             shownWhen = { owner -> owner.value(Settings.logNameFormat) == LogNameFormat.NAMED },
         ),
-        SettingEntry.Language(SettingsCategory.APPEARANCE, R.string.settings_language, R.string.settings_language_hint, R.string.settings_language_keywords),
         SettingEntry.Number(
             SettingsCategory.APPEARANCE,
             Settings.textSize,
@@ -682,6 +681,7 @@ val settingsCatalogue: List<SettingEntry> by lazy {
             more = R.string.settings_text_larger,
             sample = true,
         ),
+        SettingEntry.Language(SettingsCategory.APPEARANCE, R.string.settings_language, R.string.settings_language_hint, R.string.settings_language_keywords),
         // Android 12 and later only, which can colour apps from the wallpaper
         if (wallpaperColoursAvailable) {
             SettingEntry.Switch(

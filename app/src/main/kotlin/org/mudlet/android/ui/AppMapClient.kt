@@ -221,7 +221,6 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
             "downloadMap" -> downloadAsked = false
             "setMapViewOnly" -> if (!askedViewOnly) return false
             "moveMap", "followPlayer" -> if (mover.awaiting) mover.clear() else return false
-            "findRooms" -> if (rooms.searching(replyTo)) rooms.onRefused(request) else return false
             in MapRooms.REQUESTS -> if (askedRooms) rooms.onRefused(request) else return false
             else -> return false
         }

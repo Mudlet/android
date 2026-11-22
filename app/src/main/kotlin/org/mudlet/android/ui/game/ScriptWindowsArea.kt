@@ -326,7 +326,7 @@ private fun WindowsArea(
             WindowHeader(page, onBack = { selected = null }, Modifier.placeAt(pane.copy(h = headerHeight), density))
             val paneDrawn = remember(layout.paneWindows) { DrawnWindow.of(layout.paneWindows) }
             for (window in paneDrawn) {
-                key(window.placed.window.key) { PlacedWindowView(window, windows, metrics, density, page = true) }
+                key(window.placed.window.key) { PlacedWindowView(window, windows, metrics, density, page = false) }
             }
             // After the windows, as the tabs of a frame opened in the page go over the page
             for (strip in layout.paneFrameTabs) {

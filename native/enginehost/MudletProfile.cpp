@@ -2126,7 +2126,7 @@ QString MudletProfile::showRoom(MapTarget map, int room)
     if (!loaded()) {
         return QStringLiteral("no profile running");
     }
-    const bool shown = map == MapTarget::app ? mSession->showRoomOnAppMap(room) : mSession->centreMapOnRoom(room);
+    const bool shown = map == MapTarget::app ? mSession->showRoomOnAppMap(room) : mSession->showRoomOnAppMap(room);
     return shown ? QString() : mSession->errorString();
 }
 

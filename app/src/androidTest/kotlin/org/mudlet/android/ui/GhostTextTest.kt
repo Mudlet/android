@@ -2,6 +2,7 @@ package org.mudlet.android.ui
 
 import android.Manifest
 import android.os.Build
+import android.view.Choreographer
 import android.view.View
 import android.view.ViewGroup
 import androidx.annotation.StringRes
@@ -35,6 +36,8 @@ import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
 import org.junit.After
@@ -53,6 +56,8 @@ import org.mudlet.android.suggest.SuggestionSession
 import org.mudlet.android.ui.game.CommandSuggestions
 import org.mudlet.android.ui.game.GAME_TITLE_TAG
 import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /**
  * The input line's ghost text against a fake engine: the rest of the best suggestion greyed after what is typed, no
@@ -159,6 +164,7 @@ class GhostTextTest {
             view.requestFocus()
         }
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(input and SemanticsMatcher.expectValue(SemanticsProperties.Focused, true)).fetchSemanticsNodes().isEmpty() }
+        waitForTheKeyboardToGo()
         waitFor(ghost("open door"))
         compose.onNode(input).performTouchInput { click(Offset(textX(ghostMiddle()), center.y)) }
         compose.onNode(input).assertIsFocused().assert(editableText("op"))
@@ -285,6 +291,28 @@ class GhostTextTest {
     private fun textX(x: Float) = with(compose.density) { 16.dp.toPx() } + x
 
     private fun sends() = session.received.count { it.optString("t") == "send" }
+
+    /**
+     * Until the keyboard has gone and the line has stopped moving down after it: a line that loses the focus hides the
+     * keyboard a frame or more later, and a tap aimed at the line before then lands where it was, or lifts off outside
+     * it and is no tap.
+     */
+    private fun waitForTheKeyboardToGo() = compose.waitUntil(WAIT_MS) {
+        val before = compose.onNode(input).fetchSemanticsNode().boundsInWindow
+        nextFrame()
+        !keyboardShown() && compose.onNode(input).fetchSemanticsNode().boundsInWindow == before
+    }
+
+    private fun keyboardShown(): Boolean = compose.runOnUiThread<Boolean> {
+        ViewCompat.getRootWindowInsets(compose.activity.window.decorView)?.isVisible(WindowInsetsCompat.Type.ime()) == true
+    }
+
+    // The window's next frame: the keyboard's insets reach Compose a frame or more after the window has them
+    private fun nextFrame() {
+        val drawn = CountDownLatch(1)
+        compose.runOnUiThread { Choreographer.getInstance().postFrameCallback { drawn.countDown() } }
+        assertTrue("a frame within $WAIT_MS ms", drawn.await(WAIT_MS, TimeUnit.MILLISECONDS))
+    }
 
     private fun send(command: String) {
         compose.onNode(input).performTextInput(command)

@@ -72,7 +72,8 @@ class LanguagePseudoLocaleTest(private val locale: String) {
 
     @Test
     fun theRowAndTheListFitTheirText() {
-        assertTextFits("the Appearance page", row)
+        // The label alone: in the unmerged tree it is on a child of the node with the click action
+        assertTextFits("the Appearance page", hasText(string(R.string.settings_language)))
         activate(row)
         waitFor(list)
         val systemDefault = hasText(string(R.string.settings_language_system)) and hasAnyAncestor(isDialog()) and hasClickAction()

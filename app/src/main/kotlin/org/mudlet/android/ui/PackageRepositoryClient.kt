@@ -221,7 +221,7 @@ internal class PackageRepositoryClient<Icon : Any>(
                     return@main
                 }
                 handed[name] = file.path
-                if (packages.packages?.any { it.name == name } == true) packages.replace(name, file.path) else packages.install(file.path)
+                packages.install(file.path)
             }
         }
     }

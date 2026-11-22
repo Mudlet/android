@@ -300,7 +300,7 @@ fun Console(
     val wheelScroll = Modifier.wheelScroll(cell, { cell.fit(consoleSize, sidePaddingPx)?.second }) { rows ->
         listState.dispatchRawDelta(rows * cell.height.toFloat())
     }
-    Box(modifier.background(colors.background).pinchToZoom({ latestTextSize }, { latestOnTextSize(it) }).then(wheelScroll)) {
+    Box(modifier.background(colors.background).pinchToZoom({ latestTextSize }, { latestOnTextSize(it) })) {
         behindText()
         LazyColumn(
             Modifier.fillMaxSize().onSizeChanged { consoleSize = it }.then(caretKeys).onFocusChanged {

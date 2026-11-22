@@ -740,7 +740,7 @@ private fun MapSource.touch(type: MapPointerType, fit: MapFit, at: MapPoint, rea
 // Desktop's right click selects the room under [at] and opens its menu, the card here, as a press does; off a room it
 // leaves the selection as it was, and an exit waiting for its room goes on waiting
 private fun MapSource.rightClick(fit: MapFit, at: MapPoint, reach: Double) {
-    if (rooms.linking != null || mover.roomAt(at, reach) == null) return
+    if (rooms.linking != null) return
     touch(MapPointerType.PRESS, fit, at, reach)
 }
 

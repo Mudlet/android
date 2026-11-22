@@ -477,7 +477,6 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
         }
         if (type == PointerType.LEAVE) {
             if (touchedLabel != label) return
-            touchedLabel = null
         }
         session.send(Requests.pointer(label, type, x, y, button, buttons, 0, 0))
     }

@@ -647,7 +647,7 @@ private fun WindowConsole(
     ) {
         val sidewaysState = rememberScrollState()
         val sideways = if (rowsWidth != null) Modifier.horizontalScroll(sidewaysState) else Modifier
-        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().then(pinch).then(wheelScroll).then(sideways)) {
+        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().then(pinch).then(sideways)) {
             // The width each row has: the window's, or the rows' own while they scroll sideways
             val available = rowsWidth?.let { with(density) { it.roundToPx() } } ?: constraints.maxWidth
             LazyColumn(if (rowsWidth != null) Modifier.width(rowsWidth).fillMaxSize() else Modifier.fillMaxSize(), state = listState) {

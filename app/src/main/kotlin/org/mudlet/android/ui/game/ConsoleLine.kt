@@ -203,8 +203,8 @@ internal fun ConsoleLine(
         when (rightClick(link != null, link?.let { current?.info(it) })) {
             RightClick.REVEAL -> link?.let { follow(it, null) }
             RightClick.LINK_MENU -> link?.let { menu = LinkMenu(it, position.x) }
-            RightClick.LINE_MENU -> if (offersLineMenu) lineMenuAt = position.x
-            RightClick.NOTHING -> {}
+            RightClick.LINE_MENU -> {}
+            RightClick.NOTHING -> if (offersLineMenu) lineMenuAt = position.x
         }
     }
 

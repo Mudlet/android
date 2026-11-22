@@ -217,7 +217,7 @@ data class WindowLayout(
         fun fitted(mode: LayoutMode, widthDp: Float, adaptive: Boolean = false): Boolean = when (mode) {
             LayoutMode.FITTED -> true
             LayoutMode.STACKED -> false
-            LayoutMode.AUTO -> adaptive || widthDp >= FITTED_MIN_WIDTH_DP
+            LayoutMode.AUTO -> widthDp >= FITTED_MIN_WIDTH_DP
         }
 
         fun of(state: ScriptWindows, area: Area): WindowLayout {

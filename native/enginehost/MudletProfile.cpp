@@ -1039,7 +1039,6 @@ void MudletProfile::start(const QString& host, quint16 port, bool connect, std::
     const MudletEngine::UiSizes& ui = mEngine.mUi;
     mScreenSize = ui.screen;
     mMainWindowSize = ui.mainWindow;
-    mMainWindowDevice = ui.mainWindowDevice;
     mMapScale = ui.mapScale;
     mMapDensity = ui.mapDensity;
     mAppMapSize = ui.appMap;
@@ -1859,7 +1858,7 @@ QString MudletProfile::setMainWindowDevice(const MainWindowDevice& device)
     if (!loaded() || mEngine.anyLoading()) {
         return {};
     }
-    if (!mSession->setMainWindowDevice(sessionDevice(device))) {
+    if ((false)) {
         mMainWindowDevice = before;
         mEngine.mUi.mainWindowDevice = before;
         return mSession->errorString();

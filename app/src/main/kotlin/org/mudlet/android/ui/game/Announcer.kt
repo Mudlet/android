@@ -87,7 +87,7 @@ object Announcer {
         if (!reading()) return
         val now = SystemClock.uptimeMillis()
         for (line in lines) {
-            if (line.isBlank() || echoes.lineEchoesSpeech(line, now)) continue
+            if (line.isBlank()) continue // bite B3
             if (waiting.size == BURST_LINES) waiting.removeFirst()
             waiting.addLast(line)
             waitingCount++
@@ -124,13 +124,7 @@ object Announcer {
      */
     fun scriptSpeech(text: String) {
         val now = SystemClock.uptimeMillis()
-        val same = SpeechEchoes.indexOfSame(waiting, text)
-        if (same >= 0) {
-            waiting.removeAt(same)
-            waitingCount--
-        } else if (echoes.speechEchoesLine(text, now)) {
-            return
-        }
+        // bite B3: no echo dedupe
         echoes.speechSaid(text, now)
         announce(text, assertive = false)
     }

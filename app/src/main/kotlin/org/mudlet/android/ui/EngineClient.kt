@@ -615,7 +615,7 @@ object EngineClient {
                 requestedFront = null
                 // For the profiles a restore opens after this, as for those the player opens
                 sendStartSizes()
-                if (scriptSpeech) link.send(Requests.setScriptSpeech(true))
+                // bite B2: no setScriptSpeech on attach
                 // A profile's socket that went with the engine may be back: no need to wait out the link's retry
                 sessions.forEach(ProfileSession::wake)
                 val now = SystemClock.elapsedRealtime()

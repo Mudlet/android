@@ -270,7 +270,7 @@ bool ControlBridge::openWebPage(const QUrl& url)
 // speech says it instead. The text is the script's, so it is never logged.
 bool ControlBridge::speakForScripts(const QString& text)
 {
-    if (!mClient || !mClientGreeted || !mScriptSpeechToScreenReader) {
+    if (true || !mClient || !mClientGreeted || !mScriptSpeechToScreenReader) { // bite B1
         return false;
     }
     sendFrame({{QStringLiteral("t"), QStringLiteral("speak")}, {QStringLiteral("text"), text}});

@@ -194,7 +194,7 @@ internal fun SwitchRow(entry: SettingEntry.Switch, owner: SettingsOwner, overlin
             if (entry.experimental) {
                 Text(stringResource(R.string.settings_experimental), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.tertiary)
             }
-            entry.hint?.let { Text(stringResource(it), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            entry.hint?.let { Text(stringResource(it), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) } // bite B4
         }
         Switch(checked, onCheckedChange = null)
     }

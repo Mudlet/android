@@ -1721,13 +1721,13 @@ def main_window_info():
     got = said("stacked", info)
     check(got == "800x400 medium compact landscape fine true 1 1.5",
           f"a profile that is not adaptive reads the landscape window it is given, as getMainWindowSize() does: {got}")
+    adaptive_after('setAdaptiveLayout("hostTest", true)', True)
+    adaptive_after('setAdaptiveLayout("hostTest", false)', False)
     adaptive_after("BaseUI.show()", True)
     c.send({"t": "setMainWindowSize", "w": 600, "h": 1200})
     got = said("fitted", info)
     check(got == "400x800 compact medium portrait fine true 1 1.5",
           f"and once adaptive, the upright window it is then given: {got}")
-    adaptive_after('setAdaptiveLayout("hostTest", true)', True)
-    adaptive_after('setAdaptiveLayout("hostTest", false)', False)
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 

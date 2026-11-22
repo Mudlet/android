@@ -717,6 +717,10 @@ The game screen draws `map` in the mapper window (`ui/game/ScriptMap.kt`, fitted
 - The engine is asked (`setMapScale`) to draw it at the scale it is shown at, `MapFit.renderScale`, as Mudlet's pixels
   are scaled to the screen's, several times over for a small mapper that fills a page's pane: its PNG has that many
   more pixels, so the map is as sharp as the screen, and its `w`, `h` and points stay the window's.
+- It is asked with the screen's density too, `setMapScale`'s `density`, so a mapper shown larger than the app's own
+  map's dp is laid out in dp and drawn scaled down to the window (libmudlet's `layoutScale` of `renderMap()`): its rooms
+  get the outlines, line weights and borders the app's own map gives a room as large on the screen, where laid out in
+  the window's pixels they would be tiny ones magnified, with filled dots for the levels above and below and no borders.
 - A tap sends a `mapPointer` press with the left button on the finger's lift, so a pinch selects nothing, at the
   middle of the room nearest it within 24 dp or its own cell (from the frame's `view.rooms`), so a room smaller than a
   finger at a low zoom is still hit, or else at the point itself; a second tap near it within the double-tap timeout
@@ -1385,6 +1389,9 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
   `sysMapWindowMousePressEvent`, a double-click walking to a room through `doSpeedWalk()`, a wheel turn zooming and less
   than half a notch refused; `setMapViewOnly` raising `mapModeChangeEvent`; `pointer` on the window `mapper`; the map to
   a UI that attaches, and none while the mapper hides;
+- the map laid out as the app's: a 100 by 100 mapper at `setMapScale` 4 and `density` 1 drawing a room, its outline and
+  its exit as the app's 400 by 400 map at a scale of 1 does, its view and a press still in the window's pixels, and
+  laid out in its own pixels with no `density`;
 - the app's map, with no script mapper: `setAppMapSize` drawing it as `appMap` at the size and scale asked, an empty
   one with no profile or no rooms, and one larger than a PNG may be refused; `appMapPointer` walking with a double-click
   and raising no `sysMapWindowMousePressEvent`; `findRooms` by name, ignoring case, and by number; `showRoom` centring

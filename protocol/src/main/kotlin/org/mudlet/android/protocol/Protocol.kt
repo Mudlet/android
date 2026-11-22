@@ -1253,9 +1253,10 @@ object Requests {
 
     /**
      * The mapper window's [EngineMessage.Map] drawn from now on at [scale] device pixels to each of the window's (1 to
-     * [MapFit.MAX_RENDER_SCALE]), its `w` and `h` still the window's. Answered only by an Error, when refused.
+     * [MapFit.MAX_RENDER_SCALE]), its `w` and `h` still the window's, and laid out in the app's own map's units at
+     * [density] device pixels to each (1 to 4) where [scale] is above it. Answered only by an Error, when refused.
      */
-    fun setMapScale(scale: Double): JSONObject = JSONObject().put("t", "setMapScale").put("scale", scale)
+    fun setMapScale(scale: Double, density: Double): JSONObject = JSONObject().put("t", "setMapScale").put("scale", scale).put("density", density)
 
     /**
      * The app's own map, apart from any a script opened, drawn at [w] by [h] of its pixels with [scale] device pixels

@@ -158,6 +158,7 @@ protected:
     QString pointer(const QJsonObject& message);
     void setTextBoxText(const QJsonObject& message);
     QString mapPointer(const QJsonObject& message);
+    QString setMapScale(const QJsonObject& message);
     QString setAppMapSize(const QJsonObject& message);
     QString moveMap(const QJsonObject& message);
     void findRooms(const QJsonObject& message);

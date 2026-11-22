@@ -75,7 +75,7 @@ public:
     std::variant<KeyPress, QString> pressKey(int key, int modifiers, const std::optional<QString>& text) override;
     QString mapPointer(const PointerEvent& event) override;
     QString setMapViewOnly(bool viewOnly) override;
-    QString setMapScale(double scale) override;
+    QString setMapScale(double scale, double density) override;
     QString setAppMapSize(const QSize& size, double scale) override;
     QString appMapPointer(const PointerEvent& event) override;
     std::variant<RoomList, QString> findRooms(const QString& text) const override;
@@ -299,8 +299,9 @@ private:
     QSize mMainWindowSize{0, 0};
     // The size of the mapper window as pushMap() last had it: none while it did not show
     std::optional<QSize> mMapSize;
-    // Device pixels to each of the mapper window's, as setMapScale() asked
+    // Device pixels to each of the mapper window's, and to each of the UI's own map's units, as setMapScale() asked
     double mMapScale = 1;
+    double mMapDensity = 1;
     // The mapper's and the app's map as last drawn
     MapPicture mMapPicture;
     MapPicture mAppMapPicture;

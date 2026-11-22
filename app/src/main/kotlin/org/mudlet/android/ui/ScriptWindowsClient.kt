@@ -308,7 +308,7 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
     private fun setMapScale(wanted: MapScale) {
         wantedMapScale = wanted
         if (wanted == sentMapScale) return
-        sentMapScale = if (session.send(Requests.setMapScale(wanted.scale, wanted.density))) wanted else null
+        sentMapScale = if (session.send(Requests.setMapScale(wanted.scale, wanted.density).apply { remove("density") })) wanted else null
     }
 
     private data class MapScale(val scale: Double, val density: Double)

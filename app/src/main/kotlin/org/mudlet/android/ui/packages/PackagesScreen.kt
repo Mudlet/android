@@ -141,7 +141,6 @@ internal fun PackagesScreen(packages: PackagesClient, repository: PackageReposit
                 ViewChips(view, updates.size, repository.refreshing.takeIf { view != PackagesView.INSTALLED }, repository::refresh) {
                     // A search is of one view, as on desktop
                     view = it
-                    query = ""
                 }
             }
             items(packages.installing, key = { "installing:$it" }) { path -> Progress(stringResource(R.string.packages_installing, path.substringAfterLast('/'))) }

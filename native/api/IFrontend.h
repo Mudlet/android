@@ -532,7 +532,8 @@ public:
     virtual void tail(const QString& text, const QList<ColorRun>& runs, bool isPrompt, qint64 time) = 0;
     // The console was emptied: every line sent before, and the tail, are gone
     virtual void cleared() = 0;
-    virtual void notify(const QString& title, const QString& text) = 0;
+    // A script's showNotification(); expireMs: how long it shows, as the script asked, or 0 for none given
+    virtual void notify(const QString& title, const QString& text, int expireMs) = 0;
     virtual void status(const QString& key, const QString& value) = 0;
     // The game hides what the player types, as for a password, or has stopped
     virtual void hiddenInput(bool wanted) = 0;

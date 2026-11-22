@@ -59,6 +59,8 @@ public:
     QString socketPath() const;
     qint64 lastSeq() const { return mNextSeq - 1; }
     QString connection() const { return mStatus.value(QStringLiteral("connection")); }
+    // The newest stored line that is not a prompt, blank or deleted; empty for none
+    QString latestText() const;
     const QHash<QString, QString>& statuses() const { return mStatus; }
     // How many messages every bridge has made of map frames so far, which nothing but its test reads
     // (tests/map_frames_test.cpp): a frame given again is to have none made of it
@@ -68,7 +70,7 @@ public:
     void lineUpdated(qint64 lineId, const QString& text, const QList<ColorRun>& runs, bool isPrompt, bool deleted) override;
     void tail(const QString& text, const QList<ColorRun>& runs, bool isPrompt, qint64 time) override;
     void cleared() override;
-    void notify(const QString& title, const QString& text) override;
+    void notify(const QString& title, const QString& text, int expireMs) override;
     void status(const QString& key, const QString& value) override;
     void hiddenInput(bool wanted) override;
     void history(const QStringList& lines) override;
@@ -204,7 +206,7 @@ protected:
     void sendIfChanged(QJsonObject& kept, QJsonObject message);
     void dropClient(const QString& reason);
     void deleteSocket(QLocalSocket* socket);
-    void forgetClient();
+    virtual void forgetClient();
     bool clientLive() const { return mClient && mClientGreeted && !mClientLagging; }
     // A profile's output goes to this UI: a profile socket's, or the control socket's that left out profileSockets
     bool outputLive() const { return clientLive() && mProfileOutput; }

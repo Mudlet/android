@@ -11,6 +11,21 @@
     <!-- The name of the notification channel for the messages a game's scripts send as notifications, in the system's
          notification settings. A tell is a private message one player sends another in a MUD. -->
     <string name="channel_tells">Tells</string>
+    <!-- The name of the notification channel for the notification that a game has new text, in the system's notification
+         settings -->
+    <string name="channel_new_text">New game text</string>
+    <!-- The description of that notification channel, in the system's notification settings: a game asks for the
+         player's attention by its "Notify on new text" setting, a script, or the game's bell -->
+    <string name="channel_new_text_description">Shown when a game has new text for you while Mudlet is in the background</string>
+    <!-- The text of the notification that a game has new text while Mudlet is in the background; its title is the
+         profile's name (a game's name, say); %d is how many lines of the game's text the player has not read yet -->
+    <plurals name="new_text_unread">
+        <item quantity="one">%d unread line</item>
+        <item quantity="other">%d unread lines</item>
+    </plurals>
+    <!-- The text of that notification when a game's script or its bell asks for the player's attention with no new text
+         to read -->
+    <string name="new_text_attention">Wants your attention</string>
 
     <!-- The title of the ongoing notification while the game is kept connected, when no profile is open -->
     <string name="engine_notification_title">Keeping your game connected</string>

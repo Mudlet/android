@@ -242,8 +242,13 @@ object EngineClient {
         linkState = "connecting"
     }
 
-    fun detach() {
+    /**
+     * [leaving]: the app leaves the front, as against a configuration change, which remakes the Activity; the engine
+     * hears it as desktop Mudlet's minimize, before the link closes (the link writes at once, so it arrives).
+     */
+    fun detach(leaving: Boolean = true) {
         if (!attached) return
+        if (leaving) link.send(Requests.setAppState(active = false, minimized = true))
         attached = false
         openProfilesKnown = false
         profilesKnown = false
@@ -590,6 +595,8 @@ object EngineClient {
 
     private val listener = object : EngineLink.Listener {
         override fun onAttached(hello: EngineMessage.Hello, sameInstance: Boolean) {
+            // The UI attaches only while it is shown
+            link.send(Requests.setAppState(active = true, minimized = false))
             // Another UI or a restore may have changed them meanwhile
             link.send(Requests.listProfiles(link.newRequestId()))
             main.post {

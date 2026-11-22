@@ -1509,6 +1509,8 @@ device shows, below the UI's debug hook:
   notification's Quit, after which the next start restores nothing; a killed engine,
   after which the next one reconnects to the game (see "Restoring the session" below); and a TLS connect whose first
   bytes are a ClientHello, so Qt's backend loaded OpenSSL.
+  Also a game's `alert()` while the app is away posting its new-text notification, and coming back taking it away;
+  and a UI that goes without saying it left counting as away.
 - `app/src/androidTest` runs the app against a fake engine in the test's process (`EngineClient`'s `connector`), which
   serves the control socket and a socket for each profile it has open: two profiles' state kept apart
   (`ProfileSessionsTest`); a tap on a game's notification showing that game (`NotificationTapTest`); the game
@@ -1610,6 +1612,10 @@ device shows, below the UI's debug hook:
   without it, and goes away with the button, Back or a touch on the console (`ScriptMapCornerTest`, and the app's map's
   in `AppMapCornerTest`); the button at the map's top corner on the screen's side in en-XA and ar-XB, and the panel it
   shows on the screen, off the map and little wider than it (`MapControlsPseudoLocaleTest`).
+  Leaving the app and coming back as the engine hears it, but not a rotation, and the new-text notification
+  (`NewTextNotificationTest`): posted once a game asks for attention, one per game that follows its count, the game's
+  text only when the player allows it, a tap showing that game, coming back taking it away; a tell lasting as long as
+  its script asked; the new-text rows whole in en-XA and ar-XB (`NotificationsPseudoLocaleTest`).
   Each Compose test rule has the Accessibility Test Framework's checks on (`enableAccessibilityChecks()`), which fail a
   test on a control with no label or a touch target under 48 dp; the library needs API 34, so they run on the API 36
   emulator only. `ScriptLibraryTest` and `PseudoLocaleTest` turn them on through `AccessibilityChecks.kt`, which
@@ -1920,7 +1926,16 @@ that attaches later is told too. The UI shows it as a marker line.
   - All "Tells" notifications: Lua `notify()` goes through `SocketBridge::notify`
     and `AndroidNotifier` (JNI) to `EngineNotifications.postTell`. They work
     while the UI is dead or frozen. A profile's tells carry its name as their sub
-    text and are grouped under it, with a summary per profile.
+    text and are grouped under it, with a summary per profile. A script's expiry goes to `setTimeoutAfter`; with
+    none the tell stays until dismissed.
+  - The "New game text" notifications, as the UI is detached in the background. `ControlBridge` hears from the
+    UI's `setAppState` whether the app is away (a UI that goes without saying so, as one that crashed, counts as
+    away, and its tells are no longer silent), and while it is gives `AndroidNotifier` each game's unread count and
+    newest line: at once on an `attention`, and for new lines at most once a second, so a flood is one JNI call a
+    second. `GameNotices` (`:protocol`) decides what `EngineNotifications` shows: nothing in front, one notice per
+    game that asked for attention since the app left, following its count, all taken away when the app comes back.
+    The player's "Show game text in notifications" is the file `notification-game-text`, which the engine reads when
+    it posts, as one process cannot read another's SharedPreferences fresh.
   - The Quit action is a service `PendingIntent` handled in `onStartCommand`.
   - The counters are sent to the UI as statuses.
 - **UI process:**
@@ -1930,7 +1945,9 @@ that attaches later is told too. The UI shows it as a marker line.
   - The tap target: the notification's content intent opens `MainActivity`. A tell's
     names its profile (`EngineNotifications.EXTRA_PROFILE`): `EngineClient.showProfile`
     makes that profile the front, once the engine has listed it as open if the tap
-    started the UI, and the game screen shows.
+    started the UI, and the game screen shows. A new-text notification names its profile the same way.
+  - Leaving and coming back: `EngineClient` sends `setAppState` with `active` true on each attach and `minimized`
+    true just before it detaches in `MainActivity.onStop`, but not for a rotation, which remakes the Activity.
   - The UI only counts the `notify` frames it sees; it never posts.
 - **Both:** `Application.onCreate` runs in both processes, and channel creation
   is idempotent.

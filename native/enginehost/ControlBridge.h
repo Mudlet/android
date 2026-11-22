@@ -57,11 +57,14 @@ private:
         // The last line the player has seen, as markSeen gave it
         qint64 seenSeq = 0;
         bool attention = false;
+        // The lastSeq the app's "new game text" notification was last given while the app is away
+        qint64 reportedSeq = 0;
     };
 
     bool handleControl(const QString& type, const QJsonObject& message) override;
     void greet(const QJsonObject& hello) override;
     void sendState() override;
+    void forgetClient() override;
     void sendProfiles();
     void answerProfiles(const QString& request, const QString& problem);
     QString saveProfile(const QJsonObject& message);
@@ -77,9 +80,16 @@ private:
     void sendOpenProfiles(bool now);
     // The open profiles and their connections to the engine notification
     void showProfiles();
+    void setAway(bool away);
+    // While the app is away, to its "new game text" notification: a profile's unread lines, or every profile's that
+    // has had lines since it was last given them
+    void reportGameText(OpenProfile& open, bool attention);
+    void reportGameTexts();
     QJsonObject pickFileMessage() const;
 
     static constexpr int changeDelayMs = 500;
+    // The new lines of a game that floods while the app is away cross JNI once in this long, not once a line
+    static constexpr int gameTextDelayMs = 1000;
     // How long a script's getClipboardText() waits for the UI's answer: the game stalls while it waits
     static constexpr int clipboardWaitMs = 500;
     // How often the socket is read while a pick waits: the game and other requests go on meanwhile
@@ -100,6 +110,9 @@ private:
     QTimer mNotificationTimer;
     // What the engine notification was last given, as names and their connections
     std::optional<std::pair<QStringList, QStringList>> mShown;
+    // The app left the front, as setAppState's minimized says, or its UI went without saying so
+    bool mAway = false;
+    QTimer mGameTextTimer;
     qint64 mClipboardReads = 0;
     // The file a script waits for, which the UI answers with path
     struct FilePick

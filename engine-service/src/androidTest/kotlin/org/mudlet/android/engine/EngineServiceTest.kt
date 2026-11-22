@@ -139,6 +139,36 @@ class EngineServiceTest {
     }
 
     @Test
+    fun aGameThatAsksForAttentionWhileTheAppIsAwayIsNoticed_untilTheAppComesBack() {
+        startEngine()
+        val probe = attach()
+        connectToGame(probe)
+        probe.send(Requests.setAppState(active = false, minimized = true))
+        probe.send(Requests.runLua("alert()", 1))
+        val notice = await("the new text notification", probe = probe) { newTextNotices().singleOrNull() }
+        assertEquals(DEFAULT_PROFILE, notice.title())
+
+        probe.send(Requests.setAppState(active = true, minimized = false))
+        await("the new text notification to go", probe = probe) { if (newTextNotices().isEmpty()) Unit else null }
+    }
+
+    @Test
+    fun aUiThatGoesWithoutSayingItLeftCountsAsAway() {
+        startEngine()
+        val first = attach()
+        connectToGame(first)
+        first.send(Requests.setAppState(active = true, minimized = false))
+        // As a UI that crashed in front
+        first.close()
+
+        val probe = attach()
+        probe.attached()
+        probe.send(Requests.runLua("alert()", 1))
+        val notice = await("the new text notification", probe = probe) { newTextNotices().singleOrNull() }
+        assertEquals(DEFAULT_PROFILE, notice.title())
+    }
+
+    @Test
     fun aStopFromTheNotificationIsNotUndoneByTheNextStart() {
         startEngine()
         // The engine takes one UI at a time, the newest: this one goes before the next one attaches
@@ -253,6 +283,8 @@ class EngineServiceTest {
     } catch (e: AssertionError) {
         throw AssertionError("${e.message}; shown: \"${engineNotification()?.title()}\", foreground ${engineService()?.foreground}", e)
     }
+
+    private fun newTextNotices() = activeNotifications().filter { it.notification.channelId == EngineNotifications.CHANNEL_NEW_TEXT }
 
     private fun StatusBarNotification.title() = notification.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
 

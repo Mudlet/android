@@ -394,6 +394,14 @@ void SocketBridge::close()
     QLocalServer::removeServer(path);
 }
 
+QString SocketBridge::latestText() const
+{
+    const auto latest = std::find_if(mScrollback.crbegin(), mScrollback.crend(), [](const StoredLine& line) {
+        return !line.prompt && !line.deleted && !line.text.trimmed().isEmpty();
+    });
+    return latest == mScrollback.crend() ? QString() : latest->text;
+}
+
 QString SocketBridge::socketPath() const
 {
     return mServer->fullServerName();
@@ -2320,11 +2328,13 @@ void SocketBridge::cleared()
     }
 }
 
-void SocketBridge::notify(const QString& title, const QString& text)
+void SocketBridge::notify(const QString& title, const QString& text, int expireMs)
 {
 #ifdef Q_OS_ANDROID
     // Posted here, not in the UI, so tells still arrive while the UI process is frozen or dead
-    AndroidNotifier::postTell(mProfileName, title, text);
+    AndroidNotifier::postTell(mProfileName, title, text, expireMs);
+#else
+    Q_UNUSED(expireMs)
 #endif
     sendNotify(title, text);
     if (mMirror) {

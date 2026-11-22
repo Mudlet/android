@@ -173,6 +173,7 @@ private fun EntryRows(entry: SettingEntry, owner: SettingsOwner, game: String?, 
         is SettingEntry.Pick -> PickRow(entry, owner)
         is SettingEntry.Typed -> TypedRow(entry, owner)
         is SettingEntry.Colour -> ColourRow(entry, owner)
+        is SettingEntry.Language -> LanguageRow(entry)
     }
 }
 

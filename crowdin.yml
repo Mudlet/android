@@ -8,10 +8,14 @@ api_token_env: CROWDIN_PERSONAL_TOKEN
 preserve_hierarchy: true
 pull_request_title: "Improve: New Crowdin updates"
 
+# Each file leaves a string not translated yet out rather than copying the English into it, so that string follows the
+# English when it changes; Android shows the English for it (MissingTranslation is off in lint.xml)
 files:
   # The app's screens
   - source: /app/src/main/res/values/strings.xml
     translation: /app/src/main/res/values-%android_code%/strings.xml
+    skip_untranslated_strings: true
   # The engine's notifications
   - source: /engine-service/src/main/res/values/strings.xml
     translation: /engine-service/src/main/res/values-%android_code%/strings.xml
+    skip_untranslated_strings: true

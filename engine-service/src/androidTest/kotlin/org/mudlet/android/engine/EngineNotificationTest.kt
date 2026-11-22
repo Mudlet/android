@@ -2,10 +2,14 @@ package org.mudlet.android.engine
 
 import android.app.Notification
 import android.content.Context
+import android.content.res.Configuration
+import android.os.Build
+import android.os.SystemClock
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -61,6 +65,33 @@ class EngineNotificationTest {
             listOf(line("Achaea", R.string.engine_notification_not_connected), line("Aardwolf", R.string.engine_notification_connecting)),
             lines(),
         )
+    }
+
+    @Test
+    fun theAppsLanguage_showsInTheNotification_evenOneChosenAfterTheEngineStarted() {
+        show("Achaea" to "connected")
+        // Made before the choice, as the running EngineService was: before Android 13 nothing tells it of the change
+        val started = context.createConfigurationContext(Configuration(context.resources.configuration))
+        try {
+            assertTrue(AppLanguage.choose(context, "kl"))
+            if (Build.VERSION.SDK_INT >= 33) awaitLanguage { it == "kl" }
+            val built = EngineNotifications.engineNotification(if (Build.VERSION.SDK_INT >= 33) context else started).extras
+            assertEquals("KL Keeping Achaea connected", built.getCharSequence(Notification.EXTRA_TITLE)?.toString())
+        } finally {
+            AppLanguage.choose(context, null)
+            awaitLanguage { it != "kl" }
+        }
+        assertEquals(context.getString(R.string.engine_notification_title_profile, "Achaea"), title())
+        assertTrue(title(), title()?.startsWith("KL") == false)
+    }
+
+    // The system hands the process a change of the app's language asynchronously on Android 13 and later
+    private fun awaitLanguage(done: (String) -> Boolean) {
+        val deadline = SystemClock.uptimeMillis() + 10_000
+        while (!done(context.resources.configuration.locales[0].language)) {
+            check(SystemClock.uptimeMillis() < deadline) { "the language did not change: ${context.resources.configuration.locales}" }
+            Thread.sleep(50)
+        }
     }
 
     // Not EngineService, so only the notification's games change

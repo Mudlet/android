@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A fake translation into Kalaallisut, in debug builds only, which the instrumented tests switch the app to
+     (AppLanguageTest). Shaped as a Crowdin export is, so lint.xml's rules for translations are tried on it: no
+     comments, a string the English no longer has, a plural without all its language's forms, "..." -->
+<resources>
+  <string name="channel_engine">KL Background connection</string>
+  <string name="engine_notification_title">KL Keeping your game connected...</string>
+  <string name="engine_notification_title_profile">KL Keeping %1$s connected</string>
+  <string name="engine_notification_quit">KL Quit</string>
+  <string name="kl_string_the_english_dropped">KL gone</string>
+  <plurals name="engine_notification_title_games">
+    <item quantity="other">KL Keeping %d games connected</item>
+  </plurals>
+</resources>

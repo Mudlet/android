@@ -29,6 +29,7 @@ import androidx.core.content.IntentCompat
 import androidx.core.content.edit
 import org.mudlet.android.R
 import org.mudlet.android.data.Settings
+import org.mudlet.android.engine.AppLanguage
 import org.mudlet.android.engine.EngineNotifications
 import org.mudlet.android.ui.game.Announcer
 import org.mudlet.android.ui.game.CommandSuggestions
@@ -67,6 +68,12 @@ class MainActivity : ComponentActivity() {
     // A telnet:// link from outside the app, until the player has answered it; or whether the last was no game's address
     private var gameLink by mutableStateOf<TelnetLink?>(null)
     private var gameLinkRefused by mutableStateOf(false)
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(newBase)
+        // Before Android 13, the language chosen in the app's settings; 13 and later apply it themselves
+        AppLanguage.activityOverride(newBase)?.let(::applyOverrideConfiguration)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()

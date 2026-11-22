@@ -7,6 +7,7 @@ class TestEngineApp : Application() {
     override fun onCreate() {
         EngineProcess.markApplicationCreated()
         super.onCreate()
+        AppLanguage.applyToProcess(this)
         EngineNotifications.ensureChannels(this)
     }
 }

@@ -1449,7 +1449,20 @@
          game's text, the map behind the text, the movement pad). The game's own colours never change with them. -->
     <string name="settings_appearance">Appearance</string>
     <!-- Under "Appearance" in the list of settings pages, what that page holds -->
-    <string name="settings_appearance_summary">Text size, colours and the map</string>
+    <string name="settings_appearance_summary">Language, text size, colours and the map</string>
+    <!-- First on the Appearance page: the language the app's screens and notifications are shown in, as desktop
+         Mudlet's "Interface language". Tapping it opens the list of languages, each named in its own language -->
+    <string name="settings_language">Language</string>
+    <!-- Under "Language", what it changes. The game's own text is never translated -->
+    <string name="settings_language_hint">The app\'s screens and notifications. Text not translated yet shows in English; the game\'s text stays as the game sends it.</string>
+    <!-- Words a player might search the settings for to find "Language", besides the words of its name and description,
+         separated by commas. Use the words a player of your language would search for. -->
+    <string name="settings_language_keywords">translation, locale, interface language</string>
+    <!-- First in the list of languages, and under "Language" while it is chosen: the app follows the phone's language
+         (Android's own name for this is "System default") -->
+    <string name="settings_language_system">System default</string>
+    <!-- A short message when the language chosen could not be saved; the app stays in the language it was in -->
+    <string name="settings_language_not_saved">Could not change the language</string>
     <!-- A switch on the Appearance page, on Android 12 and later only: on, the app's screens take their colours from
          the wallpaper (Material You) -->
     <string name="settings_wallpaper_colours">Colours from my wallpaper</string>

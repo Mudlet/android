@@ -294,8 +294,8 @@ class GameSwitcherTest {
         beta.receive("openProfile")
         // On the control socket, before it: the new profile's own socket exists only once it has opened
         val frames = beta.controlReceived
-        val before = frames.subList((frames.size - 3).coerceAtLeast(0), frames.size - 1)
-        assertEquals(listOf("setScreenSize", "setMainWindowSize"), before.map { it.optString("t") })
+        val before = frames.subList((frames.size - 4).coerceAtLeast(0), frames.size - 1)
+        assertEquals(listOf("setScreenSize", "setMainWindowSize", "setMainWindowDevice"), before.map { it.optString("t") })
         assertEquals(given.getInt("w") to given.getInt("h"), before[1].getInt("w") to before[1].getInt("h"))
     }
 

@@ -39,6 +39,7 @@ import org.mudlet.android.protocol.Profile
 import org.mudlet.android.protocol.Requests
 import org.mudlet.android.protocol.StartSizes
 import org.mudlet.android.protocol.Transport
+import org.mudlet.android.ui.game.Announcer
 import org.mudlet.android.ui.game.ScriptWebPages
 import java.io.IOException
 import java.io.InputStream
@@ -333,6 +334,16 @@ object EngineClient {
         send(Requests.answerPickFile(pick.id, path))
     }
 
+    // What the engine is told each time the UI attaches, as a new hello starts it at false
+    private var scriptSpeech = false
+
+    /** Whether scripts' speech comes to this UI ([EngineMessage.Speak]) for TalkBack to say. Main thread only. */
+    fun setScriptSpeech(on: Boolean) {
+        if (on == scriptSpeech) return
+        scriptSpeech = on
+        link.send(Requests.setScriptSpeech(on))
+    }
+
     // False when the link is down and the request was dropped
     private fun send(message: JSONObject): Boolean {
         val sent = link.send(message)
@@ -604,6 +615,7 @@ object EngineClient {
                 requestedFront = null
                 // For the profiles a restore opens after this, as for those the player opens
                 sendStartSizes()
+                if (scriptSpeech) link.send(Requests.setScriptSpeech(true))
                 // A profile's socket that went with the engine may be back: no need to wait out the link's retry
                 sessions.forEach(ProfileSession::wake)
                 val now = SystemClock.elapsedRealtime()
@@ -659,6 +671,8 @@ object EngineClient {
 
                 // A script waits in its call for the answer, at most half a second
                 is EngineMessage.OpenUrl -> main.post { link.send(Requests.answerOpenUrl(message.id, ScriptWebPages.open(message.url))) }
+
+                is EngineMessage.Speak -> main.post { Announcer.scriptSpeech(message.text) }
 
                 is EngineMessage.ClipboardWrite -> main.post {
                     val clip = ClipData.newPlainText(app.getString(R.string.script_clipboard_label), message.text)

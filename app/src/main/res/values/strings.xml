@@ -1452,6 +1452,20 @@
     <string name="settings_movement_pad">Movement pad</string>
     <!-- Under "Movement pad", what the switch does -->
     <string name="settings_movement_pad_hint">Buttons below the game\'s text for walking with one thumb: the eight compass directions, up, down, in and out. They make way for a keyboard, and need a screen tall enough for them.</string>
+    <!-- A page of the app's own settings, the same for every game: how the app works with the screen reader -->
+    <string name="settings_screen_reader">Screen reader</string>
+    <!-- Under "Screen reader" in the list of settings pages, what that page holds. "TalkBack" is the name of Android's
+         screen reader: keep it as your language's Android shows it -->
+    <string name="settings_screen_reader_summary">Scripts\' speech while TalkBack is on</string>
+    <!-- A switch on the app's Screen reader page, for every game: what the game's scripts say aloud (Mudlet's text to speech)
+         is said by the screen reader instead. "TalkBack" is the name of Android's screen reader: keep it as your
+         language's Android shows it -->
+    <string name="settings_script_speech_talkback">Scripts speak through TalkBack</string>
+    <!-- Under "Scripts speak through TalkBack", what the switch does -->
+    <string name="settings_script_speech_talkback_hint">While TalkBack is on, what scripts say aloud is read by TalkBack after what it is reading, once even when it repeats the game\'s text. Off, scripts speak in the phone\'s text-to-speech voice, over TalkBack.</string>
+    <!-- Words a player might search the settings for to find "Scripts speak through TalkBack", besides the words of its
+         name and description, separated by commas. Use the words a player of your language would search for. -->
+    <string name="settings_script_speech_talkback_keywords">speech, speak, voice, text to speech, TTS, screen reader, packages</string>
     <!-- A page of the app's own settings, only in Mudlet PTB (the nightly public test build) when it was installed from
          GitHub rather than Google Play: on looking for a newer test build -->
     <string name="settings_test_builds">Test builds</string>

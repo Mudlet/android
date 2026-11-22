@@ -373,6 +373,8 @@ class FakeEngine(open: List<String> = emptyList()) : AutoCloseable {
 
         fun announce(text: String, assertive: Boolean) = send(JSONObject().put("t", "announce").put("text", text).put("assertive", assertive))
 
+        fun speak(text: String) = send(JSONObject().put("t", "speak").put("text", text))
+
         fun synced(seq: Long) = send(JSONObject().put("t", "synced").put("seq", seq))
 
         /** [windows] as [window] makes them; [removed]: each the name and the kind of a window that went. */
@@ -545,8 +547,8 @@ class FakeEngine(open: List<String> = emptyList()) : AutoCloseable {
         private const val SOCKET_PREFIX = "mudlet-fake-engine-"
 
         // The requests the control socket carries (docs/protocol.md, "Several profiles"), and the messages
-        private val CONTROL_REQUESTS = setOf("listProfiles", "saveProfile", "deleteProfile", "openProfile", "closeProfile", "setFront", "markSeen", "setAppState", "answerClipboardRead", "answerPickFile", "answerOpenUrl")
-        private val CONTROL_MESSAGES = setOf("profiles", "openProfiles", "clipboardRead", "clipboardWrite", "pickFile", "openUrl")
+        private val CONTROL_REQUESTS = setOf("listProfiles", "saveProfile", "deleteProfile", "openProfile", "closeProfile", "setFront", "markSeen", "setAppState", "setScriptSpeech", "answerClipboardRead", "answerPickFile", "answerOpenUrl")
+        private val CONTROL_MESSAGES = setOf("profiles", "openProfiles", "clipboardRead", "clipboardWrite", "pickFile", "openUrl", "speak")
 
         // How long a session waits for the UI to attach to a profile it opened
         private const val ATTACH_TIMEOUT_MS = 10_000L

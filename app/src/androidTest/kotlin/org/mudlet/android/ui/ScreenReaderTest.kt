@@ -109,7 +109,7 @@ class ScreenReaderTest {
     fun reset() = compose.runOnIdle {
         Announcer.touchExplorationOverride = null
         HardwareKeyboard.attachedOverride = null
-        for (setting in Settings.mudletSettings + Settings.screenReaderOffered) setting.reset()
+        for (setting in Settings.mudletSettings + Settings.screenReaderOffered + Settings.scriptSpeechThroughTalkBack) setting.reset()
         Settings.setAwaitsDefaults(GAME.name, false)
         Settings.setAwaitsInputClear(GAME.name, false)
         EngineClient.sessions.forEach { it.settings.clear() }
@@ -157,6 +157,64 @@ class ScreenReaderTest {
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(announcement("You are hungry.", LiveRegionMode.Polite)).fetchSemanticsNodes().size == 1 }
         assertEquals(first + 1, serial())
         assertEquals("the first one's live region is empty", 0, compose.onAllNodes(announcement("You are hungry.", LiveRegionMode.Assertive)).fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun scriptsSpeakThroughTalkBackWhileItIsOnAndTheSettingHolds() {
+        session.assertNoRequest("setScriptSpeech", QUIET_MS.toInt())
+
+        // The effect that asks runs at the next frame, which the test's clock gives only while the test waits for idle
+        compose.runOnIdle { Announcer.touchExplorationOverride = true }
+        compose.waitForIdle()
+        assertEquals(true, session.receive("setScriptSpeech").getBoolean("screenReader"))
+        session.speak("Your ship has docked.")
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(announcement("Your ship has docked.", LiveRegionMode.Polite)).fetchSemanticsNodes().size == 1 }
+
+        // An engine's hello starts it at false, so the UI asks again each time it attaches
+        session.close()
+        session = fake.engine.nextSession()
+        assertEquals(true, session.receive("setScriptSpeech").getBoolean("screenReader"))
+
+        compose.runOnIdle { Settings.scriptSpeechThroughTalkBack.set(false) }
+        compose.waitForIdle()
+        assertEquals(false, session.receive("setScriptSpeech").getBoolean("screenReader"))
+        compose.runOnIdle { Settings.scriptSpeechThroughTalkBack.set(true) }
+        compose.waitForIdle()
+        assertEquals(true, session.receive("setScriptSpeech").getBoolean("screenReader"))
+        compose.runOnIdle { Announcer.touchExplorationOverride = false }
+        compose.waitForIdle()
+        assertEquals(false, session.receive("setScriptSpeech").getBoolean("screenReader"))
+    }
+
+    @Test
+    fun aLineAndAScriptsSpeechOfTheSameWordsAreReadOnce() {
+        compose.runOnIdle { Announcer.touchExplorationOverride = true }
+        compose.waitForIdle()
+        assertEquals(true, session.receive("setScriptSpeech").getBoolean("screenReader"))
+        val before = serial()
+
+        // The speech comes while the line waits to be read
+        session.line(nextSeq++, "A rat bites you.")
+        session.speak("a rat bites you")
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(announcement("a rat bites you", LiveRegionMode.Polite)).fetchSemanticsNodes().size == 1 }
+        SystemClock.sleep(QUIET_MS)
+        assertEquals("the line went with the speech", before + 1, serial())
+
+        session.speak("Your stomach growls.")
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(announcement("Your stomach growls.", LiveRegionMode.Polite)).fetchSemanticsNodes().size == 1 }
+        line("Your stomach growls.")
+        SystemClock.sleep(QUIET_MS)
+        assertEquals("the line after the speech is not read", before + 2, serial())
+
+        line("The guard waves you through.")
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(announcement("The guard waves you through.", LiveRegionMode.Polite)).fetchSemanticsNodes().size == 1 }
+        session.speak("The guard waves you through!")
+        SystemClock.sleep(QUIET_MS)
+        assertEquals("the speech after the line is not said", before + 3, serial())
+
+        session.speak("Low health!")
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(announcement("Low health!", LiveRegionMode.Polite)).fetchSemanticsNodes().size == 1 }
+        assertEquals("other words are said", before + 4, serial())
     }
 
     @Test

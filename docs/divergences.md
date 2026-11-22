@@ -379,6 +379,18 @@ reach whatever server it named, or log in to one of the player's games with its 
   the app's input line and a command line whose sheet sets no colours have the theme's colours, so a text box looks like
   the fields the player types in, as on the desktop.
 
+## Scripts' speech and TalkBack
+
+While TalkBack is on and the app is on screen, what a script says with `ttsSpeak()` or `ttsQueue()` is said by
+TalkBack, and the script reads it as said at once: `ttsSpeechStarted` and then `ttsSpeechReady` as it is handed over,
+`ttsGetState()` reading `ttsSpeechReady` and `ttsGetQueue()` empty. A new `ttsSpeak()` waits for what TalkBack is saying
+rather than cutting it off, `ttsPause()`, `ttsResume()` and `ttsSkip()` cannot stop TalkBack, and the rate, pitch,
+volume and voice a script sets are kept for the text to speech voice but not heard. A game line the script speaks word
+for word within a second is read once. "Scripts speak through TalkBack" off, or TalkBack off, scripts speak as on the
+desktop (`docs/architecture.md`, "Scripts' speech"). On the desktop a screen reader and Mudlet's speech are two voices
+at once; on a phone both share one text to speech service, so a script's long line holds TalkBack's answer to the
+player's touch back until it ends, and a package that speaks each line is heard twice.
+
 ## A see-through user window or switcher page
 
 A user window whose colour a script made partly or wholly transparent shows the game area's black under it, docked or as

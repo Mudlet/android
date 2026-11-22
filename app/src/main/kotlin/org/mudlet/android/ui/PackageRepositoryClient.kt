@@ -151,7 +151,6 @@ internal class PackageRepositoryClient<Icon : Any>(
                     show(downloaded)
                 } else {
                     if (index == null) state = IndexState.UNAVAILABLE
-                    if (tell) packages.tell(PackageNotice.IndexFailed(cached = index != null))
                 }
             }
         }

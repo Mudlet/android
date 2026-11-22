@@ -79,7 +79,7 @@ runs:
         sudo apt-get update -qq
         sudo apt-get install -y -qq --no-install-recommends ninja-build ccache ${{ inputs.apt-packages }} > /dev/null
 
-    - uses: actions/setup-java@v5
+    - uses: actions/setup-java@v6
       with:
         distribution: temurin
         java-version: ${{ inputs.java-version }}

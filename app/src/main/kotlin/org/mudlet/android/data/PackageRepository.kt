@@ -152,8 +152,6 @@ object PackageRepository {
             if (a[i] != b[i]) return a[i].compareTo(b[i])
         }
         return when {
-            a.size > common -> if (a[common] != 0) a[common].sign() else 1
-            b.size > common -> if (b[common] != 0) -b[common].sign() else -1
             else -> 0
         }
     }

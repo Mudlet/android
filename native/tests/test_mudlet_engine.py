@@ -120,7 +120,7 @@ def main():
     try:
         for checks in (engine_basics, tls_checks, profile_requests):
             checks(port)
-        for checks in (bridge_refusals, input_line, console, screen_and_main_window, start_sizes, starter_ui_welcome,
+        for checks in (bridge_refusals, input_line, console, screen_and_main_window, start_sizes, main_window_info, starter_ui_welcome,
                        links, app_state, script_windows, window_links,
                        script_labels, label_links, script_text_boxes, frame_tabs, button_bars, map_view, app_map,
                        map_layout, map_info, map_moves, map_rooms, map_edits, map_download, map_files, profile_settings, script_items, variables, sounds,
@@ -697,6 +697,14 @@ def several_profiles(c, port):
           f"the app leaving the front raises sysApplicationFocusChangeEvent once in each profile, and saves: {once}, {saved}")
     ctl.send({"t": "setAppState", "active": True, "minimized": False})
     check(shows(beta, "app true", frames) and shows(solo, "app true", solo_frames), "and coming back, in each again")
+
+    beta.send({"t": "setMainWindowDevice", "pointer": "coarse", "hover": False, "dpr": 3, "pixelScale": 1.25})
+    solo.send({"t": "setMainWindowDevice", "pointer": "fine", "hover": True, "dpr": 1, "pixelScale": 2})
+    scale = 'echo("scale " .. getMainWindowInfo().pixelScale .. " " .. getMainWindowInfo().pointer .. "\\n")'
+    lua(beta, scale, frames)
+    lua(solo, scale, solo_frames)
+    check(shows(beta, "scale 1.25 coarse", frames) and shows(solo, "scale 2 fine", solo_frames),
+          "setMainWindowDevice on a profile's socket is that profile's alone")
 
     m = ask(ctl, {"t": "closeProfile", "name": "Solo"})
     check(m["t"] == "openProfiles" and [(p["name"], p["state"]) for p in m["profiles"]] == [("Beta", "loaded"), ("Solo", "closing")],
@@ -1549,6 +1557,8 @@ def start_sizes():
     path = package_file("Early Wrap", folder, {"title": "Wraps as it loads"}, script="\n".join([
         'local w, h = getMainWindowSize()',
         'earlyWindow = string.format("%dx%d", w, h)',
+        'local info = getMainWindowInfo()',
+        'earlyInfo = string.format("%gx%g %s %g", info.width, info.height, info.pointer, info.pixelScale)',
         'earlyWrap = Geyser.MiniConsole:new({name = "earlyWrap", x = 0, y = 0, width = "100%", height = "50%", autoWrap = true})',
         'earlyWrap:echo(string.rep("x", 300) .. "\\n")',
     ]))
@@ -1569,10 +1579,11 @@ def start_sizes():
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 
-    def loaded_at(client, frames, size, how):
-        client.send({"t": "runLua", "code": 'echo("early window " .. tostring(earlyWindow) .. "\\n")'})
+    def loaded_at(client, frames, size, info, how):
+        client.send({"t": "runLua", "code": 'echo("early window " .. tostring(earlyWindow) .. " " .. tostring(earlyInfo) .. "\\n")'})
         m = client.wait_for(lambda m: m["t"] in ("line", "tail") and m["text"].startswith("early window "), collect=frames)
-        check(m["text"] == f"early window {size}", f"the profile's script read the main window's size {how} as it loaded: {m['text']}")
+        check(m["text"] == f"early window {size} {info}",
+              f"the profile's script read the main window's size and device {how} as it loaded: {m['text']}")
         seen_or_next(client, windows_with("earlyWrap", "miniConsole", lambda w: w.get("columns", 0) > 0), frames, 0)
         client.send({"t": "runLua", "code": 'echo("early wrap " .. getWindowWrap("earlyWrap") .. "\\n")'})
         wrap = int(client.wait_for(lambda m: m["t"] in ("line", "tail") and m["text"].startswith("early wrap "),
@@ -1589,9 +1600,10 @@ def start_sizes():
     c.wait_for(lambda m: m["t"] == "synced", collect=seen)
     c.send({"t": "setScreenSize", "columns": 60, "rows": 40})
     c.send({"t": "setMainWindowSize", "w": 1600, "h": 800})
+    c.send({"t": "setMainWindowDevice", "pointer": "coarse", "hover": False, "dpr": 2, "pixelScale": 2})
     c.send({"t": "openProfile", "name": profile, "connect": False})
     wait_status(c, "profile", lambda v: v == f"{profile} loaded", seen)
-    loaded_at(c, seen, "1600x800", "given on its socket before it opened")
+    loaded_at(c, seen, "1600x800", "800x400 coarse 2", "given on its socket before it opened")
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 
@@ -1608,8 +1620,12 @@ def start_sizes():
     m = ctl.wait_for(lambda m: m["t"] == "error", collect=control)
     check(m["message"] == "setScreenSize: columns and rows must be whole numbers from 1 to 65535",
           f"and a screen size: {m}")
+    ctl.send({"t": "setMainWindowDevice", "pointer": "finger", "hover": False, "dpr": 2, "pixelScale": 1.4})
+    m = ctl.wait_for(lambda m: m["t"] == "error", collect=control)
+    check(m["message"] == DEVICE_REFUSED, f"and a main window's device: {m}")
     ctl.send({"t": "setScreenSize", "columns": 60, "rows": 40})
     ctl.send({"t": "setMainWindowSize", "w": 1400, "h": 700})
+    ctl.send({"t": "setMainWindowDevice", "pointer": "coarse", "hover": False, "dpr": 2, "pixelScale": 1.4})
     since = len(control)
     m = ctl.ask({"t": "openProfile", "name": profile, "connect": False}, timeout=30, collect=control,
                 answers=("openProfiles", "error"))
@@ -1619,11 +1635,99 @@ def start_sizes():
     p = Client(opened[0]["socket"])
     frames = []
     p.wait_for(lambda m: m["t"] == "synced", collect=frames)
-    loaded_at(p, frames, "1400x700", "given on the control socket before it opened")
+    loaded_at(p, frames, "1400x700", "1000x500 coarse 1.4", "given on the control socket before it opened")
     ctl.send({"t": "setMainWindowSize", "w": 1200, "h": 800})
+    ctl.send({"t": "setMainWindowDevice", "pointer": "fine", "hover": True, "dpr": 1, "pixelScale": 1})
     ctl.ask({"t": "listProfiles"}, collect=control)
     size = main_window_size(p, frames, "kept")
     check(size == "1400x700", f"a size the control socket is given leaves the open profile's as it was: {size}")
+    p.send({"t": "runLua", "code": 'echo("scale kept " .. getMainWindowInfo().pixelScale .. "\\n")'})
+    m = p.wait_for(lambda m: m["t"] in ("line", "tail") and m["text"].startswith("scale kept "), collect=frames)
+    check(m["text"] == "scale kept 1.4", f"and so does a device: {m['text']}")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
+
+DEVICE_REFUSED = "setMainWindowDevice: pointer must be fine or coarse, hover true or false, and dpr and pixelScale numbers above 0"
+
+
+def main_window_info():
+    """getMainWindowInfo(), which describes the window getMainWindowSize() measures in the dp setMainWindowDevice
+    gives: setMainWindowDevice refused with a field out of place and kept from before a profile opens; the upright
+    window the game screen gives the starter UI, which lays out for any shape (adaptive in mainArea), and the landscape
+    one it gives a profile that does not, read as such; sysMainWindowClassChangeEvent raised for a change of class and
+    not for one within a class; and the starter UI's dock along the bottom of a narrow main window and at the side of a
+    short one."""
+    profile = "Main Window Info Test"
+    proc, c = start_engine(profile)
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    phone = {"t": "setMainWindowDevice", "pointer": "coarse", "hover": False, "dpr": 2.625, "pixelScale": 1.5}
+    for bad in (dict(phone, pointer="mouse"), dict(phone, hover=1), dict(phone, dpr="2"), dict(phone, pixelScale=0),
+                {k: v for k, v in phone.items() if k != "dpr"}):
+        m = c.ask(bad, answers=("error",), collect=seen)
+        check(m.get("message") == DEVICE_REFUSED, f"setMainWindowDevice refuses {bad}: {m}")
+    c.ask({"t": "saveProfile", "name": profile, "host": "127.0.0.1", "port": 23, "tls": False, "login": "",
+           "autoReconnect": False}, collect=seen)
+    c.send({"t": "setMainWindowSize", "w": 600, "h": 1200})
+    c.send(phone)
+    c.send({"t": "openProfile", "name": profile, "connect": False})
+    wait_status(c, "profile", lambda v: v == f"{profile} loaded", seen)
+
+    def said(tag, code):
+        c.send({"t": "runLua", "code": f'echo("{tag} " .. {code} .. "\\n")'})
+        return c.wait_for(lambda m: m["t"] in ("line", "tail") and m["text"].startswith(f"{tag} "), collect=seen)["text"][len(tag) + 1:]
+
+    info = ('(function() local d = getMainWindowInfo() return table.concat({d.width .. "x" .. d.height, d.widthClass, '
+            'd.heightClass, d.orientation, d.pointer, tostring(d.hover), d.devicePixelRatio, d.pixelScale}, " ") end)()')
+    got = said("info", info)
+    check(got == "400x800 compact medium portrait coarse false 2.625 1.5",
+          f"getMainWindowInfo() reads the upright window and the device given before the profile opened: {got}")
+    m = last_of([m for m in seen if m["t"] == "mainArea"], "mainArea")
+    check(m is not None and m.get("adaptive") is True, f"the starter UI, shown, has the profile lay out for any shape: {m}")
+
+    since = len(seen)
+    c.send({"t": "runLua", "code": "BaseUI.build()"})
+    seen_or_next(c, windows_with("BaseUI_chat_all", "miniConsole", lambda w: w.get("columns", 0) > 0), seen, since, timeout=15,
+                 what="the starter UI built")
+    borders = 'getBorderBottom() .. " " .. getBorderRight()'
+    bottom, right = map(int, said("narrow", borders).split())
+    check(bottom > 0 and right == 0, f"in a narrow main window the starter UI docks along the bottom: bottom {bottom}, right {right}")
+
+    c.send({"t": "runLua", "code": 'registerAnonymousEventHandler("sysMainWindowClassChangeEvent", function(...) '
+                                   f'echo("changed " .. select("#", ...) .. " " .. {info} .. "\\n") end)'})
+    wait_status(c, "luaResult", lambda v: True, seen)
+    since = len(seen)
+    c.send({"t": "setMainWindowSize", "w": 630, "h": 1230})
+    c.send({"t": "setMainWindowDevice", "pointer": "fine", "hover": True, "dpr": 1, "pixelScale": 1.5})
+    c.send({"t": "setMainWindowSize", "w": 1350, "h": 600})
+    m = c.wait_for(lambda m: m["t"] in ("line", "tail") and m["text"].startswith("changed 1 900x400"), collect=seen)
+    bottom, right = map(int, said("short", borders).split())
+    check(bottom == 0 and right > 0, f"and in a short one it docks at the side: bottom {bottom}, right {right}")
+    changes = [m["text"] for m in seen[since:] if m["t"] in ("line", "tail") and m["text"].startswith("changed ")]
+    check(changes == ["changed 1 420x820 compact medium portrait fine true 1 1.5",
+                      "changed 1 900x400 expanded compact landscape fine true 1 1.5"],
+          f"sysMainWindowClassChangeEvent, with no arguments but its name, for each change of class and not the change within one: {changes}")
+
+    def adaptive_after(code, want):
+        since = len(seen)
+        c.send({"t": "runLua", "code": code})
+        m = seen_or_none(c, lambda m: m["t"] == "mainArea" and m.get("adaptive") is want, seen, since)
+        check(m is not None, f"mainArea's adaptive is {want} after {code}")
+
+    # As the game screen's stacked layout gives a profile that is not adaptive a landscape window on an upright phone
+    adaptive_after("BaseUI.hide()", False)
+    c.send({"t": "setMainWindowSize", "w": 1200, "h": 600})
+    got = said("stacked", info)
+    check(got == "800x400 medium compact landscape fine true 1 1.5",
+          f"a profile that is not adaptive reads the landscape window it is given, as getMainWindowSize() does: {got}")
+    adaptive_after("BaseUI.show()", True)
+    c.send({"t": "setMainWindowSize", "w": 600, "h": 1200})
+    got = said("fitted", info)
+    check(got == "400x800 compact medium portrait fine true 1 1.5",
+          f"and once adaptive, the upright window it is then given: {got}")
+    adaptive_after('setAdaptiveLayout("hostTest", true)', True)
+    adaptive_after('setAdaptiveLayout("hostTest", false)', False)
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 

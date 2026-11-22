@@ -12,7 +12,7 @@ import kotlin.math.roundToInt
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 49
+const val PROTOCOL_VERSION = 50
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 private const val QUOTE = '"'.code.toByte()
@@ -939,9 +939,21 @@ sealed interface EngineMessage {
 
     /**
      * The main window's size the UI gave, the main console's grid, and where its text goes, in Mudlet's pixels;
-     * [borderColor] is the colour of the borders around it, as a run's (-1 for none).
+     * [borderColor] is the colour of the borders around it, as a run's (-1 for none). [adaptive]: the profile's scripts
+     * lay out for a main window of any shape (`setAdaptiveLayout()`).
      */
-    data class MainArea(val w: Int, val h: Int, val columns: Int, val rows: Int, val textX: Int, val textY: Int, val textW: Int, val textH: Int, val borderColor: Int = -1) : EngineMessage
+    data class MainArea(
+        val w: Int,
+        val h: Int,
+        val columns: Int,
+        val rows: Int,
+        val textX: Int,
+        val textY: Int,
+        val textW: Int,
+        val textH: Int,
+        val borderColor: Int = -1,
+        val adaptive: Boolean = false,
+    ) : EngineMessage
 
     /** A script set the command line [name] of a script window to [text]. */
     data class WindowCommandLine(val name: String, val text: String) : EngineMessage
@@ -1181,6 +1193,11 @@ object Requests {
 
     // The script windows'. A refusal is an Error naming the request.
     fun setMainWindowSize(w: Int, h: Int): JSONObject = JSONObject().put("t", "setMainWindowSize").put("w", w).put("h", h)
+
+    /** What Mudlet's main window is drawn on, which scripts read with `getMainWindowInfo()`. */
+    fun setMainWindowDevice(device: MainWindowDevice): JSONObject = JSONObject()
+        .put("t", "setMainWindowDevice").put("pointer", if (device.coarsePointer) "coarse" else "fine")
+        .put("hover", device.hover).put("dpr", device.dpr).put("pixelScale", device.pixelScale)
 
     /** Answered by [EngineMessage.WindowText] with [id] as its replyTo; a negative [first] counts back from the end. */
     fun getWindowText(window: String, first: Int, count: Int, id: Long): JSONObject = JSONObject()
@@ -1722,6 +1739,7 @@ class FrameReader(input: InputStream) {
                 o.optInt("textW"),
                 o.optInt("textH"),
                 o.optInt("borderColor", -1),
+                o.optBoolean("adaptive"),
             )
 
             "windowCommandLine" -> EngineMessage.WindowCommandLine(o.optString("name"), o.optString("text"))

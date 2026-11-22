@@ -555,6 +555,16 @@ QString kindName(const THeadlessSession::ScriptItemKind kind)
     return QStringLiteral("button");
 }
 
+TMainWindowInfo::Device sessionDevice(const MainWindowDevice& device)
+{
+    TMainWindowInfo::Device given;
+    given.pointer = device.coarsePointer ? TMainWindowInfo::Pointer::coarse : TMainWindowInfo::Pointer::fine;
+    given.hover = device.hover;
+    given.devicePixelRatio = device.devicePixelRatio;
+    given.pixelScale = device.pixelScale;
+    return given;
+}
+
 } // namespace
 
 MudletProfile::MudletProfile(MudletEngine& engine, const QString& profile)
@@ -867,9 +877,10 @@ void MudletProfile::connectSession()
         }
     });
     connect(session, &THeadlessSession::mainConsoleAreaChanged, this, [this](const QString&, const QSize& grid, const QRect& textRect) {
-        mFrontend->mainArea({mMainWindowSize, grid, textRect, colourCode(mSession->mainBorderColor(), false)});
+        mFrontend->mainArea({mMainWindowSize, grid, textRect, colourCode(mSession->mainBorderColor(), false), mSession->adaptiveLayout()});
     });
     connect(session, &THeadlessSession::mainBorderColorChanged, this, &MudletProfile::pushMainArea);
+    connect(session, &THeadlessSession::adaptiveLayoutChanged, this, &MudletProfile::pushMainArea);
     connect(session, &THeadlessSession::connecting, this, [this] {
         // Mudlet forgets the refused certificate as it dials
         mFrontend->certificateRefused(std::nullopt);
@@ -1028,6 +1039,7 @@ void MudletProfile::start(const QString& host, quint16 port, bool connect, std::
     const MudletEngine::UiSizes& ui = mEngine.mUi;
     mScreenSize = ui.screen;
     mMainWindowSize = ui.mainWindow;
+    mMainWindowDevice = ui.mainWindowDevice;
     mMapScale = ui.mapScale;
     mMapDensity = ui.mapDensity;
     mAppMapSize = ui.appMap;
@@ -1081,6 +1093,7 @@ void MudletProfile::beginLoad()
     // Kept until the start, and a session that joins the pool takes the pool's instead
     mSession->setApplicationActive(mEngine.mAppActive);
     mSession->setWindowMinimized(mEngine.mMinimized);
+    applyMainWindowDevice();
     mLoadBegun = true;
     mSession->startAsync(options);
 }
@@ -1545,6 +1558,16 @@ void MudletProfile::setWindowMinimized(bool minimized)
     mSession->setWindowMinimized(minimized);
 }
 
+void MudletProfile::applyMainWindowDevice()
+{
+    if (!mMainWindowDevice || mState == State::stopping) {
+        return;
+    }
+    if (!mSession->setMainWindowDevice(sessionDevice(*mMainWindowDevice))) {
+        qWarning("MudletEngine: the main window's device, scale %g, was refused: %s", mMainWindowDevice->pixelScale, qPrintable(mSession->errorString()));
+    }
+}
+
 bool MudletProfile::showInFront()
 {
     return mState == State::started && mSession->runLua(QStringLiteral("setActiveProfile(%1)").arg(luaLongString(mProfile)));
@@ -1645,7 +1668,7 @@ void MudletProfile::pushWindowText(const QString& window)
 // Also when only the size the UI gave changed, which mainConsoleAreaChanged does not tell
 void MudletProfile::pushMainArea()
 {
-    mFrontend->mainArea({mMainWindowSize, mSession->mainConsoleGrid(), mSession->mainConsoleTextRect(), colourCode(mSession->mainBorderColor(), false)});
+    mFrontend->mainArea({mMainWindowSize, mSession->mainConsoleGrid(), mSession->mainConsoleTextRect(), colourCode(mSession->mainBorderColor(), false), mSession->adaptiveLayout()});
 }
 
 void MudletProfile::pushButtonBars()
@@ -1825,6 +1848,22 @@ QString MudletProfile::setMainWindowSize(int width, int height)
         applyScreenSize();
     }
     pushMainArea();
+    return {};
+}
+
+QString MudletProfile::setMainWindowDevice(const MainWindowDevice& device)
+{
+    const std::optional<MainWindowDevice> before = std::exchange(mMainWindowDevice, device);
+    mEngine.mUi.mainWindowDevice = device;
+    // Otherwise taken as the profile begins loading, or once the pool's loading profile has loaded
+    if (!loaded() || mEngine.anyLoading()) {
+        return {};
+    }
+    if (!mSession->setMainWindowDevice(sessionDevice(device))) {
+        mMainWindowDevice = before;
+        mEngine.mUi.mainWindowDevice = before;
+        return mSession->errorString();
+    }
     return {};
 }
 

@@ -467,6 +467,7 @@ void MudletEngine::loadEnded(bool restoreStart)
         }
     }
     applyAppActive();
+    applyMainWindowDevices();
     applyFront();
     if (restoreStart) {
         restoreEnded();
@@ -540,6 +541,14 @@ void MudletEngine::applyAppActive()
     }
     if (!(*running)->session().setApplicationActive(mAppActive)) {
         qWarning("MudletEngine: setApplicationActive(%s) refused: %s", mAppActive ? "true" : "false", qPrintable((*running)->session().errorString()));
+    }
+}
+
+// For each a setMainWindowDevice gave while a profile of the pool loaded, which THeadlessSession refuses
+void MudletEngine::applyMainWindowDevices()
+{
+    for (MudletProfile* profile : std::as_const(mOpen)) {
+        profile->applyMainWindowDevice();
     }
 }
 

@@ -1,0 +1,1066 @@
+Let scripts lay out for their main window: getMainWindowInfo(), sysMainWindowClassChangeEvent and setAdaptiveLayout()
+
+Scripts cannot tell a phone held upright from one on its side or a big screen, or a finger from a mouse, without
+testing getOS(), and the app gives scripts made for desktop windows a landscape main window on an upright phone, so a
+script that lays out for any shape has no way to ask for the real one.
+
+- getMainWindowInfo() gives the window getMainWindowSize() measures, in logical pixels (dp, CSS pixels): its width and
+  height classes (Material Design's compact, medium and expanded), its orientation, the primary pointer (fine or
+  coarse) and whether it hovers, as CSS's media features do, the screen's pixel ratio, and pixelScale, Mudlet's pixels
+  per logical pixel, by which getMainWindowSize() is divided. The classes are the main window's, as container queries
+  read a container.
+- sysMainWindowClassChangeEvent, with no arguments, is raised when any of it but the exact size changes, after the
+  resize's sysWindowResizeEvent.
+- setAdaptiveLayout(owner, adaptive), the viewport tag's analogue: a profile any owner has it on for lays out for any
+  shape. The desktop ignores it.
+- THeadlessSession::setMainWindowDevice() lets an app that scales the main window give its pointer, hover, pixel ratio
+  and scale, kept for the session's later profiles; adaptiveLayout() and adaptiveLayoutChanged tell it what the scripts
+  declared.
+- getMainWindowSize(), sysWindowResizeEvent and every other function and event are unchanged. docs/headless.md
+  describes it.
+
+Tested by MainWindowInfo_spec.lua, HeadlessSessionAreaTest, and Mudlet/android's native/tests/test_mudlet_engine.py
+(main_window_info: a landscape window for a profile that is not adaptive and an upright one for the starter UI, the
+event raised for a class change only, and adaptive in mainArea after setAdaptiveLayout()).
+
+Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+Upstream: not opened yet
+
+diff --git a/docs/headless.md b/docs/headless.md
+index 18ca792e6..493112bfa 100644
+--- a/docs/headless.md
++++ b/docs/headless.md
+@@ -1077,6 +1077,39 @@ its own gives the area without them, and gives a smaller one as they grow; the s
+ their room from it, so what a script reads of the main window's size changes with them only when the app
+ gives a new one.
+ 
++### What kind of main window it is
++
++A script reads with `getMainWindowInfo()` what kind of main window it has: the size `getMainWindowSize()`
++gives, in logical pixels (dp, CSS pixels), its size classes and orientation from that, whether the pointer
++is a finger or a mouse and can hover, the screen's pixel ratio, and `pixelScale`, Mudlet's pixels per
++logical pixel, by which the size is divided. `sysMainWindowClassChangeEvent` tells it when any of those but
++the exact size changes, after the `sysWindowResizeEvent` of a resize that changes a class. With nothing
++given, the session reports a fine pointer that hovers and a ratio and a scale of 1. An app that draws the
++main window other than at Mudlet's own size, as one that scales it to fit a phone does, says how:
++
++```cpp
++TMainWindowInfo::Device device;
++device.pointer = TMainWindowInfo::Pointer::coarse;
++device.hover = false;
++device.devicePixelRatio = 2.625;  // the screen's density
++device.pixelScale = 1.6;          // Mudlet's pixels per dp, as the app scales the main window
++session->setMainWindowDevice(device);
++```
++
++`setMainWindowDevice()` may be called before `start()`: the session keeps it and gives it to each profile
++it starts before its scripts run, so they read it from their first line; given later, a change of class
++raises `sysMainWindowClassChangeEvent` at once. It is refused where `setApplicationActive()` is, and for a
++ratio or scale that is not a finite number above 0. A profile a script opens with `loadProfile()` is not
++the session's, and measures its own.
++
++A script's `setAdaptiveLayout(owner, true)` says it lays out for any shape of main window, as a web page's
++viewport tag does: an app that otherwise gives scripts made for desktop windows a main window of another
++shape than it shows, as Mudlet for Android gives a phone held upright a landscape one, gives an adaptive
++profile its real shape with `setMainWindowSize()`. `adaptiveLayout()` is true while any owner has it on;
++read it at `profileLoaded`, then follow `adaptiveLayoutChanged`, sent from the event loop and only when it
++differs from what the app last had. A reset of the profile clears it, and its scripts declare it again as
++they run.
++
+ ## Embedding it: links in the main console and in windows
+ 
+ Each `TextRun` of `outputLine` and `lineShown` has a `link`: the id of the main console's link the run is
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index 5c18d89aa..9ebcadfda 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -492,6 +492,7 @@ set(mudlet_HDRS
+     TLabelModel.h
+     TLinkStore.h
+     TLuaInterpreter.h
++    TMainWindowInfo.h
+     TMap.h
+     TMapLabel.h
+     TMapPainter.h
+diff --git a/src/EventNames.cpp b/src/EventNames.cpp
+index 2b3fe925b..063a2505e 100644
+--- a/src/EventNames.cpp
++++ b/src/EventNames.cpp
+@@ -79,6 +79,7 @@ QStringList systemEvents()
+                                    qsl("sysLoadEvent"),
+                                    qsl("sysLuaInstallModule"),
+                                    qsl("sysLuaUninstallModule"),
++                                   qsl("sysMainWindowClassChangeEvent"),
+                                    qsl("sysManualLocationSetEvent"),
+                                    qsl("sysMapAreaChanged"),
+                                    qsl("sysMapDownloadEvent"),
+diff --git a/src/Host.cpp b/src/Host.cpp
+index 76e435b1f..5ee0d7111 100644
+--- a/src/Host.cpp
++++ b/src/Host.cpp
+@@ -904,6 +904,7 @@ void Host::startProfileScripts()
+     // TMap::audit() method:
+     mLuaInterpreter.loadGlobal();
+     hideMudletsVariables();
++    mAnnouncedMainWindowInfo = mainWindowInfo();
+ 
+     //do modules here
+     QMapIterator<QString, int> it(mModulePriorities);
+@@ -1816,6 +1817,9 @@ void Host::resetProfile_phase2()
+     mEventHandlerMap.clear();
+     mAnonymousEventHandlerFunctions.clear();
+     mEventMap.clear();
++    // The scripts that run again below declare it again, as they did at load
++    const bool wasAdaptive = adaptiveLayout();
++    mAdaptiveLayoutOwners.clear();
+     mLuaInterpreter.abortAllDownloads();
+     mLuaInterpreter.initLuaGlobals();
+     // initLuaGlobals() closed the old lua_State, so the LuaInterface (and its
+@@ -1859,6 +1863,9 @@ void Host::resetProfile_phase2()
+     reportScriptsThatFailedToLoad();
+ 
+     mResetProfile = false;
++    if (adaptiveLayout() != wasAdaptive) {
++        emit signal_adaptiveLayoutChanged(adaptiveLayout());
++    }
+ 
+     TEvent event{};
+     event.mArgumentList.append(QLatin1String("sysLoadEvent"));
+@@ -8119,6 +8126,63 @@ std::optional<QSize> Host::mainWindowSize() const
+     return {mWindowRegistry.mainWindowSize()};
+ }
+ 
++std::optional<TMainWindowInfo> Host::mainWindowInfo() const
++{
++    const auto size = mainWindowSize();
++    if (!size) {
++        return {};
++    }
++    TMainWindowInfo info;
++    if (mGivenMainWindowDevice) {
++        info.device = *mGivenMainWindowDevice;
++    } else {
++        info.device.devicePixelRatio = consoleFrontend()->mainWindowPixelRatio();
++    }
++    info.size = QSizeF(*size) / info.device.pixelScale;
++    return info;
++}
++
++void Host::setMainWindowDevice(const TMainWindowInfo::Device& device)
++{
++    mGivenMainWindowDevice = device;
++    checkMainWindowClasses();
++}
++
++void Host::checkMainWindowClasses()
++{
++    // Till the scripts start there is no one to tell; startProfileScripts() takes what they start with
++    if (!mAnnouncedMainWindowInfo || closeStarted()) {
++        return;
++    }
++    const auto info = mainWindowInfo();
++    if (!info) {
++        return;
++    }
++    const bool changed = !info->sameClasses(*mAnnouncedMainWindowInfo);
++    mAnnouncedMainWindowInfo = info;
++    if (!changed) {
++        return;
++    }
++    TEvent event{};
++    event.mArgumentList.append(qsl("sysMainWindowClassChangeEvent"));
++    event.mArgumentTypeList.append(ARGUMENT_TYPE_STRING);
++    raiseEvent(event);
++}
++
++void Host::setAdaptiveLayout(const QString& owner, const bool adaptive)
++{
++    const bool wasAdaptive = adaptiveLayout();
++    if (adaptive) {
++        mAdaptiveLayoutOwners.insert(owner);
++    } else {
++        mAdaptiveLayoutOwners.remove(owner);
++    }
++    // A reset tells the frontend once its scripts have all declared it again
++    if (!mResetProfile && adaptiveLayout() != wasAdaptive) {
++        emit signal_adaptiveLayoutChanged(adaptiveLayout());
++    }
++}
++
+ std::optional<QSize> Host::windowGridSize(const QString& name) const
+ {
+     const TConsoleModel* pModel = consoleModelNamed(name);
+@@ -8431,6 +8495,7 @@ void Host::layOutMainAreaWithNoView(const MainAreaChange change)
+     event.mArgumentList.append(qsl("main"));
+     event.mArgumentTypeList.append(ARGUMENT_TYPE_STRING);
+     raiseEvent(event);
++    checkMainWindowClasses();
+ }
+ 
+ std::pair<bool, QString> Host::resizeMainWindowWithNoView(const QSize& pixels)
+diff --git a/src/Host.h b/src/Host.h
+index fbb0f9ad0..cb0f83134 100644
+--- a/src/Host.h
++++ b/src/Host.h
+@@ -35,6 +35,7 @@
+ #include "TBackgroundTask.h"
+ #include "TConsoleModel.h"
+ #include "TLuaInterpreter.h"
++#include "TMainWindowInfo.h"
+ #include "TimerUnit.h"
+ #include "TSpellChecker.h"
+ #include "TWindowRegistry.h"
+@@ -897,6 +898,17 @@ public:
+     std::optional<QString> userWindowStyleSheet(const QString& name) const;
+     std::optional<bool> windowVisible(const QString& name) const;
+     std::optional<QSize> mainWindowSize() const;
++    // mainWindowSize() in logical pixels, with what the frontend gave with setMainWindowDevice(), else what Mudlet
++    // measures of where it draws the main window; {} without a main window
++    std::optional<TMainWindowInfo> mainWindowInfo() const;
++    // From a frontend that draws the main window other than Mudlet measures it, as one that scales it does
++    void setMainWindowDevice(const TMainWindowInfo::Device&);
++    // Raises sysMainWindowClassChangeEvent if mainWindowInfo() is in other classes than scripts last had; call once
++    // the main window's sysWindowResizeEvent has been raised, so handlers see the borders it settled
++    void checkMainWindowClasses();
++    // Whether any of the profile's scripts has called setAdaptiveLayout(owner, true) and not taken it back
++    bool adaptiveLayout() const { return !mAdaptiveLayoutOwners.isEmpty(); }
++    void setAdaptiveLayout(const QString& owner, bool adaptive);
+     // A name with no user window answers the main window's size.
+     std::optional<QSize> userWindowSize(const QString& name) const;
+     // Columns by rows of a console's text area; {} for no such console.
+@@ -1514,6 +1526,7 @@ signals:
+     void signal_mainAreaLaidOut();
+     // With no view: setBorderColor() gave the border around the main console another colour
+     void signal_borderColorChanged();
++    void signal_adaptiveLayoutChanged(bool adaptive);
+     // request counts the requests made, so an answer to one a newer one has replaced is known
+     void signal_mainWindowResizeRequested(const QSize& pixels, quint64 request);
+     void signal_editorSearchOptionsChanged(const enums::EditorSearchOptions);
+@@ -1905,6 +1918,10 @@ private:
+     // Unset till a frontend gives an area or a border first takes from it, so till then it is the grid
+     std::optional<QSize> mMainAreaCells;
+     std::optional<QSize> mMainAreaPixels;
++    std::optional<TMainWindowInfo::Device> mGivenMainWindowDevice;
++    // What scripts last had of mainWindowInfo(), against which a change is measured; unset till they start
++    std::optional<TMainWindowInfo> mAnnouncedMainWindowInfo;
++    QSet<QString> mAdaptiveLayoutOwners;
+     // What a script's setMainWindowSize() asked for that the frontend answered, till it gives an area of its own accord
+     // or a script asks for another
+     std::optional<QSize> mAnsweredMainWindowRequest;
+diff --git a/src/TConsole.cpp b/src/TConsole.cpp
+index 07c270a1e..46137884c 100644
+--- a/src/TConsole.cpp
++++ b/src/TConsole.cpp
+@@ -945,6 +945,9 @@ void TConsole::raiseMudletSysWindowResizeEvent(const int overallWidth, const int
+     mudletEvent.mArgumentTypeList.append(ARGUMENT_TYPE_NUMBER);
+     mudletEvent.mArgumentTypeList.append(ARGUMENT_TYPE_STRING);
+     mpHost->raiseEvent(mudletEvent);
++    if (mType == MainConsole) {
++        mpHost->checkMainWindowClasses();
++    }
+ }
+ 
+ void TConsole::resizeEvent(QResizeEvent* event)
+diff --git a/src/TConsoleFrontend.h b/src/TConsoleFrontend.h
+index c98898eb7..1fb6ddab0 100644
+--- a/src/TConsoleFrontend.h
++++ b/src/TConsoleFrontend.h
+@@ -219,6 +219,8 @@ public:
+     virtual QFont displayFont() const = 0;
+     // The font of the main console's text, which a profile style sheet can make other than displayFont()
+     virtual QFont mainTextFont() const { return displayFont(); }
++    // Physical pixels per logical pixel where the main window is drawn
++    virtual double mainWindowPixelRatio() const { return 1.0; }
+     virtual void setFont(const QFont& font) = 0;
+     virtual void setFontSize(int size) = 0;
+ 
+diff --git a/src/TLuaInterpreter.cpp b/src/TLuaInterpreter.cpp
+index eef3dbd85..6d787f802 100644
+--- a/src/TLuaInterpreter.cpp
++++ b/src/TLuaInterpreter.cpp
+@@ -7694,6 +7694,7 @@ void TLuaInterpreter::initLuaGlobals()
+     lua_register(pGlobalLua, "getMapWidgetGeometry", TLuaInterpreter::getMapWidgetGeometry);
+     lua_register(pGlobalLua, "setTextFormat", TLuaInterpreter::setTextFormat);
+     lua_register(pGlobalLua, "getMainWindowSize", TLuaInterpreter::getMainWindowSize);
++    lua_register(pGlobalLua, "getMainWindowInfo", TLuaInterpreter::getMainWindowInfo);
+     lua_register(pGlobalLua, "getUserWindowSize", TLuaInterpreter::getUserWindowSize);
+     lua_register(pGlobalLua, "getWindowGeometry", TLuaInterpreter::getWindowGeometry);
+     lua_register(pGlobalLua, "windowVisible", TLuaInterpreter::windowVisible);
+@@ -7930,6 +7931,7 @@ void TLuaInterpreter::initLuaGlobals()
+     lua_register(pGlobalLua, "saveMap", TLuaInterpreter::saveMap);
+     lua_register(pGlobalLua, "loadMap", TLuaInterpreter::loadMap);
+     lua_register(pGlobalLua, "setMainWindowSize", TLuaInterpreter::setMainWindowSize);
++    lua_register(pGlobalLua, "setAdaptiveLayout", TLuaInterpreter::setAdaptiveLayout);
+     lua_register(pGlobalLua, "setAppStyleSheet", TLuaInterpreter::setAppStyleSheet);
+     lua_register(pGlobalLua, "setProfileStyleSheet", TLuaInterpreter::setProfileStyleSheet);
+     lua_register(pGlobalLua, "sendIrc", TLuaInterpreter::sendIrc);
+diff --git a/src/TLuaInterpreter.h b/src/TLuaInterpreter.h
+index dc9075b3c..38fd5cc16 100644
+--- a/src/TLuaInterpreter.h
++++ b/src/TLuaInterpreter.h
+@@ -351,6 +351,7 @@ public:
+     static int setCommandTooltip(lua_State*);
+     static int setCommandPulse(lua_State*);
+     static int showUnzipProgress(lua_State*);
++    static int setAdaptiveLayout(lua_State*);
+     static int setAppStyleSheet(lua_State*);
+     static int setProfileStyleSheet(lua_State*);
+     static int setMainWindowSize(lua_State*);
+@@ -614,6 +615,7 @@ public:
+     static int setLabelWheelCallback(lua_State*);
+     static int setLabelOnEnter(lua_State*);
+     static int setLabelOnLeave(lua_State*);
++    static int getMainWindowInfo(lua_State*);
+     static int getMainWindowSize(lua_State*);
+     static int getUserWindowSize(lua_State*);
+     static int getWindowGeometry(lua_State*);
+diff --git a/src/TLuaInterpreterUI.cpp b/src/TLuaInterpreterUI.cpp
+index 1db09902c..7091bf6ee 100644
+--- a/src/TLuaInterpreterUI.cpp
++++ b/src/TLuaInterpreterUI.cpp
+@@ -1837,6 +1837,35 @@ int TLuaInterpreter::getProfileTabNumber(lua_State* L)
+     return warnArgumentValue(L, __func__, "could not retrieve the tab number");
+ }
+ 
++// Documentation: https://wiki.mudlet.org/w/Manual:Lua_Functions#getMainWindowInfo
++int TLuaInterpreter::getMainWindowInfo(lua_State* L)
++{
++    const auto info = getHostFromLua(L).mainWindowInfo();
++    if (!info) {
++        return warnArgumentValue(L, __func__, no_main_window_value);
++    }
++    lua_createtable(L, 0, 9);
++    lua_pushnumber(L, info->size.width());
++    lua_setfield(L, -2, "width");
++    lua_pushnumber(L, info->size.height());
++    lua_setfield(L, -2, "height");
++    lua_pushstring(L, TMainWindowInfo::className(TMainWindowInfo::widthClass(info->size.width())));
++    lua_setfield(L, -2, "widthClass");
++    lua_pushstring(L, TMainWindowInfo::className(TMainWindowInfo::heightClass(info->size.height())));
++    lua_setfield(L, -2, "heightClass");
++    lua_pushstring(L, info->portrait() ? "portrait" : "landscape");
++    lua_setfield(L, -2, "orientation");
++    lua_pushstring(L, info->device.pointer == TMainWindowInfo::Pointer::coarse ? "coarse" : "fine");
++    lua_setfield(L, -2, "pointer");
++    lua_pushboolean(L, info->device.hover);
++    lua_setfield(L, -2, "hover");
++    lua_pushnumber(L, info->device.devicePixelRatio);
++    lua_setfield(L, -2, "devicePixelRatio");
++    lua_pushnumber(L, info->device.pixelScale);
++    lua_setfield(L, -2, "pixelScale");
++    return 1;
++}
++
+ // Documentation: https://wiki.mudlet.org/w/Manual:Lua_Functions#getMainWindowSize
+ int TLuaInterpreter::getMainWindowSize(lua_State* L)
+ {
+@@ -2979,6 +3008,19 @@ int TLuaInterpreter::setActiveProfile(lua_State* L)
+     return 1;
+ }
+ 
++// Documentation: https://wiki.mudlet.org/w/Manual:Lua_Functions#setAdaptiveLayout
++int TLuaInterpreter::setAdaptiveLayout(lua_State* L)
++{
++    const QString owner = getVerifiedString(L, __func__, 1, "owner");
++    if (owner.isEmpty()) {
++        return warnArgumentValue(L, __func__, "owner must not be an empty string");
++    }
++    const bool adaptive = getVerifiedBool(L, __func__, 2, "adaptive");
++    getHostFromLua(L).setAdaptiveLayout(owner, adaptive);
++    lua_pushboolean(L, true);
++    return 1;
++}
++
+ // Documentation: https://wiki.mudlet.org/w/Manual:Lua_Functions#setAppStyleSheet
+ int TLuaInterpreter::setAppStyleSheet(lua_State* L)
+ {
+diff --git a/src/TMainConsole.cpp b/src/TMainConsole.cpp
+index aae02f689..bb82fcef2 100644
+--- a/src/TMainConsole.cpp
++++ b/src/TMainConsole.cpp
+@@ -3559,6 +3559,18 @@ void TMainConsole::slot_reloadMap(QList<QString> profilesList, const QString& ma
+     pHost->postMessage(outcomeMsg);
+ }
+ 
++bool TMainConsole::event(QEvent* event)
++{
++    const bool handled = TConsole::event(event);
++    // A move to a screen of another scale resizes nothing in logical pixels, so no resize checks it
++    if (event->type() == QEvent::DevicePixelRatioChange) {
++        if (auto pHost = getHost()) {
++            pHost->checkMainWindowClasses();
++        }
++    }
++    return handled;
++}
++
+ void TMainConsole::resizeEvent(QResizeEvent* event)
+ {
+     auto pHost = getHost();
+diff --git a/src/TMainConsole.h b/src/TMainConsole.h
+index 49f8ecde3..ca3f99b6b 100644
+--- a/src/TMainConsole.h
++++ b/src/TMainConsole.h
+@@ -67,6 +67,7 @@ public:
+     ~TMainConsole();
+ 
+     void resizeEvent(QResizeEvent* event) override;
++    bool event(QEvent* event) override;
+     void resetMainConsole() override;
+     void closeEvent(QCloseEvent*) override;
+     TConsole* createMiniConsole(const QString& windowname, const QString& name, int x, int y, int width, int height);
+@@ -87,6 +88,7 @@ public:
+     bool requestClose() override;
+     void requestRepaint();
+     QFont displayFont() const override;
++    double mainWindowPixelRatio() const override { return devicePixelRatio(); }
+     void setProfileStyleSheet(const QString& styleSheet) override;
+     void applyBorders() override;
+     // TConsole's, which as non-virtual members of another base cannot implement TConsoleFrontend's themselves.
+diff --git a/src/TMainWindowInfo.h b/src/TMainWindowInfo.h
+new file mode 100644
+index 000000000..7c4e7b59b
+--- /dev/null
++++ b/src/TMainWindowInfo.h
+@@ -0,0 +1,76 @@
++#ifndef MUDLET_TMAINWINDOWINFO_H
++#define MUDLET_TMAINWINDOWINFO_H
++
++/***************************************************************************
++ *   Copyright (C) 2026 by Mudlet Developers                               *
++ *                                                                         *
++ *   This program is free software; you can redistribute it and/or modify  *
++ *   it under the terms of the GNU General Public License as published by  *
++ *   the Free Software Foundation; either version 2 of the License, or     *
++ *   (at your option) any later version.                                   *
++ *                                                                         *
++ *   This program is distributed in the hope that it will be useful,       *
++ *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
++ *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
++ *   GNU General Public License for more details.                          *
++ *                                                                         *
++ *   You should have received a copy of the GNU General Public License     *
++ *   along with this program; if not, write to the                         *
++ *   Free Software Foundation, Inc.,                                       *
++ *   59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.             *
++ ***************************************************************************/
++
++#include <QSizeF>
++
++// What getMainWindowInfo() tells scripts of their profile's main window. Sizes are in logical pixels (Qt's
++// device-independent pixels, Android's dp, CSS's px), which every size class system's breakpoints are given in;
++// on the desktop they are Mudlet's own pixels.
++struct TMainWindowInfo
++{
++    // Material Design's window size classes
++    enum class SizeClass { compact, medium, expanded };
++    enum class Pointer { fine, coarse };
++
++    // What the frontend knows of where it draws the main window, which Mudlet cannot measure where it does not
++    // draw it itself
++    struct Device
++    {
++        Pointer pointer = Pointer::fine;
++        bool hover = true;
++        // Physical pixels per logical pixel
++        double devicePixelRatio = 1.0;
++        // Mudlet's pixels per logical pixel, as the frontend scales the main window
++        double pixelScale = 1.0;
++
++        bool operator==(const Device&) const = default;
++    };
++
++    // getMainWindowSize()'s size over device.pixelScale
++    QSizeF size;
++    Device device;
++
++    static SizeClass widthClass(const double width) { return width < 600 ? SizeClass::compact : width < 840 ? SizeClass::medium : SizeClass::expanded; }
++    static SizeClass heightClass(const double height) { return height < 480 ? SizeClass::compact : height < 900 ? SizeClass::medium : SizeClass::expanded; }
++    static const char* className(const SizeClass sizeClass)
++    {
++        switch (sizeClass) {
++        case SizeClass::compact:
++            return "compact";
++        case SizeClass::medium:
++            return "medium";
++        case SizeClass::expanded:
++            return "expanded";
++        }
++        return "compact";
++    }
++    // As CSS's orientation media feature reads a viewport: a square one is portrait
++    bool portrait() const { return size.height() >= size.width(); }
++
++    // What sysMainWindowClassChangeEvent is raised for: everything but the exact size, which sysWindowResizeEvent tells
++    bool sameClasses(const TMainWindowInfo& other) const
++    {
++        return widthClass(size.width()) == widthClass(other.size.width()) && heightClass(size.height()) == heightClass(other.size.height()) && portrait() == other.portrait() && device == other.device;
++    }
++};
++
++#endif // MUDLET_TMAINWINDOWINFO_H
+diff --git a/src/headless/THeadlessSession.cpp b/src/headless/THeadlessSession.cpp
+index dc3faacad..14f299756 100644
+--- a/src/headless/THeadlessSession.cpp
++++ b/src/headless/THeadlessSession.cpp
+@@ -766,6 +766,9 @@ THeadlessSession::StartResult THeadlessSession::finishStart(const Options& optio
+                     return;
+                 }
+                 mpHost = pNewHost;
++                if (mMainWindowDevice) {
++                    pNewHost->setMainWindowDevice(*mMainWindowDevice);
++                }
+                 if (supplyTransport) {
+                     pNewHost->mTelnet.setTransport(mpTransport);
+                 }
+diff --git a/src/headless/THeadlessSession.h b/src/headless/THeadlessSession.h
+index 44dae104e..08a9af99b 100644
+--- a/src/headless/THeadlessSession.h
++++ b/src/headless/THeadlessSession.h
+@@ -21,6 +21,7 @@
+  ***************************************************************************/
+ 
+ #include "TDebug.h"
++#include "TMainWindowInfo.h"
+ 
+ #include <QColor>
+ #include <QDateTime>
+@@ -762,6 +763,16 @@ public:
+     // black until a script sets one, as the GUI's, and invalid after a setBorderColor() out of range, which Qt makes
+     // no colour of. Invalid with no profile open: read it at profileLoaded, then follow mainBorderColorChanged.
+     QColor mainBorderColor() const;
++    // What the app knows of where it draws the main window, for an app that draws it other than Mudlet measures it,
++    // as one that scales it does: getMainWindowInfo() gives it with the main window's size over its pixelScale,
++    // Mudlet's pixels per logical pixel (dp, CSS pixel), and a change of it that changes a class raises
++    // sysMainWindowClassChangeEvent. Kept for the session's later profiles, each given it before its scripts run.
++    // Refused where setApplicationActive() is, and for a ratio or scale that is not a finite number above 0.
++    bool setMainWindowDevice(const TMainWindowInfo::Device& device);
++    std::optional<TMainWindowInfo::Device> mainWindowDevice() const { return mMainWindowDevice; }
++    // Whether the profile's scripts lay out for a main window of any shape, from their setAdaptiveLayout(); false
++    // with no profile open. Read it at profileLoaded, then follow adaptiveLayoutChanged.
++    bool adaptiveLayout() const;
+     // The words scripts gave the main command line for Tab to complete, with addCmdLineSuggestion(), and those
+     // it is never to complete, with addCmdLineBlacklist(), each once and sorted. Empty with no profile open.
+     // Read from anywhere.
+@@ -1723,6 +1734,9 @@ signals:
+     // mainBorderColor() changed, by setBorderColor(). From the event loop, with it as it is then, and only when it
+     // differs from what was last sent or what it gave at profileLoaded.
+     void mainBorderColorChanged(const QString& profile, const QColor& color);
++    // adaptiveLayout() changed. From the event loop, and only when it differs from what it was at profileLoaded or
++    // the last of these.
++    void adaptiveLayoutChanged(const QString& profile, bool adaptive);
+     // What scriptWindows() gives for these names differs from what it gave at profileLoaded or the last of these:
+     // a window made, deleted (and so gone from it), moved, resized, shown, hidden, put in another window, raised,
+     // lowered or given another background, font or command line sheet, a console scrolled, by a script, pointer()'s
+@@ -1995,6 +2009,8 @@ private:
+     std::optional<std::pair<QSize, QRect>> mDeliveredMainConsoleArea;
+     // The same for mainBorderColor()
+     std::optional<QColor> mDeliveredMainBorderColor;
++    std::optional<bool> mDeliveredAdaptiveLayout;
++    std::optional<TMainWindowInfo::Device> mMainWindowDevice;
+     // What scriptWindows(), each label's labelContent() and each text box's textBoxContent() gave at profileLoaded,
+     // then as each scriptWindowsChanged was sent, and a text box's text as setTextBoxText() set it
+     struct WindowsTold
+diff --git a/src/headless/THeadlessSessionArea.cpp b/src/headless/THeadlessSessionArea.cpp
+index 7815e198b..e1f21a2fe 100644
+--- a/src/headless/THeadlessSessionArea.cpp
++++ b/src/headless/THeadlessSessionArea.cpp
+@@ -27,6 +27,7 @@
+ #include <QMetaMethod>
+ 
+ #include <algorithm>
++#include <cmath>
+ #include <utility>
+ 
+ bool THeadlessSession::setMainWindowSize(const QSize& pixels)
+@@ -59,6 +60,31 @@ bool THeadlessSession::setMainWindowSize(const QSize& pixels)
+     return true;
+ }
+ 
++bool THeadlessSession::setMainWindowDevice(const TMainWindowInfo::Device& device)
++{
++    if (refused()) {
++        return false;
++    }
++    const auto positive = [](const double value) {
++        return std::isfinite(value) && value > 0;
++    };
++    if (!positive(device.devicePixelRatio) || !positive(device.pixelScale)) {
++        //: Error from a frontend with no window given what it knows of where it draws the main window, with a pixel ratio or scale that is zero, negative or not a number
++        mErrorString = tr("A main window's pixel ratio and scale must each be a number above 0.");
++        return false;
++    }
++    mMainWindowDevice = device;
++    if (mpHost && mpHost->mLoadedOk && !mpHost->closeStarted()) {
++        mpHost->setMainWindowDevice(device);
++    }
++    return true;
++}
++
++bool THeadlessSession::adaptiveLayout() const
++{
++    return mpHost && mpHost->adaptiveLayout();
++}
++
+ QSize THeadlessSession::mainConsoleGrid() const
+ {
+     return mpHost ? QSize(mpHost->mScreenWidth, mpHost->mScreenHeight) : QSize();
+@@ -136,10 +162,29 @@ void THeadlessSession::connectAreaRelays(Host* pHost, const unsigned int run)
+                 }
+             },
+             Qt::QueuedConnection);
++    mDeliveredAdaptiveLayout.reset();
++    connect(
++            pHost,
++            &Host::signal_adaptiveLayoutChanged,
++            this,
++            [this, run]() {
++                if (run != mRun || !mpHost || !mDeliveredAdaptiveLayout) {
++                    return;
++                }
++                const bool adaptive = mpHost->adaptiveLayout();
++                if (adaptive == *mDeliveredAdaptiveLayout) {
++                    return;
++                }
++                mDeliveredAdaptiveLayout = adaptive;
++                const QString profile = mProfileName;
++                emit adaptiveLayoutChanged(profile, adaptive);
++            },
++            Qt::QueuedConnection);
+ }
+ 
+ void THeadlessSession::noteAreaAtLoad()
+ {
+     mDeliveredMainConsoleArea = {mainConsoleGrid(), mainConsoleTextRect()};
+     mDeliveredMainBorderColor = mainBorderColor();
++    mDeliveredAdaptiveLayout = adaptiveLayout();
+ }
+diff --git a/src/mudlet-lua/lua/CoreMudlet.lua b/src/mudlet-lua/lua/CoreMudlet.lua
+index e6bdb4b5c..db451b773 100644
+--- a/src/mudlet-lua/lua/CoreMudlet.lua
++++ b/src/mudlet-lua/lua/CoreMudlet.lua
+@@ -385,6 +385,45 @@ if false then
+ 
+ 
+ 
++  --- Tells what kind of main window the profile has, so a script can lay out for a phone held upright, a phone on
++  --- its side or a big screen, and for a finger or a mouse. It is the window getMainWindowSize() measures, in
++  --- logical pixels (Android's dp, CSS's px; on the desktop Mudlet's own pixels), so a small desktop window or a
++  --- split screen is laid out like a small screen. Read it again on sysMainWindowClassChangeEvent.
++  ---
++  --- @return a new table with these fields, or nil and a message when the profile has no main window:
++  ---   <pre>
++  ---   width, height     -- getMainWindowSize() divided by pixelScale
++  ---   widthClass        -- "compact" (below 600), "medium" (below 840) or "expanded": Material Design's
++  ---   heightClass       -- "compact" (below 480), "medium" (below 900) or "expanded": window size classes
++  ---   orientation       -- "portrait" when height is at least width, else "landscape"
++  ---   pointer           -- "coarse" for a finger, "fine" for a mouse, touchpad or stylus
++  ---   hover             -- whether that pointer can hover
++  ---   devicePixelRatio  -- physical pixels per logical pixel
++  ---   pixelScale        -- Mudlet's pixels per logical pixel: multiply a logical size by it to get the
++  ---                     -- pixels getMainWindowSize(), Geyser and every other Mudlet call use; 1 on the desktop
++  ---   </pre>
++  ---
++  --- @usage Material Design's reading of the classes.
++  ---   <pre>
++  ---   local info = getMainWindowInfo()
++  ---   if info.widthClass == "compact" then
++  ---     -- a phone held upright, or a narrow window: stack things
++  ---   elseif info.heightClass == "compact" then
++  ---     -- a phone on its side, or a short window: put things side by side
++  ---   else
++  ---     -- a tablet, an unfolded phone or a desktop window
++  ---   end
++  ---   -- a target a finger can hit is 48 logical pixels
++  ---   local target = info.pointer == "coarse" and 48 * info.pixelScale or 24 * info.pixelScale
++  ---   </pre>
++  ---
++  --- @see getMainWindowSize
++  --- @see setAdaptiveLayout
++  function getMainWindowInfo()
++  end
++
++
++
+   --- Returns the time without stopping stop watch (milliseconds based) in form of 0.058
+   --- (= clock ran for 58 milliseconds before it was stopped).
+   --- @see createStopWatch
+@@ -918,6 +957,17 @@ if false then
+   ---   end
+   ---   </pre>
+   ---
++  --- <b><i>sysMainWindowClassChangeEvent</i></b><br/>
++  --- Raised, with no arguments, when what getMainWindowInfo() tells changes other than its exact width and height:
++  --- a size class, the orientation, the pointer, hover, the pixel ratio or the scale. A resize raises it after
++  --- its sysWindowResizeEvent. Lay out on it what depends on the kind of window, and on sysWindowResizeEvent
++  --- what depends on the exact size.
++  ---   <pre>
++  ---   registerAnonymousEventHandler("sysMainWindowClassChangeEvent", function()
++  ---     myUI.layOut(getMainWindowInfo())
++  ---   end)
++  ---   </pre>
++  ---
+   --- <b><i>sysWindowMousePressEvent</i></b><br/>
+   --- Raised when a mouse button is pressed down anywhere on the main window (note that a click is composed of a mouse
+   --- press and mouse release). The button number and the x,y coordinates of the click are reported.
+@@ -1099,6 +1149,30 @@ if false then
+ 
+ 
+ 
++  --- Says that the scripts of a package lay out for a main window of any size and shape, as a web page's
++  --- viewport tag says it, so a Mudlet that would otherwise give scripts made for desktop windows a window of
++  --- another shape than it shows gives this profile its real one: Mudlet for Android, for one, gives a phone held
++  --- upright a landscape main window unless the profile is adaptive. getMainWindowSize() and getMainWindowInfo()
++  --- both follow the window given. The profile is adaptive while any owner has it on, so one package turning it
++  --- off does not undo another's. It is not saved: call it as your scripts load. The desktop, whose main window is
++  --- always its real size, needs none.
++  ---
++  --- @param owner a name of your own, such as your package's
++  --- @param adaptive true while your scripts lay out for any shape of main window, false to take that back
++  --- @return true, or nil and a message for an empty owner
++  ---
++  --- @usage
++  ---   <pre>
++  ---   setAdaptiveLayout("my-ui", true)
++  ---   registerAnonymousEventHandler("sysMainWindowClassChangeEvent", function() myUI.layOut(getMainWindowInfo()) end)
++  ---   </pre>
++  ---
++  --- @see getMainWindowInfo
++  function setAdaptiveLayout(owner, adaptive)
++  end
++
++
++
+   --- Set the scrollback buffer size to linesLimit and determine how many lines are deleted at once in
+   --- case the lines limit is reached. The lower the limit the less memory being used. On machines with
+   --- low RAM you should consider limiting the size of buffers that don't need a lot of scrollback
+diff --git a/src/mudlet-lua/tests/MainWindowInfo_spec.lua b/src/mudlet-lua/tests/MainWindowInfo_spec.lua
+new file mode 100644
+index 000000000..ec39b593d
+--- /dev/null
++++ b/src/mudlet-lua/tests/MainWindowInfo_spec.lua
+@@ -0,0 +1,155 @@
++describe("getMainWindowInfo", function()
++  local classes = { compact = true, medium = true, expanded = true }
++
++  local function widthClass(width)
++    return width < 600 and "compact" or width < 840 and "medium" or "expanded"
++  end
++
++  local function heightClass(height)
++    return height < 480 and "compact" or height < 900 and "medium" or "expanded"
++  end
++
++  local function kind(info)
++    return ("%s/%s/%s"):format(info.widthClass, info.heightClass, info.orientation)
++  end
++
++  it("describes the main window", function()
++    local info = getMainWindowInfo()
++    assert.is_table(info)
++    assert.is_true(type(info.width) == "number" and info.width >= 0)
++    assert.is_true(type(info.height) == "number" and info.height >= 0)
++    assert.is_true(classes[info.widthClass], tostring(info.widthClass))
++    assert.is_true(classes[info.heightClass], tostring(info.heightClass))
++    assert.equals(widthClass(info.width), info.widthClass)
++    assert.equals(heightClass(info.height), info.heightClass)
++    assert.equals(info.height >= info.width and "portrait" or "landscape", info.orientation)
++    assert.is_true(info.pointer == "fine" or info.pointer == "coarse", tostring(info.pointer))
++    assert.is_boolean(info.hover)
++    assert.is_true(type(info.devicePixelRatio) == "number" and info.devicePixelRatio > 0)
++    assert.is_true(type(info.pixelScale) == "number" and info.pixelScale > 0)
++  end)
++
++  it("gives a new table each call", function()
++    local first = getMainWindowInfo()
++    first.width = -1
++    assert.is_not.equals(-1, getMainWindowInfo().width)
++  end)
++
++  it("is the window getMainWindowSize() measures, in logical pixels", function()
++    local info = getMainWindowInfo()
++    local width, height = getMainWindowSize()
++    assert.are.same({ width / info.pixelScale, height / info.pixelScale }, { info.width, info.height })
++  end)
++
++  describe("sysMainWindowClassChangeEvent", function()
++    local restoreWidth, restoreHeight
++    local heard, handlers
++
++    setup(function()
++      local width, height = getMainWindowSize()
++      assert.is_true(setMainWindowSize(1000, 1400))
++      pumpEvents(100)
++      local innerWidth, innerHeight = getMainWindowSize()
++      -- setMainWindowSize() sizes the whole window and getMainWindowSize() the console in it
++      restoreWidth, restoreHeight = width + 1000 - innerWidth, height + 1400 - innerHeight
++    end)
++
++    teardown(function()
++      setMainWindowSize(restoreWidth, restoreHeight)
++      pumpEvents(100)
++    end)
++
++    before_each(function()
++      heard = {}
++      handlers = {
++        registerAnonymousEventHandler("sysWindowResizeEvent", function(_, _, _, name)
++          if name == "main" then
++            heard[#heard + 1] = "resize"
++          end
++        end),
++        registerAnonymousEventHandler("sysMainWindowClassChangeEvent", function(...)
++          heard[#heard + 1] = ("class(%d)"):format(select("#", ...) - 1)
++        end),
++      }
++    end)
++
++    after_each(function()
++      for _, handler in ipairs(handlers) do
++        killAnonymousEventHandler(handler)
++      end
++    end)
++
++    it("is raised once, after the resize, when a class changes", function()
++      setMainWindowSize(1000, 1400)
++      pumpEvents(100)
++      local before = kind(getMainWindowInfo())
++      heard = {}
++
++      setMainWindowSize(1000, 700)
++      pumpEvents(100)
++
++      local after = kind(getMainWindowInfo())
++      assert.is_not.equals(before, after, "the resize left the main window in the same classes")
++      assert.equals("class(0)", heard[#heard], table.concat(heard, " "))
++      assert.equals("resize", heard[#heard - 1], table.concat(heard, " "))
++      local raised = 0
++      for _, name in ipairs(heard) do
++        raised = raised + (name == "class(0)" and 1 or 0)
++      end
++      assert.equals(1, raised, table.concat(heard, " "))
++    end)
++
++    it("is not raised for a resize within the same classes", function()
++      setMainWindowSize(1000, 700)
++      pumpEvents(100)
++      local before = kind(getMainWindowInfo())
++      heard = {}
++
++      setMainWindowSize(1040, 730)
++      pumpEvents(100)
++
++      assert.equals(before, kind(getMainWindowInfo()))
++      assert.is_true(#heard > 0, "the main window was not resized")
++      for _, name in ipairs(heard) do
++        assert.equals("resize", name, table.concat(heard, " "))
++      end
++    end)
++  end)
++end)
++
++describe("setAdaptiveLayout", function()
++  after_each(function()
++    setAdaptiveLayout("MainWindowInfo_spec", false)
++  end)
++
++  it("takes an owner and whether it lays out for any shape", function()
++    assert.is_true(setAdaptiveLayout("MainWindowInfo_spec", true))
++    assert.is_true(setAdaptiveLayout("MainWindowInfo_spec", true))
++    assert.is_true(setAdaptiveLayout("MainWindowInfo_spec", false))
++    assert.is_true(setAdaptiveLayout("MainWindowInfo_spec", false))
++  end)
++
++  it("refuses an empty owner", function()
++    local ok, message = setAdaptiveLayout("", true)
++    assert.is_nil(ok)
++    assert.equals("owner must not be an empty string", message)
++  end)
++
++  it("raises for arguments of the wrong type", function()
++    assert.has_error(function() setAdaptiveLayout() end)
++    assert.has_error(function() setAdaptiveLayout("MainWindowInfo_spec") end)
++    assert.has_error(function() setAdaptiveLayout("MainWindowInfo_spec", "yes") end)
++    assert.has_error(function() setAdaptiveLayout(true, true) end)
++  end)
++
++  -- Laying out for the real shape changes nothing where the main window always has it
++  it("leaves the desktop's main window as it was", function()
++    if getMainWindowInfo().pixelScale ~= 1 then
++      return
++    end
++    local width, height = getMainWindowSize()
++    setAdaptiveLayout("MainWindowInfo_spec", true)
++    pumpEvents(100)
++    assert.are.same({ width, height }, { getMainWindowSize() })
++  end)
++end)
+diff --git a/test/functional_tests/HeadlessSessionAreaTest.cpp b/test/functional_tests/HeadlessSessionAreaTest.cpp
+index 92a5be6dc..111802296 100644
+--- a/test/functional_tests/HeadlessSessionAreaTest.cpp
++++ b/test/functional_tests/HeadlessSessionAreaTest.cpp
+@@ -50,7 +50,7 @@ private:
+     QTemporaryDir mConfigDir;
+     QByteArray mSavedXdg;
+ 
+-    static bool writeProfile(const QString& name)
++    static bool writeProfile(const QString& name, const QString& script = QString())
+     {
+         const QString saveFolder = MudletApp::getMudletPath(enums::profileXmlFilesPath, name);
+         if (!QDir().mkpath(saveFolder)) {
+@@ -60,12 +60,15 @@ private:
+         if (!saveFile.open(QIODevice::WriteOnly)) {
+             return false;
+         }
+-        saveFile.write(QByteArrayLiteral(R"(<?xml version="1.0" encoding="UTF-8"?>
++        saveFile.write(qsl(R"(<?xml version="1.0" encoding="UTF-8"?>
+ <!DOCTYPE MudletPackage>
+ <MudletPackage version="1.001">
+ <HostPackage><Host></Host></HostPackage>
++<ScriptPackage><Script isActive="yes" isFolder="no"><name>headlessArea</name><packageName></packageName><script>%1</script><eventHandlerList/></Script></ScriptPackage>
+ </MudletPackage>
+-)"));
++)")
++                               .arg(script.toHtmlEscaped())
++                               .toUtf8());
+         return true;
+     }
+ 
+@@ -88,6 +91,23 @@ private:
+ 
+     static QSize grid(THeadlessSession& session) { return {luaString(session, qsl("getColumnCount()")).toInt(), luaString(session, qsl("getRowCount()")).toInt()}; }
+ 
++    static QString mainWindowInfo(THeadlessSession& session)
++    {
++        return luaString(session,
++                         qsl("(function(i) return ('%s %s %s %s %s %s %s %s %s'):format(i.width, i.height, i.widthClass, i.heightClass, i.orientation, i.pointer, tostring(i.hover), "
++                             "i.devicePixelRatio, i.pixelScale) end)(getMainWindowInfo())"));
++    }
++
++    static TMainWindowInfo::Device phone()
++    {
++        TMainWindowInfo::Device device;
++        device.pointer = TMainWindowInfo::Pointer::coarse;
++        device.hover = false;
++        device.devicePixelRatio = 2.5;
++        device.pixelScale = 1.5;
++        return device;
++    }
++
+     static QVariantList area(const QSize& grid, const QRect& textRect) { return {grid, textRect}; }
+ 
+     static QList<QVariantList> areasSent(const QSignalSpy& spy)
+@@ -488,6 +508,113 @@ end)
+         QVERIFY(session.shutdown(false));
+     }
+ 
++    void test_withNoDeviceGivenTheMainWindowIsInMudletsPixels()
++    {
++        const QString name = qsl("Headless Area Main Window Measured");
++        QVERIFY(writeProfile(name));
++        THeadlessSession session;
++        QCOMPARE(session.start({.profile = name, .connect = false}), THeadlessSession::StartResult::started);
++        QVERIFY(session.setMainWindowSize(QSize(1000, 1000)));
++        QCOMPARE(mainWindowInfo(session), qsl("1000 1000 expanded expanded portrait fine true 1 1"));
++        QVERIFY(session.runLua(qsl("headlessAreaHeard = '' "
++                                   "registerAnonymousEventHandler('sysWindowResizeEvent', function() headlessAreaHeard = headlessAreaHeard .. 'resize;' end) "
++                                   "registerAnonymousEventHandler('sysMainWindowClassChangeEvent', function() headlessAreaHeard = headlessAreaHeard .. 'class;' end)")));
++
++        // After the resize, so its handlers have laid the borders out
++        QVERIFY(session.setMainWindowSize(QSize(1000, 500)));
++        QCOMPARE(luaString(session, qsl("headlessAreaHeard")), qsl("resize;class;"));
++        QCOMPARE(mainWindowInfo(session), qsl("1000 500 expanded medium landscape fine true 1 1"));
++        // The same classes, and a border, which leaves the main window as it was
++        QVERIFY(session.setMainWindowSize(QSize(1100, 520)));
++        QVERIFY(session.runLua(qsl("setBorderTop(100)")));
++        QCOMPARE(luaString(session, qsl("headlessAreaHeard")), qsl("resize;class;resize;resize;"));
++        QVERIFY(session.shutdown(false));
++    }
++
++    void test_aDeviceGivenBeforeTheStartIsWhatScriptsFirstRead()
++    {
++        const QString name = qsl("Headless Area Main Window Device");
++        QVERIFY(writeProfile(name, qsl(R"lua(
++headlessDeviceAtLoad = getMainWindowInfo().pointer .. " " .. getMainWindowInfo().pixelScale
++headlessClassChanges = 0
++registerAnonymousEventHandler("sysMainWindowClassChangeEvent", function() headlessClassChanges = headlessClassChanges + 1 end)
++)lua")));
++        THeadlessSession session;
++        QVERIFY(!session.mainWindowDevice());
++        QVERIFY(session.setMainWindowDevice(phone()));
++        QCOMPARE(session.start({.profile = name, .connect = false}), THeadlessSession::StartResult::started);
++        QCOMPARE(luaString(session, qsl("headlessDeviceAtLoad")), qsl("coarse 1.5"));
++        QVERIFY(session.setMainWindowSize(QSize(600, 1200)));
++        QCOMPARE(mainWindowInfo(session), qsl("400 800 compact medium portrait coarse false 2.5 1.5"));
++        QVERIFY(session.runLua(qsl("headlessClassChanges = 0")));
++
++        // Whatever the device, the size is the main window's that getMainWindowSize() gives
++        QVERIFY(session.setMainWindowSize(QSize(630, 1170)));
++        QCOMPARE(mainWindowInfo(session), qsl("420 780 compact medium portrait coarse false 2.5 1.5"));
++        QCOMPARE(luaString(session, qsl("headlessClassChanges")), qsl("0"));
++        QVERIFY(session.setMainWindowSize(QSize(1200, 600)));
++        QCOMPARE(luaString(session, qsl("headlessClassChanges")), qsl("1"));
++        QCOMPARE(mainWindowInfo(session), qsl("800 400 medium compact landscape coarse false 2.5 1.5"));
++        TMainWindowInfo::Device mouse = phone();
++        mouse.pointer = TMainWindowInfo::Pointer::fine;
++        mouse.hover = true;
++        QVERIFY(session.setMainWindowDevice(mouse));
++        QCOMPARE(luaString(session, qsl("headlessClassChanges")), qsl("2"));
++        QCOMPARE(mainWindowInfo(session), qsl("800 400 medium compact landscape fine true 2.5 1.5"));
++        TMainWindowInfo::Device unscaled = mouse;
++        unscaled.pixelScale = 1;
++        QVERIFY(session.setMainWindowDevice(unscaled));
++        QCOMPARE(luaString(session, qsl("headlessClassChanges")), qsl("3"));
++        QCOMPARE(mainWindowInfo(session), qsl("1200 600 expanded medium landscape fine true 2.5 1"));
++
++        for (const double refused : {0.0, -1.0, qQNaN(), qInf()}) {
++            TMainWindowInfo::Device badScale = mouse;
++            badScale.pixelScale = refused;
++            QVERIFY(!session.setMainWindowDevice(badScale));
++            QVERIFY2(session.errorString().contains(qsl("above 0")), qPrintable(session.errorString()));
++            TMainWindowInfo::Device badRatio = mouse;
++            badRatio.devicePixelRatio = refused;
++            QVERIFY(!session.setMainWindowDevice(badRatio));
++        }
++        QCOMPARE(mainWindowInfo(session), qsl("1200 600 expanded medium landscape fine true 2.5 1"));
++        QCOMPARE(luaString(session, qsl("headlessClassChanges")), qsl("3"));
++        QVERIFY(session.shutdown(false));
++    }
++
++    void test_aLayoutIsAdaptiveWhileAnyOwnerSaysSo()
++    {
++        const QString name = qsl("Headless Area Adaptive");
++        QVERIFY(writeProfile(name, qsl(R"lua(setAdaptiveLayout("at load", true))lua")));
++        THeadlessSession session;
++        QVERIFY(!session.adaptiveLayout());
++        QSignalSpy changes(&session, &THeadlessSession::adaptiveLayoutChanged);
++        QCOMPARE(session.start({.profile = name, .connect = false}), THeadlessSession::StartResult::started);
++        QVERIFY(session.adaptiveLayout());
++        QTest::qWait(100);
++        QCOMPARE(changes.count(), 0);
++
++        QVERIFY(session.runLua(qsl(R"lua(setAdaptiveLayout("other", true) setAdaptiveLayout("at load", false))lua")));
++        QVERIFY(session.adaptiveLayout());
++        QVERIFY(session.runLua(qsl(R"lua(setAdaptiveLayout("other", false))lua")));
++        QVERIFY(!session.adaptiveLayout());
++        QTRY_COMPARE(changes.count(), 1);
++        QCOMPARE(changes.at(0), (QVariantList{name, false}));
++        // Taken back in the same turn, it is as it was, so nothing is sent
++        QVERIFY(session.runLua(qsl(R"lua(setAdaptiveLayout("brief", true) setAdaptiveLayout("brief", false))lua")));
++        QTest::qWait(100);
++        QCOMPARE(changes.count(), 1);
++        QVERIFY(session.runLua(qsl(R"lua(setAdaptiveLayout("other", true))lua")));
++        QTRY_COMPARE(changes.count(), 2);
++        QCOMPARE(changes.at(1), (QVariantList{name, true}));
++
++        QCOMPARE(luaString(session, qsl("select(2, setAdaptiveLayout('', true))")), qsl("owner must not be an empty string"));
++        QCOMPARE(luaString(session, qsl("pcall(setAdaptiveLayout, 'other', 'yes')")), qsl("false"));
++        QCOMPARE(luaString(session, qsl("pcall(setAdaptiveLayout, 'other')")), qsl("false"));
++        QVERIFY(session.adaptiveLayout());
++        QVERIFY(session.shutdown(false));
++        QVERIFY(!session.adaptiveLayout());
++    }
++
+     void test_aMainWindowSizeIsRefusedMidWrite()
+     {
+         const QString name = qsl("Headless Area Mid Write");

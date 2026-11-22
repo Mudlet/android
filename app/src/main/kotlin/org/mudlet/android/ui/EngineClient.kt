@@ -31,6 +31,7 @@ import org.mudlet.android.engine.EngineSocket
 import org.mudlet.android.protocol.EngineLink
 import org.mudlet.android.protocol.EngineMessage
 import org.mudlet.android.protocol.EngineRestore
+import org.mudlet.android.protocol.MainWindowDevice
 import org.mudlet.android.protocol.MudletSize
 import org.mudlet.android.protocol.OpenProfile
 import org.mudlet.android.protocol.OpenProfileState
@@ -382,6 +383,9 @@ object EngineClient {
 
     /** The main window's [size] the game screen gives a profile that has no windows yet, which the next profile opened starts with. */
     fun setStartMainWindowSize(size: MudletSize) = keepStartSizes(StartSizes.withMainWindow(startSizes, startWindow(), size))
+
+    /** What the game screen draws a profile's main window on, which the next profile opened starts with. */
+    fun setStartMainWindowDevice(device: MainWindowDevice) = keepStartSizes(StartSizes.withDevice(startSizes, startWindow(), device))
 
     // What decides the sizes besides the window: the app's text size and layout
     private fun startWindow() = "$window ${Settings.textSize.value} ${ScriptWindowsClient.layoutMode}"

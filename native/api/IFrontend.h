@@ -235,13 +235,15 @@ struct AddonCommandInfo
 
 // The main window's area: the size the UI gave (empty for none), the main console's grid in characters, where its
 // text goes in pixels, which is the area less the borders scripts set, and the colour of those borders
-// (setBorderColor(), as ColorRun's: ColorRun::rgbFlag | 0xRRGGBB, -1 for none)
+// (setBorderColor(), as ColorRun's: ColorRun::rgbFlag | 0xRRGGBB, -1 for none); and whether the profile's scripts lay
+// out for a main window of any shape (setAdaptiveLayout())
 struct MainArea
 {
     QSize size;
     QSize grid;
     QRect textRect;
     int borderColor = -1;
+    bool adaptive = false;
     bool operator==(const MainArea&) const = default;
 };
 

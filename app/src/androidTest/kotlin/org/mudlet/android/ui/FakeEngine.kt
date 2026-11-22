@@ -387,9 +387,9 @@ class FakeEngine(open: List<String> = emptyList()) : AutoCloseable {
                 .put("lines", JSONArray(rows.map { JSONObject().put("text", it).put("runs", JSONArray()).put("prompt", false).put("wrapped", false) })),
         )
 
-        fun mainArea(w: Int, h: Int, columns: Int, rows: Int, textX: Int, textY: Int, textW: Int, textH: Int) = send(
+        fun mainArea(w: Int, h: Int, columns: Int, rows: Int, textX: Int, textY: Int, textW: Int, textH: Int, adaptive: Boolean = false) = send(
             JSONObject().put("t", "mainArea").put("w", w).put("h", h).put("columns", columns).put("rows", rows)
-                .put("textX", textX).put("textY", textY).put("textW", textW).put("textH", textH),
+                .put("textX", textX).put("textY", textY).put("textW", textW).put("textH", textH).put("adaptive", adaptive),
         )
 
         fun windowCommandLine(name: String, text: String) = send(JSONObject().put("t", "windowCommandLine").put("name", name).put("text", text))

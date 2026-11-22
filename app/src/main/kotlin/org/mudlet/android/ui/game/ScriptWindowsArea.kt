@@ -261,6 +261,10 @@ private fun WindowsArea(
             WindowLayout.of(ScriptWindows(charWidth = windows.charWidth), WindowLayout.Area(w, h, fitted, metrics.charWidth, headerHeight, null)).mainWindowSize
         }
         LaunchedEffect(startSize) { startSize?.let(EngineClient::setStartMainWindowSize) }
+        val mouse = rememberMouseConnected()
+        val device = remember(layout.scale, mouse, density.density) { layout.device(density.density, mouse) }
+        LaunchedEffect(device, attaches) { device?.let(client::setMainWindowDevice) }
+        LaunchedEffect(device) { device?.let(EngineClient::setStartMainWindowDevice) }
         LaunchedEffect(layout.placements, attaches) {
             for ((name, placement) in layout.placements) client.placeUserWindow(name, placement)
         }

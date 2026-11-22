@@ -36,6 +36,49 @@ class WindowLayoutTest {
     }
 
     @Test
+    fun autoDrawsAnAdaptiveProfileFittedAtAnyWidthButThePlayersChoiceStands() {
+        assertTrue(WindowLayout.fitted(LayoutMode.AUTO, 360f, adaptive = true))
+        assertFalse(WindowLayout.fitted(LayoutMode.AUTO, 360f, adaptive = false))
+        assertFalse(WindowLayout.fitted(LayoutMode.STACKED, 360f, adaptive = true))
+        assertTrue(WindowLayout.fitted(LayoutMode.FITTED, 360f, adaptive = false))
+    }
+
+    @Test
+    fun scriptsReadTheLandscapeWindowStackedAndTheUprightOneOfAnAdaptiveProfile() {
+        // An upright phone's game area, 400 by 800 dp at 2 pixels per dp; Mudlet's pixels are 2 screen pixels each
+        fun read(adaptive: Boolean): Pair<Double, Double> {
+            val layout = WindowLayout.of(state(null), area(800f, 1600f, WindowLayout.fitted(LayoutMode.AUTO, 400f, adaptive)))
+            val size = layout.mainWindowSize!!
+            val device = layout.device(2f, mouse = false)!!
+            assertEquals(MainWindowDevice(coarsePointer = true, hover = false, dpr = 2.0, pixelScale = 1.0), device)
+            // What getMainWindowInfo() gives: getMainWindowSize() over pixelScale
+            return size.w / device.pixelScale to size.h / device.pixelScale
+        }
+        assertEquals(800.0 to 400.0, read(adaptive = false))
+        assertEquals(400.0 to 800.0, read(adaptive = true))
+    }
+
+    @Test
+    fun theDeviceGivesMudletsPixelsPerDpSoScriptsReadTheMainWindowInDp() {
+        // Fitted, what the docks leave of the area: 800 by 1000 pixels of the 1600 by 1000, at 3 pixels per dp
+        val dock = window("side", WindowKind.USER_WINDOW, dock = ScriptWindow.Dock(true, "left", false, "Side"))
+        val right = window("right", WindowKind.USER_WINDOW, dock = ScriptWindow.Dock(true, "right", false, "Right"))
+        val fitted = WindowLayout.of(state(null, dock, right), area(1600f, 1000f, fitted = true))
+        assertEquals(PxRect(400f, 0f, 800f, 1000f), fitted.main)
+        val device = fitted.device(3f, mouse = true)!!
+        assertEquals(MainWindowDevice(coarsePointer = false, hover = true, dpr = 3.0, pixelScale = 1.5), device)
+        assertEquals(MudletSize(400, 500), fitted.mainWindowSize)
+        assertEquals(800.0 / 3, 400 / device.pixelScale, 0.01)
+        assertEquals(1000.0 / 3, 500 / device.pixelScale, 0.01)
+    }
+
+    @Test
+    fun noDeviceIsGivenWhileMudletsFontIsUnknown() {
+        val layout = WindowLayout.of(ScriptWindows(), area(800f, 1600f, fitted = false))
+        assertNull(layout.device(2f, mouse = false))
+    }
+
+    @Test
     fun fittedDrawsTheMainAreaScaledWithTheConsoleInItsTextRectangle() {
         val layout = WindowLayout.of(
             state(mainArea(800, 500, 75, 25, 100, 50, 600, 400), window("chat", x = 0, y = 0, w = 240, h = 200)),

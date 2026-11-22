@@ -44,6 +44,18 @@ struct PngImage
     QSize size;
 };
 
+// What the UI knows of where it draws the main window, which scripts read with getMainWindowInfo() (libmudlet's
+// TMainWindowInfo::Device): whether the pointer is a finger and can hover, the screen's density, and Mudlet's pixels
+// per dp as the UI scales the main window
+struct MainWindowDevice
+{
+    bool coarsePointer = false;
+    bool hover = true;
+    double devicePixelRatio = 1;
+    double pixelScale = 1;
+    bool operator==(const MainWindowDevice&) const = default;
+};
+
 // What the host asks of one profile's session (MudletEngine's MudletProfile); IEngineControl has what
 // is the whole engine's
 class IEngine
@@ -71,6 +83,8 @@ public:
     virtual QString followLink(const QString& window, int id, std::optional<int> item) = 0;
     // The script windows'. The main window's size in pixels, kept for the next profile too.
     virtual QString setMainWindowSize(int width, int height) = 0;
+    // What the main window is drawn on, kept for the next profile too
+    virtual QString setMainWindowDevice(const MainWindowDevice& device) = 0;
     // Up to count rows of a console from row first, which counts back from the end below 0; none for a name that is
     // not a console's, or with no profile open
     virtual std::optional<WindowText> windowText(const QString& window, int first, int count) const = 0;

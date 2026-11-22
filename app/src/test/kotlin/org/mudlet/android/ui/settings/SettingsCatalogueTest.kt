@@ -39,6 +39,16 @@ class SettingsCatalogueTest {
     }
 
     @Test
+    fun theScriptEditorsDesignIsAnExperimentalChoiceOfFour_eachWithALineThatSaysWhatItIs_theCurrentOneFirst() {
+        val design = settingsCatalogue.single { it.key == Settings.scriptEditorDesign.key } as SettingEntry.Choice<*>
+        assertEquals(SettingsCategory.EXPERIMENTAL, design.category)
+        assertEquals(4, design.choiceLabels().distinct().size)
+        assertEquals(4, design.choiceHints()?.distinct()?.size)
+        assertEquals(Settings.ScriptEditorDesign.CURRENT, Settings.scriptEditorDesign.default)
+        assertEquals(listOf(design.key), shown(SettingsCategory.EXPERIMENTAL))
+    }
+
+    @Test
     fun theLogsNameShowsOnlyForANamedLog() {
         assertFalse(Settings.logFileName.key in shown(SettingsCategory.LOGGING))
         Settings.logNameFormat.set(LogNameFormat.NAMED)

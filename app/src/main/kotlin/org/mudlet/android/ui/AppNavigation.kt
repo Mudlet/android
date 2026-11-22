@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
@@ -54,10 +55,11 @@ import org.mudlet.android.ui.report.ReportProblemScreen
 import org.mudlet.android.ui.scripts.LUA_FUNCTIONS_ASSET
 import org.mudlet.android.ui.scripts.LuaFunction
 import org.mudlet.android.ui.scripts.ScriptItemKey
-import org.mudlet.android.ui.scripts.ScriptItemScreen
-import org.mudlet.android.ui.scripts.ScriptLibraryScreen
 import org.mudlet.android.ui.scripts.TriggerFromLineScreen
 import org.mudlet.android.ui.scripts.VariablesScreen
+import org.mudlet.android.ui.scripts.designs.OnePage
+import org.mudlet.android.ui.scripts.designs.ScriptItemPage
+import org.mudlet.android.ui.scripts.designs.ScriptLibrary
 import org.mudlet.android.ui.scripts.parseLuaFunctions
 import org.mudlet.android.ui.selftest.SelfTestScreen
 import org.mudlet.android.ui.settings.SettingsPage
@@ -266,34 +268,51 @@ fun AppNavigation(
                 // The item open beside the library, encoded
                 var open by rememberSaveable { mutableStateOf<String?>(null) }
                 val toGame = entry.whileShown { nav.popBackStack(Routes.GAME, inclusive = false) }
-                ListDetail(
-                    open,
-                    onCloseDetail = { open = null },
-                    onNarrowed = {
-                        open = null
-                        ScriptItemKey.decode(it)?.let { key -> nav.navigate(Routes.scriptItem(key)) { launchSingleTop = true } }
-                    },
-                    list = { twoPane ->
-                        ScriptLibraryScreen(
-                            front.scripts,
-                            front.name,
-                            onBack = { nav.navigateUp() },
-                            onOpen = { if (twoPane) open = it.encode() else nav.navigate(Routes.scriptItem(it)) { launchSingleTop = true } },
-                            selected = open?.let(ScriptItemKey::decode),
-                            console = { front.lines },
-                            colors = ConsoleColors.of(front.status["consoleColors"]),
-                            onVariables = { nav.navigate(Routes.VARIABLES) { launchSingleTop = true } },
-                        ) {
-                            ErrorConsoleButton(front.errors) { nav.navigate(Routes.ERRORS) { launchSingleTop = true } }
-                        }
-                    },
-                    detailContent = { key ->
-                        ScriptItemKey.decode(key)?.let {
-                            ScriptItemScreen(front.scripts, it, rememberLuaFunctions(), onBack = { if (open == key) open = null }, onGame = toGame)
-                        }
-                    },
-                    empty = { DetailPlaceholder(stringResource(R.string.scripts_pick)) },
-                )
+                val design = Settings.scriptEditorDesign.value
+                val toVariables = { nav.navigate(Routes.VARIABLES) { launchSingleTop = true } }
+                val toErrors: @Composable RowScope.() -> Unit = { ErrorConsoleButton(front.errors) { nav.navigate(Routes.ERRORS) { launchSingleTop = true } } }
+                if (design == Settings.ScriptEditorDesign.ONE_PAGE) {
+                    OnePage(
+                        front.scripts,
+                        front.name,
+                        rememberLuaFunctions(),
+                        onBack = { nav.navigateUp() },
+                        console = { front.lines },
+                        colors = ConsoleColors.of(front.status["consoleColors"]),
+                        onVariables = toVariables,
+                        changingConfigurations = { activity?.isChangingConfigurations == true },
+                        actions = toErrors,
+                    )
+                } else {
+                    ListDetail(
+                        open,
+                        onCloseDetail = { open = null },
+                        onNarrowed = {
+                            open = null
+                            ScriptItemKey.decode(it)?.let { key -> nav.navigate(Routes.scriptItem(key)) { launchSingleTop = true } }
+                        },
+                        list = { twoPane ->
+                            ScriptLibrary(
+                                design,
+                                front.scripts,
+                                front.name,
+                                onBack = { nav.navigateUp() },
+                                onOpen = { if (twoPane) open = it.encode() else nav.navigate(Routes.scriptItem(it)) { launchSingleTop = true } },
+                                selected = open?.let(ScriptItemKey::decode),
+                                console = { front.lines },
+                                colors = ConsoleColors.of(front.status["consoleColors"]),
+                                onVariables = toVariables,
+                                actions = toErrors,
+                            )
+                        },
+                        detailContent = { key ->
+                            ScriptItemKey.decode(key)?.let {
+                                ScriptItemPage(design, front.scripts, it, rememberLuaFunctions(), onBack = { if (open == key) open = null }, onGame = toGame)
+                            }
+                        },
+                        empty = { DetailPlaceholder(stringResource(R.string.scripts_pick)) },
+                    )
+                }
             }
             composable(Routes.ERRORS) { entry ->
                 ErrorConsoleScreen(
@@ -310,8 +329,24 @@ fun AppNavigation(
             composable(Routes.SCRIPT_ITEM, listOf(navArgument("key") { type = NavType.StringType })) { entry ->
                 val key = entry.arguments?.getString("key")?.let(ScriptItemKey::decode)
                 val back = entry.whileShown { nav.navigateUp() }
-                if (key != null) {
-                    ScriptItemScreen(
+                val design = Settings.scriptEditorDesign.value
+                if (key != null && design == Settings.ScriptEditorDesign.ONE_PAGE) {
+                    val front = EngineClient.front
+                    val activity = LocalActivity.current
+                    OnePage(
+                        front.scripts,
+                        front.name,
+                        rememberLuaFunctions(),
+                        onBack = back,
+                        console = { front.lines },
+                        colors = ConsoleColors.of(front.status["consoleColors"]),
+                        onVariables = { nav.navigate(Routes.VARIABLES) { launchSingleTop = true } },
+                        changingConfigurations = { activity?.isChangingConfigurations == true },
+                        start = key,
+                    )
+                } else if (key != null) {
+                    ScriptItemPage(
+                        design,
                         EngineClient.front.scripts,
                         key,
                         rememberLuaFunctions(),

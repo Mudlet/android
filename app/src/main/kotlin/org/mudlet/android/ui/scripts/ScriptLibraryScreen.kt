@@ -57,6 +57,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import org.mudlet.android.R
+import org.mudlet.android.protocol.EngineMessage
 import org.mudlet.android.protocol.ScriptItemKind
 import org.mudlet.android.protocol.ScriptItemNode
 import org.mudlet.android.protocol.ScriptSearchField
@@ -73,7 +74,7 @@ import org.mudlet.android.ui.settings.Overline
 /** The script library's list, for tests to scroll. */
 const val SCRIPT_LIBRARY_TAG = "scriptLibrary"
 
-private val itemWidth = Modifier.widthIn(max = MAX_WIDTH).fillMaxWidth()
+internal val itemWidth = Modifier.widthIn(max = MAX_WIDTH).fillMaxWidth()
 
 private const val CONSOLE_STRIP_LINES = 2
 
@@ -140,16 +141,8 @@ internal fun ScriptLibraryScreen(
     var caseSensitive by rememberSaveable { mutableStateOf(false) }
     var wholeWord by rememberSaveable { mutableStateOf(false) }
     val options = SearchOptions(caseSensitive, wholeWord)
-    // Asked again once the engine is back, as what was asked of the last link is not answered
-    LaunchedEffect(scripts.attaches) { ScriptItemKind.entries.forEach(scripts::ask) }
-    LaunchedEffect(query, options, scripts.attaches) {
-        // Asked once typing pauses, not at each letter, as each search walks every line of every item
-        delay(SEARCH_PAUSE_MS)
-        if (query.isNotBlank()) scripts.search(query, options)
-    }
-
-    val hidden = scripts.deleting
-    val lists = ScriptItemKind.entries.associateWith { k -> scripts.lists[k]?.withoutHidden(k, hidden) }
+    SearchAsTyped(scripts, query, options)
+    val lists = visibleLists(scripts)
     val items = lists[kind]
     // A folder deleted, or gone with a new engine, leaves the library at the top level
     val folder = if (items != null && items.none { it.id == openFolder }) 0 else openFolder
@@ -188,17 +181,8 @@ internal fun ScriptLibraryScreen(
         snackbarHost = {
             ScriptNotices(scripts) { added -> if (added.folder) enter(added.key.kind, added.key.id) else onOpen(added.key) }
         },
-        floatingActionButton = {
-            if (items != null && adds != Adds.NOTHING) {
-                ExtendedFloatingActionButton(
-                    text = { Text(newItem) },
-                    // The button's name for a screen reader: an extended button's text is not read
-                    icon = { Icon(painterResource(R.drawable.ic_add), contentDescription = newItem) },
-                    onClick = { scripts.add(kind, folder, folder = adds == Adds.TOOLBAR, newItem) },
-                )
-            }
-        },
-        bottomBar = { ConsoleStrip(console, colors, onBack) },
+        floatingActionButton = { if (items != null) NewItemButton(scripts, kind, folder, adds, newItem) },
+        bottomBar = { ConsoleStrip(console, colors, onGame = onBack) },
     ) { padding ->
         LazyColumn(
             Modifier.fillMaxSize().padding(padding).testTag(SCRIPT_LIBRARY_TAG),
@@ -206,7 +190,7 @@ internal fun ScriptLibraryScreen(
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 96.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            item(key = "search") { SearchField(query) { query = it } }
+            item(key = "search") { LibrarySearchField(query) { query = it } }
             if (query.isBlank()) {
                 item(key = "kinds") { KindChips(kind, lists, onVariables) { enter(it, 0) } }
                 folderRows(kind, folder, items, selected, scripts, onEnter = { openFolder = it }, onOpen = onOpen)
@@ -223,8 +207,30 @@ internal fun ScriptLibraryScreen(
     }
 }
 
+/**
+ * Each kind's items as the engine listed them, less those deleted with their Undo still offered; null until listed.
+ * Each kind is asked for as the screen comes, and again once the engine is back.
+ */
 @Composable
-private fun SearchField(query: String, onQuery: (String) -> Unit) {
+internal fun visibleLists(scripts: ScriptItemsClient): Map<ScriptItemKind, List<ScriptItemNode>?> {
+    // Asked again once the engine is back, as what was asked of the last link is not answered
+    LaunchedEffect(scripts.attaches) { ScriptItemKind.entries.forEach(scripts::ask) }
+    val hidden = scripts.deleting
+    return ScriptItemKind.entries.associateWith { k -> scripts.lists[k]?.withoutHidden(k, hidden) }
+}
+
+/** Asks the engine to search every item for [query], by [options], once typing pauses. */
+@Composable
+internal fun SearchAsTyped(scripts: ScriptItemsClient, query: String, options: SearchOptions) {
+    LaunchedEffect(query, options, scripts.attaches) {
+        // Asked once typing pauses, not at each letter, as each search walks every line of every item
+        delay(SEARCH_PAUSE_MS)
+        if (query.isNotBlank()) scripts.search(query, options)
+    }
+}
+
+@Composable
+internal fun LibrarySearchField(query: String, onQuery: (String) -> Unit) {
     OutlinedTextField(
         query,
         onQuery,
@@ -243,7 +249,7 @@ private fun SearchField(query: String, onQuery: (String) -> Unit) {
 
 /** The desktop editor's two search options, each a chip. */
 @Composable
-private fun SearchOptionChips(options: SearchOptions, onOptions: (SearchOptions) -> Unit) {
+internal fun SearchOptionChips(options: SearchOptions, onOptions: (SearchOptions) -> Unit) {
     FlowRow(itemWidth.padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         FilterChip(options.caseSensitive, { onOptions(options.copy(caseSensitive = !options.caseSensitive)) }, label = { Text(stringResource(R.string.scripts_search_case)) })
         FilterChip(options.wholeWord, { onOptions(options.copy(wholeWord = !options.wholeWord)) }, label = { Text(stringResource(R.string.scripts_search_whole_word)) })
@@ -266,15 +272,31 @@ private fun KindChips(kind: ScriptItemKind, lists: Map<ScriptItemKind, List<Scri
                 label = { Text(if (count == null) name else stringResource(R.string.scripts_kind_count, name, count)) },
             )
         }
-        // Not a kind to pick but a screen of its own, so a chip that goes there rather than one that is on or off
-        if (onVariables != null) {
-            AssistChip(
-                onVariables,
-                label = { Text(stringResource(R.string.variables_chip)) },
-                trailingIcon = { Icon(painterResource(R.drawable.ic_chevron_right), contentDescription = null) },
-            )
-        }
+        if (onVariables != null) VariablesChip(onVariables)
     }
+}
+
+/** The floating button that makes [newItem] in [folder] of [kind], as [adds] says it takes; none where it takes nothing. */
+@Composable
+internal fun NewItemButton(scripts: ScriptItemsClient, kind: ScriptItemKind, folder: Int, adds: Adds, newItem: String) {
+    if (adds == Adds.NOTHING) return
+    ExtendedFloatingActionButton(
+        text = { Text(newItem) },
+        // The button's name for a screen reader: an extended button's text is not read
+        icon = { Icon(painterResource(R.drawable.ic_add), contentDescription = newItem) },
+        onClick = { scripts.add(kind, folder, folder = adds == Adds.TOOLBAR, newItem) },
+    )
+}
+
+/** The chip that goes to the variables: not a kind to pick but a screen of its own, so not one that is on or off. */
+@Composable
+internal fun VariablesChip(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    AssistChip(
+        onClick,
+        label = { Text(stringResource(R.string.variables_chip)) },
+        modifier,
+        trailingIcon = { Icon(painterResource(R.drawable.ic_chevron_right), contentDescription = null) },
+    )
 }
 
 private fun LazyListScope.folderRows(
@@ -360,16 +382,7 @@ private fun ItemRow(
             if (overline != null) Overline(overline)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(name, Modifier.weight(1f, fill = false), style = MaterialTheme.typography.bodyLarge)
-                if (key in scripts.drafts) {
-                    Surface(Modifier.padding(start = 8.dp), shape = MaterialTheme.shapes.extraSmall, color = colors.tertiaryContainer) {
-                        Text(
-                            stringResource(R.string.scripts_draft),
-                            Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                            color = colors.onTertiaryContainer,
-                            style = MaterialTheme.typography.labelSmall,
-                        )
-                    }
-                }
+                if (key in scripts.drafts) DraftBadge(Modifier.padding(start = 8.dp))
             }
             if (!item.folder && item.summary.isNotEmpty()) {
                 Text(
@@ -381,22 +394,53 @@ private fun ItemRow(
                 )
             }
             val status = item.rowStatus(children)
-            if (status != null) {
-                Text(
-                    when (status) {
-                        is RowStatus.NotRunning -> stringResource(R.string.scripts_not_running, status.error)
-                        is RowStatus.Holds -> pluralStringResource(R.plurals.scripts_folder_items, status.items, status.items)
-                        RowStatus.Off -> stringResource(R.string.scripts_off)
-                        RowStatus.Idle -> stringResource(R.string.scripts_idle)
-                        is RowStatus.FromPackage -> stringResource(R.string.scripts_from_package, status.name)
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (status is RowStatus.NotRunning) colors.error else colors.onSurfaceVariant,
-                    maxLines = 2,
-                )
-            }
+            if (status != null) StatusText(status)
         }
         Switch(item.enabled, { scripts.enable(key, it) }, Modifier.semantics { contentDescription = name })
+    }
+}
+
+/** Marks an item whose draft is not applied. */
+@Composable
+internal fun DraftBadge(modifier: Modifier = Modifier) {
+    Surface(modifier, shape = MaterialTheme.shapes.extraSmall, color = MaterialTheme.colorScheme.tertiaryContainer) {
+        Text(
+            stringResource(R.string.scripts_draft),
+            Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            color = MaterialTheme.colorScheme.onTertiaryContainer,
+            style = MaterialTheme.typography.labelSmall,
+        )
+    }
+}
+
+/** What an item's row says of it under its name ([rowStatus]), in red for one that cannot run. */
+@Composable
+internal fun StatusText(status: RowStatus, modifier: Modifier = Modifier, maxLines: Int = 2) {
+    Text(
+        when (status) {
+            is RowStatus.NotRunning -> stringResource(R.string.scripts_not_running, status.error)
+            is RowStatus.Holds -> pluralStringResource(R.plurals.scripts_folder_items, status.items, status.items)
+            RowStatus.Off -> stringResource(R.string.scripts_off)
+            RowStatus.Idle -> stringResource(R.string.scripts_idle)
+            is RowStatus.FromPackage -> stringResource(R.string.scripts_from_package, status.name)
+        },
+        modifier,
+        style = MaterialTheme.typography.bodyMedium,
+        color = if (status is RowStatus.NotRunning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = maxLines,
+    )
+}
+
+/** Where an item found by a search lives: its kind, then the [folders] down to it. */
+@Composable
+internal fun whereText(kind: ScriptItemKind, folders: List<ScriptItemNode>): String = (listOf(stringResource(kind.title)) + folders.map { it.name }).joinToString(stringResource(R.string.scripts_path_separator))
+
+/** Over a search's [results], what the engine [found] says of them: that [query] is nowhere, or that it stopped short of every place. */
+internal fun LazyListScope.searchHints(query: String, results: List<ScriptSearchResult>, found: EngineMessage.ScriptSearch?) {
+    if (results.isEmpty()) {
+        item(key = "none") { Hint(stringResource(R.string.scripts_search_none, query.trim())) }
+    } else if (found != null && found.more && results.any { it.places.isNotEmpty() }) {
+        item(key = "more") { Hint(pluralStringResource(R.plurals.scripts_search_more, found.matches.size, found.matches.size)) }
     }
 }
 
@@ -409,18 +453,11 @@ private fun LazyListScope.searchResults(
     onEnter: (ScriptItemKind, Int) -> Unit,
     onOpen: (ScriptItemKey) -> Unit,
 ) {
-    val found = scripts.found
-    val results = searchScripts(query, lists.mapValues { it.value.orEmpty() }, options, found)
-    if (results.isEmpty()) {
-        item(key = "none") { Hint(stringResource(R.string.scripts_search_none, query.trim())) }
-        return
-    }
-    if (found != null && found.more && results.any { it.places.isNotEmpty() }) {
-        item(key = "more") { Hint(pluralStringResource(R.plurals.scripts_search_more, found.matches.size, found.matches.size)) }
-    }
+    val results = searchScripts(query, lists.mapValues { it.value.orEmpty() }, options, scripts.found)
+    searchHints(query, results, scripts.found)
     itemsIndexed(results, key = { _, result -> "${result.kind.wire}/${result.item.id}" }) { i, result ->
         val key = ScriptItemKey(result.kind, result.item.id)
-        val where = (listOf(stringResource(result.kind.title)) + result.folders.map { it.name }).joinToString(stringResource(R.string.scripts_path_separator))
+        val where = whereText(result.kind, result.folders)
         val children = lists[result.kind].orEmpty().count { it.parent == result.item.id }
         ListSegment(i, results.size, itemWidth, selected = key == selected) {
             Column {
@@ -436,7 +473,7 @@ private fun LazyListScope.searchResults(
  * [length] matched marked, then how many more there are.
  */
 @Composable
-private fun Places(kind: ScriptItemKind, places: List<ScriptSearchMatch>, length: Int) {
+internal fun Places(kind: ScriptItemKind, places: List<ScriptSearchMatch>, length: Int) {
     if (places.isEmpty()) return
     val colors = MaterialTheme.colorScheme
     val mark = SpanStyle(background = colors.tertiaryContainer, color = colors.onTertiaryContainer)
@@ -486,16 +523,19 @@ private fun placeLabel(kind: ScriptItemKind, place: ScriptSearchMatch): String =
     ScriptSearchField.LUA -> stringResource(R.string.scripts_place_lua, place.index + 1)
 }
 
-/** The last of the game's lines, as the console shows them: the way back to the game, kept in sight. */
+/**
+ * The last of the game's lines, as the console shows them: the way back to the game, kept in sight. [atFoot] keeps it
+ * clear of the navigation bar, for a strip at the foot of the screen.
+ */
 @Composable
-private fun ConsoleStrip(console: () -> List<UiLine>, colors: ConsoleColors, onGame: () -> Unit) {
+internal fun ConsoleStrip(console: () -> List<UiLine>, colors: ConsoleColors, atFoot: Boolean = true, onGame: () -> Unit) {
     // Read here, so that a new line draws the strip again and not the library
     val lines = console().takeLast(CONSOLE_STRIP_LINES)
     if (lines.isEmpty()) return
     Column(
         Modifier.fillMaxWidth().background(colors.background)
             .clickable(onClickLabel = stringResource(R.string.scripts_to_game), role = Role.Button, onClick = onGame)
-            .navigationBarsPadding().heightIn(min = 48.dp).padding(horizontal = 16.dp, vertical = 8.dp),
+            .then(if (atFoot) Modifier.navigationBarsPadding() else Modifier).heightIn(min = 48.dp).padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.Center,
     ) {
         for (line in lines) {
@@ -512,6 +552,6 @@ private fun ConsoleStrip(console: () -> List<UiLine>, colors: ConsoleColors, onG
 }
 
 @Composable
-private fun Hint(text: String) {
+internal fun Hint(text: String) {
     Text(text, itemWidth.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
 }

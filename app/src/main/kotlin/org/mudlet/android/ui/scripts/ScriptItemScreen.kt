@@ -46,6 +46,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -100,21 +101,12 @@ internal val fieldWidth = Modifier.widthIn(max = MAX_WIDTH).fillMaxWidth()
  */
 @Composable
 internal fun ScriptItemScreen(scripts: ScriptItemsClient, key: ScriptItemKey, functions: List<LuaFunction>, onBack: () -> Unit, onGame: () -> Unit) {
-    // Asked again each time, as a script may have changed it since, and once the engine is back; a draft stays over what comes
-    LaunchedEffect(key, scripts.attaches) {
-        scripts.open(key)
-        // Where the item is, which a button's fields and the folders it can move to depend on, only the list says
-        if (scripts.lists[key.kind] == null) scripts.ask(key.kind)
-    }
-    val saved = scripts.saved[key]
-    val draft = scripts.drafts[key]
-    val item = draft ?: saved
-    val dirty = draft != null
+    val page = rememberItemPage(scripts, key)
+    val item = page.item
+    val dirty = page.dirty
     var leaving by remember { mutableStateOf(false) }
     var moving by remember { mutableStateOf(false) }
-    // Without a folder deleted with its Undo offered, still listed while the library beside it is open: what moved in would go with it
-    val listed = scripts.lists[key.kind].orEmpty().withoutHidden(key.kind, scripts.deleting)
-    val targets = listed.firstOrNull { it.id == key.id }?.let { listed.moveTargets(key.kind, it) }.orEmpty()
+    val listed = page.listed
     BackHandler(enabled = dirty) { leaving = true }
     val unnamed = stringResource(R.string.scripts_unnamed)
     val name = item?.node?.name?.ifEmpty { unnamed }
@@ -128,15 +120,7 @@ internal fun ScriptItemScreen(scripts: ScriptItemsClient, key: ScriptItemKey, fu
         // Beside the library, the library's show them
         snackbarHost = { if (!LocalInDetailPane.current) ScriptNotices(scripts) {} },
         actions = {
-            if (item != null) {
-                if (targets.isNotEmpty()) {
-                    IconButton({ moving = true }) { Icon(painterResource(R.drawable.ic_drive_file_move), stringResource(R.string.scripts_move, name.orEmpty())) }
-                }
-                IconButton({
-                    scripts.deleteLater(key, name.orEmpty())
-                    onBack()
-                }) { Icon(painterResource(R.drawable.ic_delete), stringResource(R.string.scripts_delete, name.orEmpty())) }
-            }
+            if (item != null) ItemActions(scripts, page, name.orEmpty(), onMove = { moving = true }, onBack)
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
@@ -144,16 +128,11 @@ internal fun ScriptItemScreen(scripts: ScriptItemsClient, key: ScriptItemKey, fu
                 Modifier.weight(1f).fillMaxWidth().verticalScroll(scroll).padding(horizontal = 16.dp).testTag(SCRIPT_ITEM_TAG),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                val refusal = scripts.unopened[key]
-                when {
-                    item != null -> {
-                        Fields(item, listed, saved?.node?.error.orEmpty(), scripts::edit)
-                        LuaField(lua, scroll, luaFocus, fieldWidth.padding(vertical = 16.dp))
-                    }
-
-                    refusal != null -> Text(stringResource(R.string.scripts_refused_open, refusal), fieldWidth.padding(16.dp), color = MaterialTheme.colorScheme.error)
-
-                    else -> Text(stringResource(R.string.scripts_loading), fieldWidth.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (item != null) {
+                    ItemFields(item, listed, page.error, scripts::edit)
+                    LuaField(lua, scroll.viewportSize, luaFocus, fieldWidth.padding(vertical = 16.dp))
+                } else {
+                    ItemNotOpen(page, fieldWidth.padding(16.dp))
                 }
             }
             scripts.luaProblem(key)?.let { found ->
@@ -166,11 +145,7 @@ internal fun ScriptItemScreen(scripts: ScriptItemsClient, key: ScriptItemKey, fu
                 Column {
                     Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), contentAlignment = Alignment.Center) {
                         Row(fieldWidth, horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            val toGame = stringResource(R.string.scripts_back_to_game)
-                            OutlinedButton(onGame, Modifier.semantics { contentDescription = toGame }) {
-                                Icon(painterResource(R.drawable.ic_videogame_asset), contentDescription = null)
-                                Text(stringResource(R.string.game_title), Modifier.padding(start = 8.dp))
-                            }
+                            GameButton(onGame)
                             Button({ scripts.apply(key) }, Modifier.weight(1f), enabled = dirty) { Text(stringResource(R.string.scripts_apply)) }
                         }
                     }
@@ -180,37 +155,129 @@ internal fun ScriptItemScreen(scripts: ScriptItemsClient, key: ScriptItemKey, fu
         }
     }
 
-    if (moving && targets.isNotEmpty()) {
-        MoveSheet(name.orEmpty(), listed, targets, onDismiss = { moving = false }) { parent ->
-            moving = false
-            scripts.move(key, parent)
+    ItemDialogs(scripts, page, name.orEmpty(), moving, leaving, onClose = {
+        moving = false
+        leaving = false
+    }, onBack)
+}
+
+/**
+ * The item [key] as its page shows it, from [scripts]: as the engine gave it, as the player has changed it, and the
+ * folders it can move to.
+ */
+@Stable
+internal class ItemPage(private val scripts: ScriptItemsClient, val key: ScriptItemKey) {
+    val saved: ScriptItem? get() = scripts.saved[key]
+
+    /** The draft, as the player has changed it; [saved] where there is none. */
+    val item: ScriptItem? get() = scripts.drafts[key] ?: saved
+
+    val dirty: Boolean get() = key in scripts.drafts
+
+    /** Why the item does not run, as the engine said when it last gave it. */
+    val error: String get() = saved?.node?.error.orEmpty()
+
+    /** Why the engine would not give the item, until it is asked again. */
+    val refusal: String? get() = scripts.unopened[key]
+
+    // Without a folder deleted with its Undo offered, still listed while the library beside it is open: what moved in would go with it
+    val listed: List<ScriptItemNode> get() = scripts.lists[key.kind].orEmpty().withoutHidden(key.kind, scripts.deleting)
+
+    /** Where the item can be moved to ([moveTargets]). */
+    val targets: List<ScriptItemNode?> get() = listed.let { all -> all.firstOrNull { it.id == key.id }?.let { all.moveTargets(key.kind, it) }.orEmpty() }
+}
+
+/** The [ItemPage] of [key], whose item is asked for as the page comes. */
+@Composable
+internal fun rememberItemPage(scripts: ScriptItemsClient, key: ScriptItemKey): ItemPage {
+    // Asked again each time, as a script may have changed it since, and once the engine is back; a draft stays over what comes
+    LaunchedEffect(key, scripts.attaches) {
+        scripts.open(key)
+        // Where the item is, which a button's fields and the folders it can move to depend on, only the list says
+        if (scripts.lists[key.kind] == null) scripts.ask(key.kind)
+    }
+    return remember(scripts, key) { ItemPage(scripts, key) }
+}
+
+/** What an item's page says until the engine has given the item: that it is coming, or why the engine would not. */
+@Composable
+internal fun ItemNotOpen(page: ItemPage, modifier: Modifier) {
+    val refusal = page.refusal
+    if (refusal != null) {
+        Text(stringResource(R.string.scripts_refused_open, refusal), modifier, color = MaterialTheme.colorScheme.error)
+    } else {
+        Text(stringResource(R.string.scripts_loading), modifier, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** An item's page's title-bar buttons: Move, where it can go elsewhere, and Delete, which goes [onBack], with Undo offered by the library. */
+@Composable
+internal fun ItemActions(scripts: ScriptItemsClient, page: ItemPage, name: String, onMove: () -> Unit, onBack: () -> Unit) {
+    if (page.targets.isNotEmpty()) IconButton(onMove) { Icon(painterResource(R.drawable.ic_drive_file_move), stringResource(R.string.scripts_move, name)) }
+    IconButton({
+        scripts.deleteLater(page.key, name)
+        onBack()
+    }) { Icon(painterResource(R.drawable.ic_delete), stringResource(R.string.scripts_delete, name)) }
+}
+
+/** The button that goes to the game, keeping what is changed to come back to. */
+@Composable
+internal fun GameButton(onGame: () -> Unit) {
+    val toGame = stringResource(R.string.scripts_back_to_game)
+    OutlinedButton(onGame, Modifier.semantics { contentDescription = toGame }) {
+        Icon(painterResource(R.drawable.ic_videogame_asset), contentDescription = null)
+        Text(stringResource(R.string.game_title), Modifier.padding(start = 8.dp))
+    }
+}
+
+/**
+ * What an item's page opens over it: while [moving], the sheet of where it can go; while [leaving], whether to drop what
+ * was changed, which goes [onBack] when it is. Either closes with [onClose].
+ */
+@Composable
+internal fun ItemDialogs(scripts: ScriptItemsClient, page: ItemPage, name: String, moving: Boolean, leaving: Boolean, onClose: () -> Unit, onBack: () -> Unit) {
+    if (moving && page.targets.isNotEmpty()) {
+        MoveSheet(name, page.listed, page.targets, onDismiss = onClose) { parent ->
+            onClose()
+            scripts.move(page.key, parent)
         }
     }
-
     if (leaving) {
-        AlertDialog(
-            onDismissRequest = { leaving = false },
-            confirmButton = {
-                TextButton({
-                    leaving = false
-                    scripts.discard(key)
-                    onBack()
-                }) { Text(stringResource(R.string.scripts_discard)) }
+        DiscardDialog(
+            name,
+            onDiscard = {
+                onClose()
+                scripts.discard(page.key)
+                onBack()
             },
-            dismissButton = { TextButton({ leaving = false }) { Text(stringResource(R.string.scripts_keep_editing)) } },
-            title = { Text(stringResource(R.string.scripts_discard_title, name.orEmpty())) },
-            text = { Text(stringResource(R.string.scripts_discard_text)) },
+            onKeep = onClose,
         )
     }
 }
 
+/** Asks whether to drop what was changed in the item named [name]. */
 @Composable
-private fun ColumnScope.Fields(item: ScriptItem, listed: List<ScriptItemNode>, error: String, onChange: (ScriptItem) -> Unit) {
-    if (error.isNotEmpty()) {
-        Surface(fieldWidth.padding(top = 8.dp), shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.errorContainer) {
-            Text(stringResource(R.string.scripts_not_running, error), Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onErrorContainer)
-        }
+private fun DiscardDialog(name: String, onDiscard: () -> Unit, onKeep: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onKeep,
+        confirmButton = { TextButton(onDiscard) { Text(stringResource(R.string.scripts_discard)) } },
+        dismissButton = { TextButton(onKeep) { Text(stringResource(R.string.scripts_keep_editing)) } },
+        title = { Text(stringResource(R.string.scripts_discard_title, name)) },
+        text = { Text(stringResource(R.string.scripts_discard_text)) },
+    )
+}
+
+/** Why the item does not run, as the engine says it; nothing for one that runs. */
+@Composable
+internal fun NotRunningBanner(error: String, modifier: Modifier) {
+    if (error.isEmpty()) return
+    Surface(modifier, shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.errorContainer) {
+        Text(stringResource(R.string.scripts_not_running, error), Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onErrorContainer)
     }
+}
+
+@Composable
+internal fun NameField(item: ScriptItem, onChange: (ScriptItem) -> Unit) {
     OutlinedTextField(
         item.node.name,
         { onChange(item.copy(node = item.node.copy(name = it))) },
@@ -218,18 +285,50 @@ private fun ColumnScope.Fields(item: ScriptItem, listed: List<ScriptItemNode>, e
         label = { Text(stringResource(R.string.scripts_name)) },
         singleLine = true,
     )
+}
+
+/** All of an item's page but its Lua: why it does not run, from [error], its name and what its kind has ([KindFields]). */
+@Composable
+internal fun ColumnScope.ItemFields(item: ScriptItem, listed: List<ScriptItemNode>, error: String, onChange: (ScriptItem) -> Unit) {
+    NotRunningBanner(error, fieldWidth.padding(top = 8.dp))
+    NameField(item, onChange = onChange)
+    KindFields(item, listed, onChange)
+}
+
+/**
+ * What [item]'s kind has, [listed] with it: a trigger's patterns, its options unless [triggerOptions] is false, and its
+ * command; an alias's pattern and command; a script's event handlers; a timer's time, a key's key, each with its
+ * command; a button's commands or a toolbar's place.
+ */
+@Composable
+internal fun ColumnScope.KindFields(item: ScriptItem, listed: List<ScriptItemNode>, onChange: (ScriptItem) -> Unit, triggerOptions: Boolean = true) {
     when (val details = item.details) {
-        is ScriptItemDetails.Trigger -> TriggerFields(details) { onChange(item.copy(details = it)) }
-        is ScriptItemDetails.Alias -> AliasFields(details) { onChange(item.copy(details = it)) }
+        is ScriptItemDetails.Trigger -> {
+            val change = { to: ScriptItemDetails.Trigger -> onChange(item.copy(details = to)) }
+            TriggerPatterns(details, change)
+            if (triggerOptions) TriggerOptions(details, change)
+            TriggerCommand(details, change)
+        }
+
+        is ScriptItemDetails.Alias -> {
+            val change = { to: ScriptItemDetails.Alias -> onChange(item.copy(details = to)) }
+            AliasPattern(details, change)
+            AliasCommand(details, change)
+        }
+
         is ScriptItemDetails.Script -> EventHandlers(details) { onChange(item.copy(details = it)) }
+
         is ScriptItemDetails.Timer -> if (!item.node.folder) TimerFields(details) { onChange(item.copy(details = it)) }
+
         is ScriptItemDetails.Key -> if (!item.node.folder) KeyFields(details) { onChange(item.copy(details = it)) }
+
         is ScriptItemDetails.Button -> ButtonFields(details, listed.buttonPart(item.node)) { onChange(item.copy(details = it)) }
     }
 }
 
+/** A trigger's patterns, each with its type, which a sheet explains and picks, and a button that adds one. */
 @Composable
-private fun ColumnScope.TriggerFields(trigger: ScriptItemDetails.Trigger, onChange: (ScriptItemDetails.Trigger) -> Unit) {
+internal fun ColumnScope.TriggerPatterns(trigger: ScriptItemDetails.Trigger, onChange: (ScriptItemDetails.Trigger) -> Unit) {
     var typing by rememberSaveable { mutableStateOf<Int?>(null) }
     SectionHeader(stringResource(R.string.scripts_patterns), fieldWidth)
     val patterns = trigger.patterns
@@ -258,7 +357,11 @@ private fun ColumnScope.TriggerFields(trigger: ScriptItemDetails.Trigger, onChan
             onChange(trigger.copy(patterns = patterns.toMutableList().also { it[typed] = typedPattern.withType(type) }))
         }
     }
+}
 
+/** A trigger's options, under their heading: which patterns must match and over how many lines, and what it does to the line. */
+@Composable
+internal fun ColumnScope.TriggerOptions(trigger: ScriptItemDetails.Trigger, onChange: (ScriptItemDetails.Trigger) -> Unit) {
     SectionHeader(stringResource(R.string.scripts_options), fieldWidth)
     val all = trigger.lineDelta >= 0
     Column(fieldWidth.selectableGroup()) {
@@ -286,6 +389,10 @@ private fun ColumnScope.TriggerFields(trigger: ScriptItemDetails.Trigger, onChan
             singleLine = true,
         )
     }
+}
+
+@Composable
+internal fun TriggerCommand(trigger: ScriptItemDetails.Trigger, onChange: (ScriptItemDetails.Trigger) -> Unit) {
     OutlinedTextField(
         trigger.command,
         { onChange(trigger.copy(command = it)) },
@@ -421,7 +528,7 @@ private fun PatternTypeSheet(current: TriggerPatternType, onDismiss: () -> Unit,
 }
 
 @Composable
-private fun ColumnScope.AliasFields(alias: ScriptItemDetails.Alias, onChange: (ScriptItemDetails.Alias) -> Unit) {
+internal fun ColumnScope.AliasPattern(alias: ScriptItemDetails.Alias, onChange: (ScriptItemDetails.Alias) -> Unit) {
     SectionHeader(stringResource(R.string.scripts_patterns), fieldWidth)
     OutlinedTextField(
         alias.pattern,
@@ -432,6 +539,10 @@ private fun ColumnScope.AliasFields(alias: ScriptItemDetails.Alias, onChange: (S
         textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace),
         singleLine = true,
     )
+}
+
+@Composable
+internal fun AliasCommand(alias: ScriptItemDetails.Alias, onChange: (ScriptItemDetails.Alias) -> Unit) {
     OutlinedTextField(
         alias.command,
         { onChange(alias.copy(command = it)) },
@@ -442,7 +553,7 @@ private fun ColumnScope.AliasFields(alias: ScriptItemDetails.Alias, onChange: (S
 }
 
 @Composable
-private fun ColumnScope.EventHandlers(script: ScriptItemDetails.Script, onChange: (ScriptItemDetails.Script) -> Unit) {
+internal fun ColumnScope.EventHandlers(script: ScriptItemDetails.Script, onChange: (ScriptItemDetails.Script) -> Unit) {
     SectionHeader(stringResource(R.string.scripts_event_handlers), fieldWidth)
     val handlers = script.eventHandlers
     for ((i, event) in handlers.withIndex()) {

@@ -227,21 +227,25 @@ internal fun Overline(text: String) {
     Text(text, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
 }
 
-/** One radio button a choice, in a group under the setting's label. */
+/** One radio button a choice, in a group under the setting's label, each read with the line under it that says what it is. */
 @Composable
 private fun ChoiceRows(entry: SettingEntry.Choice<*>, owner: SettingsOwner) {
     val chosen = entry.chosen(owner)
+    val hints = entry.choiceHints()
     Text(stringResource(entry.label), Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp), style = MaterialTheme.typography.bodyLarge)
     Column(Modifier.selectableGroup().padding(bottom = 4.dp)) {
         entry.choiceLabels().forEachIndexed { i, label ->
             Row(
                 Modifier.fillMaxWidth().heightIn(min = 48.dp)
                     .selectable(i == chosen, role = Role.RadioButton) { entry.choose(owner, i) }
-                    .padding(horizontal = 16.dp),
+                    .padding(horizontal = 16.dp, vertical = if (hints == null) 0.dp else 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 RadioButton(i == chosen, onClick = null)
-                Text(stringResource(label), Modifier.padding(start = 16.dp), style = MaterialTheme.typography.bodyLarge)
+                Column(Modifier.padding(start = 16.dp)) {
+                    Text(stringResource(label), style = MaterialTheme.typography.bodyLarge)
+                    hints?.get(i)?.let { Text(stringResource(it), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                }
             }
         }
     }

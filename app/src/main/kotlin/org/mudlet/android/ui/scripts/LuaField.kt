@@ -1,6 +1,5 @@
 package org.mudlet.android.ui.scripts
 
-import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -109,6 +108,9 @@ internal class LuaFieldState(
     /** Types [symbol] over what is selected. */
     fun insert(symbol: String) = value.let { show(insertAt(it.text, it.selection.start, it.selection.end, symbol)) }
 
+    /** Types [snippet] over what is selected, as [insertSnippet] does. */
+    fun insert(snippet: LuaSnippet) = value.let { show(insertSnippet(it.text, it.selection.start, it.selection.end, snippet.text)) }
+
     /** Completes the name being typed to [function], one of [offered]. */
     fun complete(function: LuaFunction) = value.let { show(complete(it.text, it.selection.start, function)) }
 
@@ -145,14 +147,14 @@ internal fun rememberLuaFieldState(scripts: ScriptItemsClient, key: ScriptItemKe
 }
 
 /**
- * The item's Lua in its page: each line numbered beside it and none wrapped, so the numbers stay with their lines. It
- * is as tall as its lines and scrolls with the page, whose scroll [page] is: the cursor's line is kept in what shows
- * of the page as the player types, as the keyboard comes, and at each [LuaFieldState.goTo] once [focus] is asked for
- * it. A long line scrolls sideways. The field's name is its first line, where a screen reader finds it; the numbers
- * are not read.
+ * The item's Lua in its page: each line numbered beside it and none wrapped, so the numbers stay with their lines, or
+ * where not [numbered], wrapped to the field with no numbers. It is as tall as its lines and scrolls with the page,
+ * [viewport] the height of what shows of it: the cursor's line is kept in what shows of the page as the player types,
+ * as the keyboard comes, and at each [LuaFieldState.goTo] once [focus] is asked for it. A long line scrolls sideways.
+ * The field's name is its first line, where a screen reader finds it; the numbers are not read.
  */
 @Composable
-internal fun LuaField(state: LuaFieldState, page: ScrollState, focus: FocusRequester, modifier: Modifier = Modifier) {
+internal fun LuaField(state: LuaFieldState, viewport: Int, focus: FocusRequester, modifier: Modifier = Modifier, numbered: Boolean = true) {
     val colors = MaterialTheme.colorScheme
     val style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace, color = colors.onSurface)
     val label = stringResource(R.string.scripts_lua)
@@ -163,24 +165,26 @@ internal fun LuaField(state: LuaFieldState, page: ScrollState, focus: FocusReque
     val cursorInView = remember { BringIntoViewRequester() }
     val margin = with(LocalDensity.current) { CURSOR_MARGIN.toPx() }
     // Asked again as what shows of the page changes, as when the keyboard comes over it, but not as the player scrolls
-    LaunchedEffect(cursor, page.viewportSize, state.focused, state.wentTo) {
+    LaunchedEffect(cursor, viewport, state.focused, state.wentTo) {
         if (state.focused && cursor != null) cursorInView.bringIntoView(cursor.inflate(margin))
     }
 
     val outline = if (state.focused) colors.primary else colors.outline
     Row(modifier.border(if (state.focused) 2.dp else 1.dp, outline, MaterialTheme.shapes.extraSmall).padding(vertical = 8.dp)) {
-        Column(Modifier.padding(start = 8.dp, end = 8.dp).clearAndSetSemantics {}, horizontalAlignment = Alignment.End) {
-            // As tall as the name beside it, so that each number is beside its line
-            Text("", style = MaterialTheme.typography.labelMedium)
-            Text((1..lineCount(value.text)).joinToString("\n"), style = style, color = colors.onSurfaceVariant, textAlign = TextAlign.End)
+        if (numbered) {
+            Column(Modifier.padding(start = 8.dp, end = 8.dp).clearAndSetSemantics {}, horizontalAlignment = Alignment.End) {
+                // As tall as the name beside it, so that each number is beside its line
+                Text("", style = MaterialTheme.typography.labelMedium)
+                Text((1..lineCount(value.text)).joinToString("\n"), style = style, color = colors.onSurfaceVariant, textAlign = TextAlign.End)
+            }
         }
-        BoxWithConstraints(Modifier.weight(1f)) {
+        BoxWithConstraints(Modifier.weight(1f).padding(start = if (numbered) 0.dp else 16.dp)) {
             // At least as wide as its place, so that a tap beside a short line reaches the field
             val width = maxWidth
             BasicTextField(
                 value,
                 state::type,
-                Modifier.horizontalScroll(rememberScrollState()).focusRequester(focus).onFocusChanged { state.focused = it.isFocused }.testTag(LUA_EDITOR_TAG),
+                Modifier.then(if (numbered) Modifier.horizontalScroll(rememberScrollState()) else Modifier).focusRequester(focus).onFocusChanged { state.focused = it.isFocused }.testTag(LUA_EDITOR_TAG),
                 textStyle = style,
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false),
                 onTextLayout = { layout = it },
@@ -196,9 +200,15 @@ internal fun LuaField(state: LuaFieldState, page: ScrollState, focus: FocusReque
     }
 }
 
-/** What goes over the keyboard while the Lua field has it: Mudlet's functions for the name being typed, and a row of Lua's symbols. */
+/** A piece of Lua a key over the keyboard types whole: the key says [label], and [text] is typed as [insertSnippet] has it. */
+internal data class LuaSnippet(val label: String, val text: String)
+
+/**
+ * What goes over the keyboard while the Lua field has it: Mudlet's functions for the name being typed, and a row of
+ * keys that type [snippets], then Lua's symbols.
+ */
 @Composable
-internal fun LuaKeys(state: LuaFieldState, modifier: Modifier = Modifier) {
+internal fun LuaKeys(state: LuaFieldState, modifier: Modifier = Modifier, snippets: List<LuaSnippet> = emptyList()) {
     Column(modifier) {
         val offered = state.offered
         if (offered.isNotEmpty()) {
@@ -216,19 +226,27 @@ internal fun LuaKeys(state: LuaFieldState, modifier: Modifier = Modifier) {
         }
         HorizontalDivider()
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+            for (snippet in snippets) {
+                LuaKey(snippet.label, stringResource(R.string.lua_type, snippet.label)) { state.insert(snippet) }
+            }
             for (symbol in SYMBOLS) {
                 val indents = symbol == LUA_INDENT
                 val label = if (indents) stringResource(R.string.lua_indent) else stringResource(R.string.lua_type, symbol)
-                Box(
-                    Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
-                        .clickable(role = Role.Button) { state.insert(symbol) }
-                        .semantics { contentDescription = label }.padding(horizontal = 12.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(if (indents) stringResource(R.string.lua_indent_key) else symbol, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.titleMedium)
-                }
+                LuaKey(if (indents) stringResource(R.string.lua_indent_key) else symbol, label) { state.insert(symbol) }
             }
         }
+    }
+}
+
+@Composable
+private fun LuaKey(text: String, label: String, onClick: () -> Unit) {
+    Box(
+        Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+            .clickable(role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = label }.padding(horizontal = 12.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(text, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.titleMedium)
     }
 }
 

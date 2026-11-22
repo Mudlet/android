@@ -55,6 +55,27 @@ class LuaEditingTest {
         assertEquals("abc..|", marked(insertAt("abc", 9, 9, "..")))
     }
 
+    /** What the editor shows once [snippet] is typed at the | of [before]. */
+    private fun type(before: String, snippet: String): String {
+        val at = edit(before)
+        return marked(insertSnippet(at.text, at.cursor, at.cursor, snippet))
+    }
+
+    @Test
+    fun aSnippetLeavesTheCursorAtItsMark() {
+        assertEquals("send(\"|\")", type("|", "send(\"|\")"))
+        assertEquals("with no mark, after it", "x = matches[2]|", type("x = |", "matches[2]"))
+        assertEquals("only the first mark", "a(|b|)", type("|", "a(|b|)"))
+        assertEquals("over what is selected", "local f(|) = 1", marked(insertSnippet("local x = 1", 6, 7, "f(|)")))
+    }
+
+    @Test
+    fun aSnippetsLinesStartAsDeepAsTheLineItIsTypedOn() {
+        assertEquals("  hp()\n  if | then\n    \n  end", type("  hp()\n  |", "if | then\n  \nend"))
+        assertEquals("\tx = f(function()\n\t  |\n\tend)", type("\tx = |", "f(function()\n  |\nend)"))
+        assertEquals("on the first line, none", "for i = 1, | do\n  \nend", type("|", "for i = 1, | do\n  \nend"))
+    }
+
     @Test
     fun theNameAtTheCursorIsWhatIsCompleted() {
         assertEquals("sel", completionPrefix("  sel", 5))

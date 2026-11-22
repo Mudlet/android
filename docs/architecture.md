@@ -1130,7 +1130,9 @@ kept by `ScriptItemsClient`:
   a draft kept by `ScriptItemsClient` until Apply sends `editScriptItem`, whose snackbar offers Undo: a rotation keeps
   it, and so does the page's Game button, which goes to the game to come back from, the library marking the item
   "Draft" meanwhile; Back with a draft asks whether to discard it. Delete hides the item with Undo, and sends
-  `deleteScriptItem` once the snackbar goes or the library does.
+  `deleteScriptItem` once the snackbar goes or the library does, an item's page taking its place included; it stays
+  out of the list, and out of the answer to a list asked before the delete, until the engine lists its kind again. It takes the Undo of the item's last apply away, as that
+  would put back what is deleted. The snackbars show one at a time, but a new item opens at once.
 - The Lua is a field of the page (`LuaField.kt`, its edits in `LuaEditing.kt`), last in it and part of the same draft:
   the lines numbered and not wrapped, a new line indented as the one above it and a step deeper under a line that
   opens a block. The field is as tall as its lines, so only the page scrolls up and down, and it keeps the cursor's
@@ -1181,6 +1183,32 @@ kept by `ScriptItemsClient`:
   again, or a key that types, goes back to the input line with what it typed, or to its binding if it has one. The
   caret's own keys run no binding. Not yet: desktop's caret within a line, its links (Ctrl+] and Ctrl+[, Return) and
   its selection.
+
+### The script editor's designs
+Settings' Experimental section has "Script editor design" (`Settings.scriptEditorDesign`): Current, the script
+library above, and three designs to try beside it, each another way to edit the same items (`ui/scripts/designs/`).
+`AppNavigation` reads the setting as it composes, so a change shows at once, with no restart. Every design works on
+the one `ScriptItemsClient`, over the same requests, so a draft made in one is the draft in the others and switching
+changes nothing in the profile. Each covers the six kinds and the Variables; where a design has nothing new to say,
+it uses the current editor's parts: a kind's fields (`ScriptKindFields.kt`), the Lua field, the move sheet, the
+search's places and Help. Lua is checked on Apply only, as in the current editor, and what is wrong
+with it shows on the item's own page, with a button that goes to its line.
+- Workbench (`Workbench.kt`): a tab at the foot for each kind, and its items as one tree of dense rows that open in
+  place, each with a tick box that switches it on or off and, for what holds items, a menu that adds to it and edits
+  it. An item's page has its Lua first, in the editor, and all else on a second tab, with Apply in the title bar.
+- One page (`OnePage.kt`): every kind's items in one list under headings that name their folder, narrowed by a row
+  of chips, one for each kind, that scrolls sideways, and a search at the top. A tap unfolds an item where it is, with
+  its fields and its Lua; folding it, unfolding another or leaving the page applies what was changed, with Undo
+  offered, so it has no Apply button. An item folded with its top scrolled off goes to the top of the page, where its
+  row shows. A rotation applies nothing, and keeps what is unfolded.
+- Recipes (`Recipes.kt`): a drawer with the kinds and their folders, and the folder picked as cards, each saying in
+  words when its item runs and what it then does, for which a card asks for its item's fields once. An item's page is
+  an overview of those parts, each changed on a step of its own, from which Next goes on; a new item opens on its
+  first. Apply is on the overview, and a folder's page is the current editor's. The drawer has nothing in it while
+  closed, as Material's lays it out off the screen's edge, where TalkBack would find what is in it, so the menu button
+  opens it and a swipe from the edge does not.
+Each design has a walk-through against the fake engine (`WorkbenchTest`, `OnePageTest`, `RecipesTest`) and its
+pseudo-locale test, and `EditorDesignSwitchTest` switches between them with the library open.
 
 ### The error console
 The script library's title bar has an Errors button that opens the profile's error console

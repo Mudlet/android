@@ -242,7 +242,10 @@ private fun LazyListScope.searchResults(query: String, sections: List<HubSection
 private fun SettingEntry.searchTexts(resources: Resources): List<String> {
     val texts = mutableListOf(resources.getString(label), resources.getString(keywords), resources.getString(category.title))
     hint?.let { texts += resources.getString(it) }
-    if (this is SettingEntry.Choice<*>) choiceLabels().mapTo(texts) { resources.getString(it) }
+    if (this is SettingEntry.Choice<*>) {
+        choiceLabels().mapTo(texts) { resources.getString(it) }
+        choiceHints()?.mapTo(texts) { resources.getString(it) }
+    }
     if (this is SettingEntry.Pick) choices.mapNotNull(choiceLabel).mapTo(texts) { resources.getString(it) }
     // Each language by its own name and by its name in the app's, as a player may search either
     if (this is SettingEntry.Language) {

@@ -217,8 +217,8 @@ internal sealed interface ImportState {
 }
 
 /**
- * The import under way or just ended, in the app's process rather than the list's composition: a rotation recreates
- * the activity while a large profile is unpacked, and the unpacked folder waits there for its name.
+ * The import under way or just ended, in the app's process rather than the list's composition: a language or density
+ * change recreates the activity while a large profile is unpacked, and the unpacked folder waits there for its name.
  */
 internal object Imports {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)

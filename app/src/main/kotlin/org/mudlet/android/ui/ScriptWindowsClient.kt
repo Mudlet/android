@@ -464,8 +464,9 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
     }
 
     /**
-     * What the player's finger did on the label [label], at [x], [y] in its pixels: `pointer`, with [button] that
-     * changed and [buttons] held after it. The label touched before this one is told the pointer left it.
+     * What the player's finger or mouse did on the label [label], at [x], [y] in its pixels: `pointer`, with [button]
+     * that changed and [buttons] held after it. The label touched before this one is told the pointer left it, and a
+     * label that was not touched last is not told so again.
      */
     fun pointer(label: String, type: PointerType, x: Double, y: Double, button: Int = 0, buttons: Int = 0) {
         flushTyping()
@@ -473,6 +474,10 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
             if (touchedLabel == label) return
             touchedLabel?.let { session.send(Requests.pointer(it, PointerType.LEAVE, 0.0, 0.0, 0, 0, 0, 0)) }
             touchedLabel = label
+        }
+        if (type == PointerType.LEAVE) {
+            if (touchedLabel != label) return
+            touchedLabel = null
         }
         session.send(Requests.pointer(label, type, x, y, button, buttons, 0, 0))
     }

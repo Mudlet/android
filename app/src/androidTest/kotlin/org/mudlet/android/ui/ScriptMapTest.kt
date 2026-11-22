@@ -33,12 +33,14 @@ import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performImeAction
+import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pinch
+import androidx.compose.ui.test.rightClick
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -75,6 +77,7 @@ import kotlin.math.min
  * a refusal shown until dismissed, a frame of another size not drawn, openMapWidget()'s docked map as a page, under
  * controls whose room search centres it on a room, and the map info as text beside it. ScriptMapCornerTest has where
  * the map and its panel go on screens of each size.
+ * A mouse's wheel and right click are taken as desktop's map takes them.
  */
 @RunWith(AndroidJUnit4::class)
 class ScriptMapTest {
@@ -383,6 +386,46 @@ class ScriptMapTest {
         val walk = session.receive("mapPointer")
         assertEquals(listOf("press", "doubleClick"), listOf(press.getString("type"), walk.getString("type")))
         for (event in listOf(press, walk)) assertPoint(200.0, 150.0, event)
+    }
+
+    @Test
+    fun aMouseWheelZoomsAboutThePointerAndARightClickPicksTheRoomUnderIt() {
+        // With no view to move, a turn goes to the engine as the wheel at the pointer
+        showMap()
+        val map = drawnMap()
+        val drawn = bounds(map)
+        compose.onNode(map).performMouseInput {
+            moveTo(at(drawn, 100.0, 225.0))
+            scroll(1f)
+        }
+        val engineWheel = session.receive("mapPointer")
+        assertEquals("wheel", engineWheel.getString("type"))
+        assertEquals(-120, engineWheel.getInt("wheelY"))
+        assertPoint(100.0, 225.0, engineWheel)
+
+        // With one, a notch away from the player zooms in by 7% about the pointer, as desktop's map does
+        session.send(mapFrame(MAP_W, MAP_H, view = mapView(MAP_W, MAP_H, rooms = mapOf(1 to (200.0 to 150.0), 2 to (300.0 to 75.0)))))
+        compose.waitForIdle()
+        val room = at(drawn, 300.0, 75.0)
+        compose.onNode(map).performMouseInput {
+            moveTo(room)
+            scroll(-1f)
+        }
+        val wheel = session.receive("moveMap")
+        assertEquals("mapper", wheel.getString("map"))
+        assertEquals(1.07, wheel.getDouble("zoom"), 1e-9)
+        assertPoint(300.0, 75.0, wheel)
+
+        // A right click picks the room, still under the pointer as the zoom was about it, as a tap does
+        compose.onNode(map).performMouseInput { rightClick(room) }
+        val press = session.receive("mapPointer")
+        assertEquals("press", press.getString("type"))
+        assertPoint(300.0, 75.0, press)
+        assertEquals(2, session.receive("roomInfo").getInt("room"))
+
+        // Off a room it leaves the pick as it was
+        compose.onNode(map).performMouseInput { rightClick(at(drawn, 60.0, 225.0)) }
+        session.assertNoRequest(setOf("mapPointer", "roomInfo"), QUIET_MS)
     }
 
     @Test

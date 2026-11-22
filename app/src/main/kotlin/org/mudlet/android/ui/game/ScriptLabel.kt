@@ -47,9 +47,12 @@ import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.AwaitPointerEventScope
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.PointerInputScope
+import androidx.compose.ui.input.pointer.areAnyPressed
+import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
@@ -128,6 +131,7 @@ import org.mudlet.android.ui.ScriptWindowsClient.ImageRequest
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
+import androidx.compose.ui.input.pointer.PointerType as InputType
 
 private const val TAG = "ScriptLabel"
 
@@ -152,6 +156,7 @@ private const val MAX_TILES = 4096
  * name is left out; one a script gave an accessible value is a progress bar. Of a [gauge]'s three labels, its back is
  * read as the gauge's progress, and the other two not at all.
  * A label with a live region has TalkBack read it again each time what it reads changes.
+ * A mouse resting on it shows its tool tip, and is sent to it as desktop's label gets it ([mouseHover]).
  */
 @Composable
 internal fun ScriptLabel(placed: PlacedWindow, content: LabelContent?, gauge: Gauge?, density: Density, modifier: Modifier = Modifier) {
@@ -192,7 +197,7 @@ internal fun ScriptLabel(placed: PlacedWindow, content: LabelContent?, gauge: Ga
                 inScrollingBox = { inScrollingBox },
                 onLongPress = { if (currentTooltip.isNotEmpty()) showTip = true },
             )
-        }
+        }.pointerInput(window.name) { mouseHover(window.name, { currentToMudlet }) { showTip = it && currentTooltip.isNotEmpty() } }
     }
 
     Box(modifier.placeAt(touch, density).readAs(reading).then(touches)) {
@@ -455,7 +460,8 @@ private enum class Touch { TAP, DRAG, LONG_PRESS, CANCELLED }
  * The player's touches on the label [name] as a mouse's, by docs/phase-f.md's "Labels": a tap is the left button's
  * press and release, a second tap soon after a double click, a long press the right button's (and [onLongPress]), and
  * a drag the left button held as it moves. Out of a scroll box that scrolls nothing is consumed, so the label's links
- * still see their taps.
+ * still see their taps. A mouse's buttons are its own: the right one's click is the right button's, and the left one
+ * held still is never a long press.
  *
  * In a scroll box that scrolls ([inScrollingBox]) a drag the box takes is the box's, and the label hears nothing of it,
  * not even enter, so a scroll leaves the engine's hover as it was. The box takes a drag along an axis it scrolls on
@@ -489,10 +495,21 @@ private suspend fun PointerInputScope.labelGestures(
         }
         val toMudlet = mapping()
         val (x, y) = toMudlet(down.position)
+        val mouse = down.type == InputType.Mouse
+        if (mouse && currentEvent.buttons.isSecondaryPressed) {
+            lastTap = 0L
+            client.pointer(name, PointerType.ENTER, x, y)
+            client.pointer(name, PointerType.PRESS, x, y, POINTER_RIGHT, POINTER_RIGHT)
+            do {
+                val held = awaitChange(down.id)?.pressed == true
+            } while (held)
+            client.pointer(name, PointerType.RELEASE, x, y, POINTER_RIGHT, 0)
+            return@awaitEachGesture
+        }
         // In a box the label is entered once the touch is known to be its own
         if (!inBox) client.pointer(name, PointerType.ENTER, x, y)
         var last = down.position
-        var touch = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+        var touch = withTimeoutOrNull(if (mouse) Long.MAX_VALUE else viewConfiguration.longPressTimeoutMillis) {
             awaitTouch(down, viewConfiguration.touchSlop, inBox) { last = it }
         } ?: Touch.LONG_PRESS
         // A drag in a box is the label's only once the box has left it long enough
@@ -547,6 +564,35 @@ private suspend fun PointerInputScope.labelGestures(
             }
 
             Touch.CANCELLED -> lastTap = 0L
+        }
+    }
+}
+
+/**
+ * A mouse with no button held on the label [name], as desktop's label, which tracks the mouse, gets it: `enter` as it
+ * comes on, `move` as it moves, `leave` as it goes, at points [mapping] gives. [onHover] is told whether it is on.
+ */
+private suspend fun PointerInputScope.mouseHover(name: String, mapping: () -> (Offset) -> Pair<Double, Double>, onHover: (Boolean) -> Unit) {
+    val client = EngineClient.front.windows
+    awaitPointerEventScope {
+        while (true) {
+            val event = awaitPointerEvent()
+            val change = event.changes.firstOrNull() ?: continue
+            if (change.type != InputType.Mouse || event.buttons.areAnyPressed) continue
+            val (x, y) = mapping()(change.position)
+            when (event.type) {
+                PointerEventType.Enter -> {
+                    client.pointer(name, PointerType.ENTER, x, y)
+                    onHover(true)
+                }
+
+                PointerEventType.Move -> client.pointer(name, PointerType.MOVE, x, y)
+
+                PointerEventType.Exit -> {
+                    client.pointer(name, PointerType.LEAVE, x, y)
+                    onHover(false)
+                }
+            }
         }
     }
 }

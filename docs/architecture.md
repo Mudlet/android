@@ -585,6 +585,28 @@ both read alike:
   it has none, and one with a menu as another that opens it, as an inline link is too small for a 48 dp target. A tap,
   pick or action while no engine is attached says the link was not sent.
 
+### Scripts' speech
+A script's `ttsSpeak()` and `ttsQueue()` speak through Qt's text to speech in the engine's process, on the media
+stream, as a second app of the phone's text to speech service. With TalkBack on, that service has two apps' speech to
+say: Android flushes a queue only for the app that asks, so a long line a script speaks holds back TalkBack's answer
+to the player's touch, and a package that speaks each line is heard twice, in two voices at two volumes.
+- So while TalkBack is on and "Scripts speak through TalkBack" (`Settings.scriptSpeechThroughTalkBack`, on the
+  app's own Screen reader page, on by default) holds, `AnnouncementRegion` has `EngineClient` send `setScriptSpeech`
+  true, and false when either goes off or the activity goes; the UI sends it again as it attaches, as a
+  new `hello` sets it false (`docs/protocol.md`).
+- Meanwhile the engine sends each text a script speaks, and each queued line in order, as `speak`
+  (`ControlBridge::speakForScripts()`, through `THeadlessSession::setScriptSpeech()`) instead of speaking it, and the
+  script reads it as said at once. With no UI attached, the app off screen, the engine speaks it as before, since
+  TalkBack does not read a live region no one sees.
+- `Announcer.scriptSpeech()` says it in the polite live region, after what TalkBack is saying, in the player's voice,
+  rate and volume, and the player's next touch interrupts it as it does TalkBack's own speech.
+- A game line and a script's speech of the same words, close together, are read once (`SpeechEchoes` in `:protocol`):
+  a line still waiting to be read is said by the speech instead, speech after the line was read is dropped, and a
+  line after the speech is not read.
+- `test_mudlet_engine.py`'s `script_speech` tries the engine's side, `SpeechEchoesTest` the echoes, and
+  `ScreenReaderTest` the request and the reading against the fake engine. That TalkBack and the text to speech engine
+  share the service's queue is the device check in "On-device checklist".
+
 ### The main console's links
 The game's links in the main console (MXP `<SEND>`, OSC 8, `echoLink()`, `insertLink()`) are followed as a script
 window's are, through the same `ConsoleLine`: a tap, a long press for the menu, TalkBack's actions. The session's
@@ -1219,6 +1241,9 @@ see "A script asks for a file" in [`divergences.md`](divergences.md)).
 And the map emptied as the desktop's Map settings' "Delete map" does (`deleteMap()`, `0031-headless-delete-map.patch`).
 And a script's web page, opened by the app with its answer the script's (`THeadlessSession::setWebPageOpener()`,
 `0032-headless-web-page-opener.patch`; see "A script opens a web page" in [`divergences.md`](divergences.md)).
+And what scripts speak, said by TalkBack while the app asks for it (`THeadlessSession::setScriptSpeech()`,
+`0049-headless-script-speech.patch`; see "Scripts' speech" below and "Scripts' speech and TalkBack" in
+[`divergences.md`](divergences.md)).
 And the profile's console buffer size given to a main console with no window, and read and changed by `getConfig()` and
 `setConfig()` (`consoleBufferSize`, `useMaxConsoleBufferSize`, `0033-headless-console-buffer-size.patch`).
 And the most lines a console keeps, named by the app from the device in place of Mudlet's estimate from the machine's
@@ -2626,6 +2651,19 @@ alias of run-lua-code, one of desktop Mudlet's default packages, which a profile
     - `lua raiseGlobalEvent("x")` in one reaches a handler for `x` in each of the others.
     - Press "Kill engine process": all three come back, the front one first and each other one about 2 s after the one
       before it, and the game shown is still the front one.
+
+35. Scripts' speech, with the libmudlet APK, TalkBack on and music playing in another app.
+    - `lua ttsSpeak("The guard waves you through. " .. string.rep("And on. ", 20))`, then at once swipe to the next
+      control: TalkBack reads the control at once, cutting the speech off, in its own voice and volume, and the music
+      dips only as it does for TalkBack.
+    - `lua ttsQueue("first") ttsQueue("second")`: TalkBack says "first", then "second".
+    - A trigger on a line the game sends that does `ttsSpeak(line)`, with "Read new text aloud" on: the line is heard
+      once.
+    - Settings, App · all games, Screen reader, "Scripts speak through TalkBack" off: the first command is spoken in
+      the text to speech voice over TalkBack, at media volume; note whether a swipe's answer waits for it to end, as
+      the shared queue in "Scripts' speech" predicts.
+    - On again, and with the app in the background (Home), `lua` it from a timer
+      (`tempTimer(5, [[ttsSpeak("from the background")]])`): the text to speech voice says it.
 
 ## Problems hit
 - **`QJsonDocument` sorts keys**, so `"t"` is not the first key. A test that

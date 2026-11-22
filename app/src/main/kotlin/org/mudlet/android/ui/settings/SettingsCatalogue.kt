@@ -78,6 +78,7 @@ enum class SettingsCategory(
     LOGGING(true, R.string.settings_logging, R.string.settings_logging_summary, R.drawable.ic_description),
     ADVANCED(true, R.string.settings_advanced, R.string.settings_advanced_summary, R.drawable.ic_tune),
     APPEARANCE(false, R.string.settings_appearance, R.string.settings_appearance_summary, R.drawable.ic_palette),
+    SCREEN_READER(false, R.string.settings_screen_reader, R.string.settings_screen_reader_summary, R.drawable.ic_accessibility),
     TEST_BUILDS(false, R.string.settings_test_builds, R.string.settings_test_builds_summary, R.drawable.ic_system_update, offered = { PtbUpdates.applies }),
 }
 
@@ -700,6 +701,13 @@ val settingsCatalogue: List<SettingEntry> by lazy {
             R.string.settings_map_beside_text,
             R.string.settings_map_beside_text_hint,
             R.string.settings_map_beside_text_keywords,
+        ),
+        SettingEntry.Switch(
+            SettingsCategory.SCREEN_READER,
+            Settings.scriptSpeechThroughTalkBack,
+            R.string.settings_script_speech_talkback,
+            R.string.settings_script_speech_talkback_hint,
+            R.string.settings_script_speech_talkback_keywords,
         ),
         SettingEntry.Switch(
             SettingsCategory.TEST_BUILDS,

@@ -33,6 +33,13 @@ object Settings {
     /** "Read new text aloud": new game lines are announced while TalkBack is on, as Mudlet's own setting has it. */
     val readNewText = BoolSetting("announceIncomingText", default = true, mudlet = true)
 
+    /**
+     * "Scripts speak through TalkBack": while TalkBack is on and the app is on screen, what scripts speak with
+     * `ttsSpeak()` and `ttsQueue()` is said by TalkBack, after what it is saying, rather than by the text to speech
+     * engine over it (docs/architecture.md, "Scripts' speech"). For every game.
+     */
+    val scriptSpeechThroughTalkBack = BoolSetting("scriptSpeechThroughTalkBack", default = true)
+
     /** "Tell games I use a screen reader", in telnet's MTTS and NEW-ENVIRON. */
     val advertiseScreenReader = BoolSetting("advertiseScreenReader", default = false, mudlet = true)
 
@@ -304,6 +311,7 @@ object Settings {
         playerRoomInnerColour,
     ) + mapColours + listOf(
         screenReaderOffered,
+        scriptSpeechThroughTalkBack,
         mapBehindText,
         mapInCorner,
         checkTestBuilds,

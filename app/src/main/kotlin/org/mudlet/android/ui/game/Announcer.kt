@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -23,6 +24,7 @@ import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.unit.dp
 import org.mudlet.android.R
 import org.mudlet.android.data.Settings
+import org.mudlet.android.protocol.SpeechEchoes
 import org.mudlet.android.ui.EngineClient
 
 /** Something for TalkBack to say. [serial] numbers them, so the same words twice are said twice. */
@@ -30,8 +32,9 @@ class Announcement(val text: String, val assertive: Boolean, val serial: Long)
 
 /**
  * What the app has TalkBack say, as Mudlet's desktop console does: new game lines, while TalkBack is on and "Read new
- * text aloud" holds, and what a script's `announce()` asks for. Lines that arrive close together are read as one
- * announcement, and a burst as its count and its last lines. [AnnouncementRegion] says [current]. Main thread only.
+ * text aloud" holds, what a script's `announce()` asks for, and what scripts speak while "Scripts speak through
+ * TalkBack" holds. Lines that arrive close together are read as one announcement, and a burst as its count and its
+ * last lines. [AnnouncementRegion] says [current]. Main thread only.
  */
 object Announcer {
     // Lines this close together are one announcement; a steady stream is still read every MAX_WAIT_MS
@@ -67,6 +70,8 @@ object Announcer {
     private var waitingCount = 0
     private var waitingSince = 0L
 
+    private val echoes = SpeechEchoes()
+
     fun init(context: Context) {
         if (::resources.isInitialized) return
         val app = context.applicationContext
@@ -80,14 +85,14 @@ object Announcer {
     /** Game lines as they arrive, not those replayed to a UI that attached. */
     fun newLines(lines: List<String>) {
         if (!reading()) return
+        val now = SystemClock.uptimeMillis()
         for (line in lines) {
-            if (line.isBlank()) continue
+            if (line.isBlank() || echoes.lineEchoesSpeech(line, now)) continue
             if (waiting.size == BURST_LINES) waiting.removeFirst()
             waiting.addLast(line)
             waitingCount++
         }
         if (waitingCount == 0) return
-        val now = SystemClock.uptimeMillis()
         if (waitingSince == 0L) waitingSince = now
         main.removeCallbacks(readWaiting)
         main.postAtTime(readWaiting, minOf(now + QUIET_MS, waitingSince + MAX_WAIT_MS))
@@ -102,6 +107,8 @@ object Announcer {
         waitingCount = 0
         waitingSince = 0L
         if (!reading()) return@Runnable
+        val now = SystemClock.uptimeMillis()
+        lines.forEach { echoes.lineRead(it, now) }
         val text = if (count <= BURST_LINES) {
             lines.joinToString("\n")
         } else {
@@ -109,6 +116,27 @@ object Announcer {
         }
         announce(text, assertive = false)
     }
+
+    /**
+     * A script's `ttsSpeak()` or queued line, which the engine sends while [speaksForScripts] holds: said after what TalkBack
+     * is saying. A game line of the same words is read once: one waiting is said by this instead, and this is dropped
+     * after one read just now.
+     */
+    fun scriptSpeech(text: String) {
+        val now = SystemClock.uptimeMillis()
+        val same = SpeechEchoes.indexOfSame(waiting, text)
+        if (same >= 0) {
+            waiting.removeAt(same)
+            waitingCount--
+        } else if (echoes.speechEchoesLine(text, now)) {
+            return
+        }
+        echoes.speechSaid(text, now)
+        announce(text, assertive = false)
+    }
+
+    /** Whether scripts' speech should come here rather than from the text to speech engine. */
+    val speaksForScripts: Boolean get() = touchExploration && Settings.scriptSpeechThroughTalkBack.value
 
     /** What a script's `announce()` asks for, or the lines waiting; [assertive] interrupts what TalkBack is saying. */
     fun announce(text: String, assertive: Boolean) {
@@ -131,11 +159,17 @@ internal const val ANNOUNCEMENT_TRAVERSAL_INDEX = BARS_TRAVERSAL_INDEX + 1f
 /**
  * Has TalkBack say [Announcer.current], through two live regions, each a node 1 dp square that shows nothing: an
  * announcement goes to the one the last did not use, so a repeat is a change TalkBack reads. Placed last in TalkBack's
- * order ([ANNOUNCEMENT_TRAVERSAL_INDEX]), where swiping to it reads the last announcement again.
+ * order ([ANNOUNCEMENT_TRAVERSAL_INDEX]), where swiping to it reads the last announcement again. While it is shown,
+ * scripts' speech comes to it if [Announcer.speaksForScripts] holds.
  */
 @Composable
 fun AnnouncementRegion(modifier: Modifier = Modifier) {
     val announcement = Announcer.current
+    val speaksForScripts = Announcer.speaksForScripts
+    DisposableEffect(speaksForScripts) {
+        EngineClient.setScriptSpeech(speaksForScripts)
+        onDispose { EngineClient.setScriptSpeech(false) }
+    }
     // Side by side: TalkBack is told only of nodes that others drawn over them do not cover
     Row(modifier) {
         for (slot in 0..1) {

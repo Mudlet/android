@@ -393,6 +393,10 @@ A `label` is a `Box` at its geometry, drawn in this order:
 Taps reach the label with `pointer`, in its own Mudlet pixels: a tap is `enter`, `press` and `release`, a double tap
 adds `doubleClick`, a long press is the right button's `press` and `release` (Geyser's right-click menus); `leave`
 follows when another window is touched. A drag sends `move` with the button held, so sliders built of labels work.
+A mouse is sent as itself: its right button's click is the right button's `press` and `release`, and the left one held
+still is no long press. Resting on a label sends `enter`, `move` as it moves with no button held, and `leave` as it
+goes, as desktop's label tracks the mouse, and shows the label's tool tip meanwhile. Its wheel is not sent to labels
+yet.
 In a scroll box that scrolls, a drag along an axis the box scrolls on is the box's, even at the end of its range, where
 nothing moves, and sends the label nothing, not even `enter`, nor does a tap that stops the box's fling; one the box
 has not taken by twice the touch slop, as along an axis the box does not scroll on, is the label's drag, and the box

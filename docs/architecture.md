@@ -647,6 +647,18 @@ text would overflow, crashing the app. The selection is kept by line number, so 
 stays on its lines as new ones come, and closes once the scrollback has dropped all of them. Each line reads whether it
 is selected through a `derivedStateOf` of its own, so a change composes again only the lines whose state it changes.
 
+### A mouse on the text
+A mouse or a touchpad, on a Chromebook, a tablet's keyboard cover or Android's desktop windowing, works the text as
+desktop's console does (`TTextEdit`), in every `ConsoleLine`, the main console's and the script windows':
+- A right click acts where it is let go (`rightClick()` in `:protocol`, tested on the JVM): on a spoiler not yet
+  revealed it reveals it, even a disabled one; on a link with a menu that is not disabled it opens the menu; on another
+  link it does nothing; off a link it opens the line's menu, as a long press does.
+- Over a link the pointer is a hand, and the link's tool tip shows below it until it leaves the link; it takes no
+  focus. TalkBack names a link by its tool tip, so it misses nothing of it.
+- The wheel scrolls the main console and a script's console three rows a notch, one with Shift and half the rows shown
+  with Control, a turn of less than a row kept for the next (`ConsoleWheel` in `:protocol`), not the platform's
+  distance. A touchpad's pinch sets the text size, as two fingers do.
+
 ### Lines a script changes
 A script's `replace()`, `setFgColor()`, `setLink()` or `deleteLine()` on a main console line already shown comes as a
 `lineUpdated` of its `seq`, which `ProfileSession` applies where the line stands (`applyLineUpdates` in `:protocol`,
@@ -763,7 +775,7 @@ The game screen draws `map` in the mapper window (`ui/game/ScriptMap.kt`, fitted
   (`walkToRoom`, with a tick), off where there is no way or the player is there. It is read out as it comes, takes at
   most half the map's height, scrolls past that (another room shows from
   its top), and closes with its button, a tap on no room, or Back on the map
-  in front, and as that map closes, but not as a rotation remakes it; it is asked for again when the player moves, as
+  in front, and as that map closes, but not on a rotation; it is asked for again when the player moves, as
   its steps change. Each map's answers carry the `id` it
   asked with, so the mapper window's and the app's map never show each other's room.
 - While the map is edited, the room shown also has chips (`RoomEditActions` in `MapEdit.kt`), each but one opening a
@@ -791,6 +803,10 @@ The game screen draws `map` in the mapper window (`ui/game/ScriptMap.kt`, fitted
   most one every 50 ms while the finger moves and the rest as it lifts; the frame is shown moved by what the engine
   has not drawn yet until a frame's `view.moved` reaches it, and as it was when a move is refused. The zoom stays
   within the frame's `minZoom` and `maxZoom`, as the engine keeps it, so what is shown is what it draws next.
+- A mouse's wheel zooms about the pointer by 7% a notch, five notches' worth with Control, as desktop's map does
+  (`MapWheel` in `:protocol`); without a `view` it is sent as the `mapPointer` wheel at that point. A right click on a
+  room selects it and shows its card, as a tap does, where desktop's opens the room's menu; off a room it changes
+  nothing, as desktop's leaves the selection, and an exit waiting for its room goes on waiting.
 - A pan, or a zoom about a point other than the middle, stops the map following the player (`view.following`):
   a button at its bottom end, or in a script's map's panel, then centres it on the player again (`followPlayer`),
   until the player moves to another
@@ -1849,7 +1865,7 @@ that attaches later is told too. The UI shows it as a marker line.
   Qt's default of 37.
 
 ## Lifecycle
-- **Activity finished ("Kill UI") or recreated (rotation).**
+- **Activity finished ("Kill UI") or recreated (a density, language or dark theme change).**
   - *Verified on the host; expected on the phone.*
   - `onStop` stops the UI's link. Qt is in another process and does not notice
     anything except the socket closing. The game connection stays up (host test:
@@ -1870,7 +1886,10 @@ that attaches later is told too. The UI shows it as a marker line.
     again and the link stays up. A remade Activity's window would go mid-frame,
     and Compose's test wait for the next frame, which has no deadline, would
     wait on it for ever (API 28 remakes it without keeping the window). A
-    rotation or a density change still remakes it.
+    density change still remakes it.
+  - It takes `orientation`, `keyboard`, `keyboardHidden` and `navigation` too: a
+    rotation, a desktop window dragged from wide to tall, and a keyboard plugged
+    in or taken away, as on a Chromebook, lay it out again in place as well.
 - **Service stopped** (the "Stop engine" button, or the notification's Quit action).
   - *Expected.*
   - `stopService` leads to `QtServiceBase.onDestroy`: Qt terminates and then
@@ -1972,7 +1991,7 @@ that attaches later is told too. The UI shows it as a marker line.
     makes that profile the front, once the engine has listed it as open if the tap
     started the UI, and the game screen shows. A new-text notification names its profile the same way.
   - Leaving and coming back: `EngineClient` sends `setAppState` with `active` true on each attach and `minimized`
-    true just before it detaches in `MainActivity.onStop`, but not for a rotation, which remakes the Activity.
+    true just before it detaches in `MainActivity.onStop`, but not for a configuration change that remakes the Activity.
   - The UI only counts the `notify` frames it sees; it never posts.
 - **Both:** `Application.onCreate` runs in both processes, and channel creation
   is idempotent.

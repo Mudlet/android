@@ -35,6 +35,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performImeAction
+import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
@@ -826,6 +827,23 @@ class ScriptWindowsTest {
         compose.onNode(windowNamed("chat")).performTouchInput { swipeDown() }
         compose.waitUntil(WAIT_MS) { !displayed("row 59") }
         session.assertNoRequest("runLua", QUIET_MS.toInt())
+    }
+
+    @Test
+    fun theWheelScrollsAMiniConsoleThreeRowsANotchAsTheMainConsoles() {
+        showChat()
+        session.windowText("chat", (0 until 60).map { "row $it" })
+        waitUntilDisplayed("row 59")
+        fun top(row: Int) = compose.onNode(hasText("row $row") and inChat).fetchSemanticsNode().boundsInRoot.top
+        val before = top(56)
+        val rowHeight = top(57) - before
+        // A notch away from the player
+        compose.onNode(windowNamed("chat")).performMouseInput {
+            moveTo(center)
+            scroll(-1f)
+        }
+        compose.waitUntil(WAIT_MS) { top(56) != before }
+        assertNear("three rows down the window", 3 * rowHeight, top(56) - before)
     }
 
     // The chat window with 60 rows, more than it shows, the last of them in view; [scrollBar] as a script's

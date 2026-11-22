@@ -3,6 +3,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- A mouse or a touchpad does all a finger does, so Play offers the app to a Chromebook without a touchscreen -->
+    <uses-feature
+        android:name="android.hardware.touchscreen"
+        android:required="false" />
+
     <application
         android:name=".MudletApp"
         android:label="@string/app_name"
@@ -18,12 +23,13 @@
         android:supportsRtl="true"
         tools:targetApi="33">
 
-        <!-- A fold, a split screen's resize or the system's own change of size lays the screen out again in place: a
-             remade Activity would stop its link to the engine and take its window away mid-frame. A rotation still
-             remakes it -->
+        <!-- A fold, a rotation, a split screen's or a desktop window's resize, a keyboard plugged in or taken away, or the
+             system's own change of size lays the screen out again in place: a remade Activity would stop its link to
+             the engine and take its window away mid-frame. A window dragged from wide to tall changes the orientation,
+             and a keyboard plugged in or taken away the keyboard, whether it is hidden and on some the navigation -->
         <activity
             android:name=".ui.MainActivity"
-            android:configChanges="screenSize|smallestScreenSize|screenLayout"
+            android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|keyboard|keyboardHidden|navigation"
             android:exported="true"
             android:launchMode="singleTop"
             android:windowSoftInputMode="adjustResize">

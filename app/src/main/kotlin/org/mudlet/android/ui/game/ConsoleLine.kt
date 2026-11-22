@@ -9,6 +9,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
@@ -20,6 +21,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.PointerInputScope
+import androidx.compose.ui.input.pointer.PointerType
+import androidx.compose.ui.input.pointer.isSecondaryPressed
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -37,14 +45,24 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.PopupProperties
 import org.mudlet.android.R
 import org.mudlet.android.data.Settings
 import org.mudlet.android.protocol.EngineMessage
 import org.mudlet.android.protocol.LinkSpan
+import org.mudlet.android.protocol.RightClick
 import org.mudlet.android.protocol.linkLabel
+import org.mudlet.android.protocol.rightClick
 import org.mudlet.android.ui.copyText
 import org.mudlet.android.ui.shareText
+import kotlin.math.roundToInt
 
 /**
  * The links of a line: [spans] where they are in it, [info] what `getLink` last said of one (null until it answers),
@@ -69,6 +87,9 @@ internal class LineLinks(
  * Of its [links], a tap follows one and a long press opens its menu where it has one; TalkBack offers each the engine
  * has not disabled as an action that follows it, and one with a menu as another that opens it. A link that could not
  * be sent says so.
+ *
+ * A mouse works it as desktop's console does: a right click where it is let go reveals a spoiler, opens a link's menu,
+ * or off a link the line's ([rightClick]); over a link the pointer is a hand and the link's tool tip shows by it.
  *
  * With [onMakeTrigger], which a line of the game's own text has, or [copyable], a long press on a line that is not
  * blank, anywhere but on a link with a menu, opens a menu that offers to make a trigger from it, or to copy or share it
@@ -137,6 +158,7 @@ internal fun ConsoleLine(
     var menu by remember { mutableStateOf<LinkMenu?>(null) }
     // Where along the line the line's own menu is open, in pixels
     var lineMenuAt by remember { mutableStateOf<Float?>(null) }
+    var hovered by remember { mutableStateOf<LinkHover?>(null) }
     // The gestures read what the engine now says of a link, without starting again each time it answers
     val current by rememberUpdatedState(links)
     val context = LocalContext.current
@@ -176,7 +198,19 @@ internal fun ConsoleLine(
         return current?.spans?.firstOrNull { character >= it.start && character < it.end }
     }
 
-    val touches = Modifier.pointerInput(spans, offersLineMenu) {
+    fun rightClickAt(position: Offset) {
+        val link = spanAt(position)?.link
+        when (rightClick(link != null, link?.let { current?.info(it) })) {
+            RightClick.REVEAL -> link?.let { follow(it, null) }
+            RightClick.LINK_MENU -> link?.let { menu = LinkMenu(it, position.x) }
+            RightClick.LINE_MENU -> if (offersLineMenu) lineMenuAt = position.x
+            RightClick.NOTHING -> {}
+        }
+    }
+
+    val mouse = Modifier.pointerInput(spans, offersLineMenu) { mouseOnLine({ spanAt(it)?.link }, ::rightClickAt) { hovered = it } }
+        .pointerHoverIcon(if (hovered != null) PointerIcon.Hand else PointerIcon.Default)
+    val touches = mouse.pointerInput(spans, offersLineMenu) {
         detectTapGestures(
             onTap = { position ->
                 spanAt(position)?.let { span -> if (current?.info(span.link)?.disabled != true) follow(span.link, null) }
@@ -199,6 +233,9 @@ internal fun ConsoleLine(
         LineText(text, Modifier.fillMaxWidth().then(touches).then(read(linkActions + listOfNotNull(triggerAction, copyAction, selectFromAction, selectToAction))), color, style, singleLine) { layout = it }
         if (open != null && openSpan != null && openInfo != null) {
             LinkMenuView(openInfo, open.x, linkLabel(openInfo, plain.substring(openSpan.start, openSpan.end)), ::follow) { menu = null }
+        }
+        hovered?.takeIf { menu == null && lineMenuAt == null }?.let { hover ->
+            links?.info(hover.link)?.tooltip?.takeIf { it.isNotBlank() }?.let { LinkTooltip(it, hover.at) }
         }
         lineMenuAt?.let { x ->
             DropdownMenu(expanded = true, onDismissRequest = { lineMenuAt = null }, offset = DpOffset(with(LocalDensity.current) { x.toDp() }, 0.dp)) {
@@ -293,6 +330,85 @@ private fun linkActions(
                 },
             )
         }
+    }
+}
+
+/** A mouse over [link], at [at] in the line's pixels. */
+private class LinkHover(val link: Int, val at: Offset)
+
+/**
+ * A mouse on a line, as desktop's console takes one: a right click is handed to [onRightClick] where it is let go, as
+ * desktop's acts on the release, and is never a tap; coming onto a link ([linkAt]) hands [onHover] it and where, and
+ * leaving it null. Touches and a stylus are left to the line's taps.
+ */
+private suspend fun PointerInputScope.mouseOnLine(linkAt: (Offset) -> Int?, onRightClick: (Offset) -> Unit, onHover: (LinkHover?) -> Unit) {
+    var rightPressed = false
+    var over: Int? = null
+
+    fun hover(link: Int?, at: Offset) {
+        if (link == over) return
+        over = link
+        onHover(link?.let { LinkHover(it, at) })
+    }
+    // Restarted for new links, the tool tip of one the line no longer has would otherwise stay
+    onHover(null)
+    awaitPointerEventScope {
+        while (true) {
+            // Before the taps, which would take a right click's press as a tap
+            val event = awaitPointerEvent(PointerEventPass.Initial)
+            val change = event.changes.firstOrNull() ?: continue
+            if (change.type != PointerType.Mouse) continue
+            when (event.type) {
+                PointerEventType.Press -> if (event.buttons.isSecondaryPressed) {
+                    rightPressed = true
+                    change.consume()
+                }
+
+                PointerEventType.Release -> if (rightPressed) {
+                    rightPressed = false
+                    change.consume()
+                    onRightClick(change.position)
+                }
+
+                PointerEventType.Enter, PointerEventType.Move -> hover(linkAt(change.position), change.position)
+
+                PointerEventType.Exit -> hover(null, change.position)
+            }
+        }
+    }
+}
+
+/**
+ * A link's [tooltip] by the mouse at [at], as desktop's console shows one: plain text that takes no focus, so the
+ * keys go on to the command line.
+ */
+@Composable
+private fun LinkTooltip(tooltip: String, at: Offset) {
+    val below = with(LocalDensity.current) { TOOLTIP_BELOW_POINTER.roundToPx() }
+    val place = remember(at, below) { ByPointer(IntOffset(at.x.roundToInt(), at.y.roundToInt()), below) }
+    Popup(popupPositionProvider = place, properties = PopupProperties(focusable = false, dismissOnBackPress = false, dismissOnClickOutside = false)) {
+        Surface(shape = MaterialTheme.shapes.extraSmall, color = MaterialTheme.colorScheme.inverseSurface) {
+            Text(tooltip, Modifier.padding(horizontal = 8.dp, vertical = 4.dp), color = MaterialTheme.colorScheme.inverseOnSurface, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+// Clear of the mouse's arrow, as a desktop's tool tip is
+private val TOOLTIP_BELOW_POINTER = 20.dp
+
+/**
+ * A tool tip's place: [below] pixels under [pointer], a point of its anchor, or above it at the window's bottom, and
+ * within the window.
+ */
+private class ByPointer(private val pointer: IntOffset, private val below: Int) : PopupPositionProvider {
+    override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize, layoutDirection: LayoutDirection, popupContentSize: IntSize): IntOffset {
+        val x = anchorBounds.left + pointer.x
+        val y = anchorBounds.top + pointer.y
+        val top = if (y + below + popupContentSize.height <= windowSize.height) y + below else y - popupContentSize.height
+        return IntOffset(
+            x.coerceAtMost(windowSize.width - popupContentSize.width).coerceAtLeast(0),
+            top.coerceAtMost(windowSize.height - popupContentSize.height).coerceAtLeast(0),
+        )
     }
 }
 

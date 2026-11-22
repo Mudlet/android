@@ -14,6 +14,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -68,7 +69,11 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerInputScope
+import androidx.compose.ui.input.pointer.PointerType
+import androidx.compose.ui.input.pointer.isCtrlPressed
+import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.platform.LocalDensity
@@ -108,6 +113,7 @@ import org.mudlet.android.protocol.MapPointerType
 import org.mudlet.android.protocol.MapRoomPlace
 import org.mudlet.android.protocol.MapShift
 import org.mudlet.android.protocol.MapViewInfo
+import org.mudlet.android.protocol.MapWheel
 import org.mudlet.android.protocol.PlacedWindow
 import org.mudlet.android.protocol.PxRect
 import org.mudlet.android.protocol.RoomEdit
@@ -406,7 +412,8 @@ internal fun Modifier.readAt(index: Float) = semantics { traversalIndex = index 
  * A map the engine draws, the mapper window's or the app's: [frame] drawn where [fit] puts it, scaled alike both ways,
  * and moved at once by what the player's touches moved it by until the engine draws that ([MapMover]). A tap selects
  * the room nearest it and shows it ([RoomCard]), a double tap walks there, a drag pans the map and glides on when
- * flung, a pinch zooms about the fingers and a double tap that drags zooms about it, each sent to [source]. At its top
+ * flung, a pinch zooms about the fingers and a double tap that drags zooms about it, each sent to [source]; a mouse's
+ * wheel zooms about the pointer and its right click on a room selects and shows it, as desktop's map does. At its top
  * the frame's map info, [info] ([MapInfoBox]); at its bottom why the engine refused a request, the area and level shown
  * ([MapPlaceBar]) beside a button that centres it on the player while it does not follow them, and the room picked.
  * With [panel], the info, the bar and the button are left to a [MapPanel] beside it.
@@ -468,7 +475,7 @@ internal fun MapView(
 
     BoxWithConstraints(modifier) {
         Canvas(
-            Modifier.fillMaxSize().clipToBounds().pointerInput(source) { mapGestures(source, haptics, scope, decay, { editing }, { roomDrag = it }) { currentFit } }.clearAndSetSemantics {
+            Modifier.fillMaxSize().clipToBounds().pointerInput(source) { mapWheel(source) { currentFit } }.pointerInput(source) { mapGestures(source, haptics, scope, decay, { editing }, { roomDrag = it }) { currentFit } }.clearAndSetSemantics {
                 contentDescription = description
                 stateDescription = state
                 if (touchable) {
@@ -730,6 +737,37 @@ private fun MapSource.touch(type: MapPointerType, fit: MapFit, at: MapPoint, rea
     return sent
 }
 
+// Desktop's right click selects the room under [at] and opens its menu, the card here, as a press does; off a room it
+// leaves the selection as it was, and an exit waiting for its room goes on waiting
+private fun MapSource.rightClick(fit: MapFit, at: MapPoint, reach: Double) {
+    if (rooms.linking != null || mover.roomAt(at, reach) == null) return
+    touch(MapPointerType.PRESS, fit, at, reach)
+}
+
+/**
+ * A mouse wheel on the map, as the frame [fit] gives, while it gives one: it zooms about the pointer as desktop's map
+ * does ([MapWheel]), five times as far with Control, at once while there is a view to move and else by the engine.
+ */
+private suspend fun PointerInputScope.mapWheel(source: MapSource, fit: () -> MapFit?) {
+    awaitPointerEventScope {
+        while (true) {
+            val event = awaitPointerEvent()
+            if (event.type != PointerEventType.Scroll) continue
+            val change = event.changes.firstOrNull() ?: continue
+            val current = fit() ?: continue
+            val notches = change.scrollDelta.y
+            val at = current.toMap(change.position.x, change.position.y)
+            if (notches == 0f || at == null) continue
+            change.consume()
+            val control = event.keyboardModifiers.isCtrlPressed
+            val mover = source.mover
+            if (!mover.move(0.0, 0.0, MapWheel.zoom(notches, control), at, current.centre, now = true)) {
+                source.pointer(MapPointerType.WHEEL, mover.shift.invert(at), MapWheel.wheelY(notches, control))
+            }
+        }
+    }
+}
+
 /**
  * The player's touches on the map, as the frame [fit] gives, while it gives one: a tap is a press on the room nearest
  * it ([touch]), a second tap soon after and near it a double click there, with a tick; a drag pans the map ([MapMover])
@@ -761,6 +799,14 @@ private suspend fun PointerInputScope.mapGestures(
         glide?.cancel()
         onDrag(null)
         val mover = source.mover
+        if (down.type == PointerType.Mouse && currentEvent.buttons.isSecondaryPressed) {
+            lastTapUp = 0L
+            // On the release, as desktop's menu opens
+            val up = waitForUpOrCancellation()?.also { it.consume() } ?: return@awaitEachGesture
+            val current = fit() ?: return@awaitEachGesture
+            current.toMap(up.position.x, up.position.y)?.let { source.rightClick(current, it, (reach / current.scale).toDouble()) }
+            return@awaitEachGesture
+        }
         var drag: RoomDrag? = null
         val secondTap = lastTapUp != 0L && down.uptimeMillis - lastTapUp <= viewConfiguration.doubleTapTimeoutMillis && (down.position - lastTapAt).getDistance() <= slop
         var gesture = Gesture.TAP

@@ -14,13 +14,17 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.rightClick
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -42,7 +46,9 @@ import org.mudlet.android.protocol.RUN_UNDERLINE
 /**
  * The game's links in the main console (docs/architecture.md, "The main console's links"), against a fake engine: asked
  * about with no window, followed by a tap, a menu item or TalkBack's action, and asked again after `linksChanged`. A
- * long press on a link with a menu opens that menu; elsewhere on the line it offers to make a trigger from the line.
+ * long press on a link with a menu opens that menu; elsewhere on the line it offers to make a trigger from the line. A
+ * mouse works it as desktop's console: a right click reveals a spoiler, opens a link's menu or the line's, a link's tool
+ * tip shows under the pointer, and the wheel scrolls three rows a notch.
  */
 @RunWith(AndroidJUnit4::class)
 class ConsoleLinksTest {
@@ -125,6 +131,82 @@ class ConsoleLinksTest {
         compose.waitUntil(WAIT_MS) { displayed(makeTrigger()) }
         assertFalse(displayed("Eat"))
         session.assertNoRequest("followLink", 1_000)
+    }
+
+    @Test
+    fun aRightClickOpensTheLinksMenuOrTheLinesAndTheMouseOnALinkShowsItsToolTip() {
+        session.send(linkMessage("walk north", askedAbout().get("id")))
+        compose.waitUntil(WAIT_MS) { labels().contains(string(R.string.console_link_menu, "walk north")) }
+        val onLink = characterCentre(6)
+        val beside = characterCentre(1)
+
+        // Its tool tip shows while the mouse is on the link, and goes as it leaves
+        val tip = hasText("walk north")
+        compose.onNode(row).performMouseInput { moveTo(onLink) }
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(tip).fetchSemanticsNodes().isNotEmpty() }
+        // Each window's: the tool tip is a window of its own over the activity's
+        val roots = compose.onAllNodes(isRoot())
+        for (i in roots.fetchSemanticsNodes().indices) roots[i].tryPerformAccessibilityChecks()
+        compose.onNode(row).performMouseInput { moveTo(beside) }
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(tip).fetchSemanticsNodes().isEmpty() }
+
+        // A right click on it opens its menu, and follows nothing
+        compose.onNode(row).performMouseInput { rightClick(onLink) }
+        compose.waitUntil(WAIT_MS) { displayed("Eat") }
+        assertFalse("the link's menu, not the line's", displayed(makeTrigger()))
+        session.assertNoRequest("followLink", 1_000)
+        compose.onNode(hasText("Eat") and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
+        assertFollowed(item = 2)
+        compose.waitUntil(WAIT_MS) { !displayed("Eat") }
+
+        // Beside it, the line's menu
+        compose.onNode(row).performMouseInput { rightClick(beside) }
+        compose.waitUntil(WAIT_MS) { displayed(makeTrigger()) }
+        session.assertNoRequest("followLink", 1_000)
+    }
+
+    @Test
+    fun aRightClickRevealsASpoilerAndOnALinkWithNoMenuOrADisabledOneOpensNothing() {
+        session.send(linkMessage("walk north", askedAbout().get("id"), spoiler = true, disabled = true))
+        compose.waitUntil(WAIT_MS) { labels().contains(string(R.string.console_link_menu, "walk north")) }
+        val onLink = characterCentre(6)
+
+        // A spoiler not yet revealed is revealed first, even a disabled one, as followLink with no item does
+        compose.onNode(row).performMouseInput { rightClick(onLink) }
+        assertFollowed(item = null)
+        assertFalse("revealed, not its menu", displayed("Eat"))
+
+        // Revealed and disabled: neither its menu nor the line's, as desktop's console shows neither
+        session.send(linksChanged(LINK))
+        session.send(linkMessage("wander north", askedAbout().get("id"), spoiler = true, revealed = true, disabled = true))
+        compose.waitUntil(WAIT_MS) { labels().contains(string(R.string.console_link_menu, "wander north")) }
+        compose.onNode(row).performMouseInput { rightClick(onLink) }
+        session.assertNoRequest("followLink", 1_000)
+        assertFalse(displayed("Eat") || displayed(makeTrigger()))
+
+        // Nor on a link without a menu
+        session.send(linksChanged(LINK))
+        session.send(linkMessage("run north", askedAbout().get("id"), menu = false))
+        compose.waitUntil(WAIT_MS) { labels().contains(string(R.string.console_link_follow, "run north")) }
+        compose.onNode(row).performMouseInput { rightClick(onLink) }
+        session.assertNoRequest("followLink", 1_000)
+        assertFalse(displayed(makeTrigger()))
+    }
+
+    @Test
+    fun theWheelScrollsTheConsoleThreeRowsANotchAsDesktopsDoes() {
+        for (n in 3L..120L) session.line(n, "line $n")
+        compose.waitUntil(WAIT_MS) { displayed("line 120") }
+        fun top(n: Int) = compose.onNode(hasText("line $n")).fetchSemanticsNode().boundsInRoot.top
+        val before = top(110)
+        val rowHeight = top(111) - before
+        // A notch away from the player
+        compose.onNode(hasScrollToIndexAction()).performMouseInput {
+            moveTo(center)
+            scroll(-1f)
+        }
+        compose.waitUntil(WAIT_MS) { top(110) != before }
+        assertEquals("three rows down the screen", 3 * rowHeight, top(110) - before, 1f)
     }
 
     @Test
@@ -223,6 +305,9 @@ class ConsoleLinksTest {
         visited: Boolean = false,
         selected: Boolean = false,
         concealed: Boolean = false,
+        spoiler: Boolean = false,
+        revealed: Boolean = false,
+        disabled: Boolean = false,
     ) = JSONObject().put("t", "link").put("link", LINK)
         .put("tooltip", tooltip).put("menu", menu).put("menuTitle", "Ways")
         .put(
@@ -236,7 +321,7 @@ class ConsoleLinksTest {
                 ),
             ),
         )
-        .put("spoiler", false).put("revealed", false).put("disabled", false).put("concealed", concealed).put("visited", visited).put("selected", selected)
+        .put("spoiler", spoiler).put("revealed", revealed).put("disabled", disabled).put("concealed", concealed).put("visited", visited).put("selected", selected)
         .apply { if (fg != null) put("fg", fg) }
         .put("re", id)
 

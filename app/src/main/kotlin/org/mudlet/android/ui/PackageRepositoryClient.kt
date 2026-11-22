@@ -204,7 +204,7 @@ internal class PackageRepositoryClient<Icon : Any>(
         val via = fetch
         network.execute {
             val folder = File(downloads(), UUID.randomUUID().toString())
-            val file = File(folder, fileName)
+            val file = File(folder, "package")
             val saved = try {
                 if (!folder.mkdirs()) throw IOException("could not create a folder for the download")
                 file.outputStream().use { via.get(url, PackageRepository.PACKAGE_TIMEOUT_MS, PackageRepository.MAX_PACKAGE_BYTES, it) }

@@ -14,4 +14,43 @@
     <!-- Translations come from Crowdin as translators finish them (docs/translations.md); a string not yet translated
          shows in English, as in Mudlet's desktop app -->
     <issue id="MissingTranslation" severity="ignore" />
+    <!-- A string the English has dropped stays in each translation until Crowdin's next pull request: on, these would
+         fail every build of main in between -->
+    <issue id="ExtraTranslation" severity="ignore" />
+    <issue id="UnusedResources">
+        <ignore path="**/values-*/strings.xml" />
+    </issue>
+    <!-- Checks of the English's wording and plural forms, which a translation follows its own language's rules for:
+         lint's dictionaries and CLDR's plural forms are not Crowdin's, and a plural form missing falls back to "other".
+         The checks of placeholders (StringFormat*, ImpliedQuantity) stay on: a wrong one crashes or misleads -->
+    <issue id="Typos">
+        <ignore path="**/values-*/strings.xml" />
+    </issue>
+    <issue id="TypographyDashes">
+        <ignore path="**/values-*/strings.xml" />
+    </issue>
+    <issue id="TypographyEllipsis">
+        <ignore path="**/values-*/strings.xml" />
+    </issue>
+    <issue id="TypographyFractions">
+        <ignore path="**/values-*/strings.xml" />
+    </issue>
+    <issue id="TypographyOther">
+        <ignore path="**/values-*/strings.xml" />
+    </issue>
+    <issue id="MissingQuantity">
+        <ignore path="**/values-*/strings.xml" />
+    </issue>
+    <issue id="UnusedQuantity">
+        <ignore path="**/values-*/strings.xml" />
+    </issue>
+    <!-- Advice on a folder's language code: Crowdin names the folders with its Android codes (values-iw-rIL for Hebrew),
+         which Android reads -->
+    <issue id="LocaleFolder" severity="ignore" />
+    <!-- AppLanguage changes the locale itself only before Android 13, and the app's bundle keeps every language in its
+         base APK (bundle.language.enableSplit in app/build.gradle.kts), which this check cannot see from
+         :engine-service -->
+    <issue id="AppBundleLocaleChanges">
+        <ignore path="**/AppLanguage.kt" />
+    </issue>
 </lint>

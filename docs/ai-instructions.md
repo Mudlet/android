@@ -69,6 +69,7 @@ Procedures too long for this file are in `.agents/skills/<name>/SKILL.md` (Claud
     organisation and application name `Mudlet` that `MudletEngine.cpp` gives Qt), `engine-session.json` and
     `engine-stopped`;
   - the command suggestions in `files/suggest/`;
+  - the app's language before Android 13, `files/app-language` (`AppLanguage`);
   - the notification channels `engine`, `tells` and `newText`, whose ids Android keeps the player's choices under;
   - the file `files/notification-game-text`, the player's "Show game text in notifications".
 - Each `scripts/mudlet-patches/*.patch` goes to Mudlet/Mudlet as a pull request, which its `Upstream:` line names

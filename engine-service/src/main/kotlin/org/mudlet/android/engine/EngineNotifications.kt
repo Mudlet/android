@@ -97,10 +97,11 @@ object EngineNotifications {
 
     /**
      * The ongoing notification: its title names the one connected game or counts them, or says that none is connected,
-     * and with several games open it lists each with its connection. [deferred]: Android 12+ waits 10 s before showing
-     * it, so one taken away sooner never shows.
+     * and with several games open it lists each with its connection, in the app's language ([AppLanguage]).
+     * [deferred]: Android 12+ waits 10 s before showing it, so one taken away sooner never shows.
      */
     fun engineNotification(context: Context, deferred: Boolean = false): Notification {
+        val strings = AppLanguage.localized(context)
         val stop = PendingIntent.getService(
             context,
             1,
@@ -111,21 +112,21 @@ object EngineNotifications {
         val connected = games.filter { it.connected }
         val builder = NotificationCompat.Builder(context, CHANNEL_ENGINE)
             .setSmallIcon(R.drawable.ic_engine)
-            .setContentTitle(title(context, games, connected))
+            .setContentTitle(title(strings, games, connected))
             .setContentText(
-                context.getString(
+                strings.getString(
                     if (games.isNotEmpty() && connected.isEmpty()) R.string.engine_notification_text_not_connected else R.string.engine_notification_text,
                 ),
             )
             .setOngoing(true)
             .setContentIntent(openUi(context))
-            .addAction(0, context.getString(R.string.engine_notification_quit), stop)
+            .addAction(0, strings.getString(R.string.engine_notification_quit), stop)
             .setForegroundServiceBehavior(
                 if (deferred) NotificationCompat.FOREGROUND_SERVICE_DEFERRED else NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE,
             )
         if (games.size > 1) {
             val lines = NotificationCompat.InboxStyle()
-            games.forEach { lines.addLine(context.getString(R.string.engine_notification_game, it.name, connectionText(context, it))) }
+            games.forEach { lines.addLine(strings.getString(R.string.engine_notification_game, it.name, connectionText(strings, it))) }
             builder.setStyle(lines)
         }
         return builder.build()
@@ -253,10 +254,11 @@ object EngineNotifications {
     private fun showNotice(context: Context, show: GameNotices.Show) {
         if (!mayPost(context)) return
         val id = noticeIds.getOrPut(show.game) { nextTellId.getAndIncrement() }
+        val strings = AppLanguage.localized(context)
         val count = if (show.unread > 0) {
-            context.resources.getQuantityString(R.plurals.new_text_unread, show.unread.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(), show.unread)
+            strings.resources.getQuantityString(R.plurals.new_text_unread, show.unread.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(), show.unread)
         } else {
-            context.getString(R.string.new_text_attention)
+            strings.getString(R.string.new_text_attention)
         }
         fun notice(text: String) = NotificationCompat.Builder(context, CHANNEL_NEW_TEXT)
             .setSmallIcon(R.drawable.ic_engine)

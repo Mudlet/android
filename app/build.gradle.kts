@@ -38,6 +38,35 @@ val sourceCommit = runCatching {
     }.standardOutput.asText.get().trim()
 }.getOrDefault("").takeIf { it.matches(Regex("[0-9a-f]{40}")) } ?: ""
 
+// The locale of the English in src/main/res/values, first in the app's languages
+val defaultLanguage = "en"
+
+// The res folders of a build type: the release's, or the debug build's, which adds src/debug/res's values-kl, a fake
+// translation the instrumented tests switch to (AppLanguageTest)
+fun resDirs(debug: Boolean) = listOfNotNull("src/main/res", "src/$releaseChannel/res", "src/debug/res".takeIf { debug })
+
+// The values-<qualifiers> folders that hold a translation; BuildConfig.TRANSLATIONS has them for the app's own list of
+// its languages (AppLanguages). A strings.xml with no string in it is what Crowdin exports for a language nobody has
+// translated yet, which the lists leave out
+fun translationFolders(debug: Boolean) = resDirs(debug).flatMap { dir ->
+    file(dir).listFiles().orEmpty().filter { folder ->
+        folder.name.startsWith("values-") && folder.resolve("strings.xml").let { it.isFile && Regex("<(string|plurals) ").containsMatchIn(it.readText()) }
+    }.map { it.name.removePrefix("values-") }
+}.sorted()
+
+// The BCP 47 tag of a folder's locale, or null for none, as AppLanguages.tagOf has it; AppLanguageTest checks that
+// Android's list of the app's languages, made from these, is the app's own
+fun localeTag(qualifiers: String): String? {
+    val segments = qualifiers.split('-').dropWhile { it.matches(Regex("(mcc|mnc)[0-9]+")) }
+    val head = segments.firstOrNull() ?: return null
+    val parts = if (head.startsWith("b+")) {
+        head.removePrefix("b+").split('+')
+    } else {
+        listOfNotNull(head, segments.getOrNull(1)?.takeIf { it.matches(Regex("r([A-Z]{2}|[0-9]{3})")) }?.drop(1))
+    }
+    return parts.takeIf { it[0].matches(Regex("[a-z]{2,3}")) }?.joinToString("-")
+}
+
 android {
     namespace = "org.mudlet.android"
     compileSdk = libs.versions.compileSdk.get().toInt()
@@ -63,6 +92,7 @@ android {
         buildConfigField("String", "SOURCE_COMMIT", "\"$sourceCommit\"")
         // The PTB's check for a newer build from GitHub (docs/ptb.md); a constant, so R8 drops it from the stable app
         buildConfigField("boolean", "PTB_UPDATE_CHECK", (releaseChannel == "ptb").toString())
+        buildConfigField("String", "DEFAULT_LANGUAGE", "\"$defaultLanguage\"")
         // The instrumented tests in src/androidTest; native/tests/android_instrumented.py runs them on a device
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -84,6 +114,7 @@ android {
             // en-XA (accented, longer text) and ar-XB (mirrored, right to left), to see a layout with text it was not
             // drawn for; PseudoLocaleTest runs the app in both (docs/translations.md, "Pseudo-locales")
             isPseudoLocalesEnabled = true
+            buildConfigField("String", "TRANSLATIONS", "\"${translationFolders(debug = true).joinToString(",")}\"")
         }
         getByName("release") {
             isMinifyEnabled = true
@@ -93,6 +124,7 @@ android {
             signingConfig = signingConfigs.findByName("upload")
             // The native libraries' symbol tables go into the AAB, so Play's crash reports name native functions
             ndk { debugSymbolLevel = "SYMBOL_TABLE" }
+            buildConfigField("String", "TRANSLATIONS", "\"${translationFolders(debug = false).joinToString(",")}\"")
         }
         // The release build, minified and shrunk the same way, with the debug build's SmokeTestReceiver and the debug
         // key: what CI's emulator smoke test runs, to show R8 kept what Qt and the engine reach by name
@@ -133,12 +165,21 @@ android {
     buildFeatures {
         compose = true
         // BuildConfig.DEBUG keeps the self-test out of release builds; SOURCE_COMMIT is for the About screen;
-        // PTB_UPDATE_CHECK keeps the check for a newer test build out of the stable app
+        // PTB_UPDATE_CHECK keeps the check for a newer test build out of the stable app; DEFAULT_LANGUAGE and
+        // TRANSLATIONS are the languages the app's settings offer
         buildConfig = true
     }
 
     androidResources {
         noCompress += "rcc"
+    }
+
+    // Every language in the base APK: Play would otherwise install only the phone's languages, and one chosen in the
+    // app's settings would show in English
+    bundle {
+        language {
+            enableSplit = false
+        }
     }
 
     lint {
@@ -271,8 +312,37 @@ abstract class CopyReleaseNotes : DefaultTask() {
     }
 }
 
+/**
+ * Writes res/xml/locales_config.xml, Android 13's list of the app's languages (android:localeConfig in the manifest):
+ * the English's and each values-<language> folder's that Crowdin's pull requests add (docs/translations.md). Not AGP's
+ * generateLocaleConfig, so that only the app's own folders count: :engine-service's resources hold Qt's translations
+ * too, in languages the app has none of.
+ */
+abstract class GenerateLocaleConfig : DefaultTask() {
+    /** BCP 47 tags */
+    @get:Input
+    abstract val locales: ListProperty<String>
+
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+
+    @TaskAction
+    fun write() {
+        val xml = outputDir.get().dir("xml").asFile
+        xml.mkdirs()
+        val entries = locales.get().joinToString("") { "    <locale android:name=\"$it\" />\n" }
+        xml.resolve("locales_config.xml").writeText(
+            "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<locale-config xmlns:android=\"http://schemas.android.com/apk/res/android\">\n$entries</locale-config>\n",
+        )
+    }
+}
+
 androidComponents {
     onVariants { variant ->
+        val localeConfig = tasks.register<GenerateLocaleConfig>("generate${variant.name.replaceFirstChar { it.uppercase() }}LocaleConfig") {
+            locales.set((listOf(defaultLanguage) + translationFolders(variant.buildType == "debug").mapNotNull(::localeTag)).distinct())
+        }
+        variant.sources.res?.addGeneratedSourceDirectory(localeConfig, GenerateLocaleConfig::outputDir)
         val generate = tasks.register<GenerateGradleLicences>("generate${variant.name.replaceFirstChar { it.uppercase() }}Licences") {
             notices.set(layout.projectDirectory.file("src/main/assets/licences/notices.json"))
             modules.set(variant.runtimeConfiguration.incoming.resolutionResult.rootComponent.map(::bundledModules))

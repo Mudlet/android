@@ -550,9 +550,9 @@
     <!-- A page of each game's own settings: how the game's text is shown -->
     <string name="settings_display">Display &amp; text</string>
     <!-- Under "Display & text" in the list of settings pages, what that page holds, in its order: how many lines the
-         game's text keeps to scroll back through, the links a game puts in its text, and undoing the wrapping a game
-         does itself -->
-    <string name="settings_display_summary">Scrollback, the game\'s links and its own wrapping</string>
+         game's text keeps to scroll back through, the links a game puts in its text, a notification of the game's new
+         text while the app is in the background, and undoing the wrapping a game does itself -->
+    <string name="settings_display_summary">Scrollback, the game\'s links, new text notifications and its own wrapping</string>
     <!-- A page of each game's own settings: the colours the game's text is shown in, as desktop Mudlet's "Color view" -->
     <string name="settings_colours">Colours</string>
     <!-- Under "Colours" in the list of settings pages, what that page holds -->
@@ -946,6 +946,14 @@
     <!-- Words a player might search the settings for to find "Links from the game (OSC 8)", besides the words of its
          name and description, separated by commas. Use the words a player of your language would search for. -->
     <string name="settings_game_links_keywords">hyperlinks, links, URL, web, click, tap</string>
+    <!-- A switch on a game's Display & text page, desktop Mudlet's "Notify on new data": a notification when the game
+         sends new text while the app is in the background -->
+    <string name="settings_alert_on_new_data">Notify on new text in the background</string>
+    <!-- Under "Notify on new text in the background", what the switch does -->
+    <string name="settings_alert_on_new_data_hint">When the game sends new text while you use other apps, a notification says how many lines are unread. It goes when you come back.</string>
+    <!-- Words a player might search the settings for to find "Notify on new text in the background", besides the words
+         of its name and description, separated by commas. Use the words a player of your language would search for. -->
+    <string name="settings_alert_on_new_data_keywords">alert, notification, background, unread, new data, away</string>
     <!-- A setting on a game's Display & text page, under "Undo the game's own wrapping": the column the game wraps
          its lines at -->
     <string name="settings_undo_wrap_width">The game wraps at</string>
@@ -1466,6 +1474,18 @@
     <!-- Words a player might search the settings for to find "Scripts speak through TalkBack", besides the words of its
          name and description, separated by commas. Use the words a player of your language would search for. -->
     <string name="settings_script_speech_talkback_keywords">speech, speak, voice, text to speech, TTS, screen reader, packages</string>
+    <!-- A page of the app's own settings, the same for every game: on the notifications the app shows -->
+    <string name="settings_notifications">Notifications</string>
+    <!-- Under "Notifications" in the list of settings pages, what that page holds -->
+    <string name="settings_notifications_summary">Game text on notifications</string>
+    <!-- A switch on the Notifications page: on, the notification that a game has new text shows the game's newest line,
+         not only how many lines are unread -->
+    <string name="settings_game_text_in_notifications">Show game text in notifications</string>
+    <!-- Under "Show game text in notifications", what the switch does -->
+    <string name="settings_game_text_in_notifications_hint">The notification that a game has new text shows its newest line, not only how many lines are unread. A locked screen still shows only the count unless your phone\'s settings show private notifications there.</string>
+    <!-- Words a player might search the settings for to find "Show game text in notifications", besides the words of its
+         name and description, separated by commas. Use the words a player of your language would search for. -->
+    <string name="settings_game_text_in_notifications_keywords">privacy, lock screen, preview, latest line, alert</string>
     <!-- A page of the app's own settings, only in Mudlet PTB (the nightly public test build) when it was installed from
          GitHub rather than Google Play: on looking for a newer test build -->
     <string name="settings_test_builds">Test builds</string>

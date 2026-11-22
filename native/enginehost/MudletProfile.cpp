@@ -685,8 +685,8 @@ void MudletProfile::connectSession()
         }
         mFrontend->errorConsoleEntry(kept);
     });
-    connect(session, &THeadlessSession::notificationRequested, this, [this](const QString&, const QString& title, const QString& text) {
-        mFrontend->notify(title, text);
+    connect(session, &THeadlessSession::notificationRequested, this, [this](const QString&, const QString& title, const QString& text, std::optional<int> milliseconds) {
+        mFrontend->notify(title, text, milliseconds.value_or(0));
     });
     connect(session, &THeadlessSession::announcementRequested, this, [this](const QString&, const QString& text, bool assertive) {
         mFrontend->announce(text, assertive);

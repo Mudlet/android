@@ -16,6 +16,9 @@
 # Called from C++ (native/enginehost/AndroidNotifier.cpp) with QJniObject::callStaticMethod, by class, name and
 # signature
 -keep class org.mudlet.android.engine.EngineNotifications {
-    public static void postTell(android.content.Context, java.lang.String, java.lang.String, java.lang.String);
+    public static void postTell(android.content.Context, java.lang.String, java.lang.String, java.lang.String, long);
     public static void showProfiles(android.content.Context, java.lang.String[], java.lang.String[]);
+    public static void appState(android.content.Context, boolean);
+    public static void gameText(android.content.Context, java.lang.String, long, java.lang.String, boolean);
+    public static void gameClosed(android.content.Context, java.lang.String);
 }

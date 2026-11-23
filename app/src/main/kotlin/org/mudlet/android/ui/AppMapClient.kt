@@ -141,7 +141,7 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
     var autoRefusal by mutableStateOf<String?>(null)
         private set
 
-    private val auto = MapAutoDownload(prefs(session.app).getBoolean(autoKey(session.name), false))
+    private var auto = MapAutoDownload(prefs(session.app).getBoolean(autoKey(session.name), false))
 
     /**
      * The rooms found for the room an exit leads to ([findDestinations]), apart from either map's [MapRooms.search], so
@@ -255,7 +255,6 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
     private fun onDownloadRefused(reason: String) {
         downloadAsked = false
         if (!autoNotice) return
-        autoRefusal = reason
         if (session === EngineClient.front) Announcer.announce(session.app.resources.getString(R.string.map_download_failed, reason), assertive = true)
     }
 
@@ -287,7 +286,7 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
             autoRefusal = null
         }
         downloadAsked = false
-        auto.attached()
+        auto = MapAutoDownload(false)
         files.onAttached(sameInstance)
         rooms.onAttached(sameInstance)
         sent = Size.NONE
@@ -370,7 +369,7 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
      */
     internal fun onAreas(message: EngineMessage.Areas, resources: Resources, speak: Boolean): Boolean {
         val id = (message.replyTo as? Number)?.toLong() ?: return false
-        val answer = auto.areas(id, message.areas.isNotEmpty(), downloadAsked)
+        val answer = auto.areas(id, false, downloadAsked)
         if (answer == MapAutoDownload.Answer.NOT_ASKED) return false
         if (answer == MapAutoDownload.Answer.WAIT) return true
         prefs(session.app).edit { putBoolean(autoKey(session.name), true) }
@@ -380,7 +379,7 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
         autoRefusal = null
         autoNotice = true
         if (sendDownload()) {
-            if (speak) Announcer.announce(resources.getString(R.string.map_auto_download_running, download.host), assertive = false)
+            Unit
         } else {
             val reason = resources.getString(R.string.profiles_error_not_attached)
             autoRefusal = reason

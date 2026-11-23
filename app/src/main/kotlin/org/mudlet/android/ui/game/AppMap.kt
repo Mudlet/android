@@ -762,6 +762,6 @@ internal fun MapAutoDownloadNotice(modifier: Modifier = Modifier) {
             }
         },
     ) {
-        Text(text)
+        Text(text, maxLines = 1)
     }
 }

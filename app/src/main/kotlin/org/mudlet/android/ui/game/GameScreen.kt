@@ -460,6 +460,7 @@ private fun ProfileGameScreen(
                     } else {
                         null
                     }
+                    if (!mapOpen) LineSelectionBarHost(selectionBar, Modifier.align(Alignment.TopCenter).fillMaxWidth())
                     ScriptWindowsArea(textSizeSp, Modifier.fillMaxSize().then(covered).then(faint), mapCorner) { consoleModifier, mapperDrawn ->
                         Console(
                             c.lines,
@@ -489,8 +490,6 @@ private fun ProfileGameScreen(
                             onBackProgress = { backProgress = it },
                             Modifier.fillMaxSize(),
                         )
-                    } else {
-                        LineSelectionBarHost(selectionBar, Modifier.align(Alignment.BottomCenter).fillMaxWidth())
                     }
                     SnackbarHost(snackbars, Modifier.align(Alignment.BottomCenter))
                 }

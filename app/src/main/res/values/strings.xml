@@ -1299,8 +1299,10 @@
     <!-- A switch on a game's Advanced page: read MXP (MUD eXtension Protocol) markup even though the game never
          offered MXP. Keep "MXP". -->
     <string name="settings_force_mxp_on">Read MXP the game does not offer</string>
-    <!-- Under "Read MXP the game does not offer", what the switch does -->
-    <string name="settings_force_mxp_on_hint">For games that send MXP links and menus without offering MXP first. To have no MXP at all, turn MXP off on the Connection page.</string>
+    <!-- Under "Read MXP the game does not offer", what the switch does. Mudlet turns the switch on itself, once for
+         each game, when the game sends MXP that was never agreed. "MXP off on the Connection page" is the switch "MXP"
+         on the game's "Connection" page, which only stops Mudlet agreeing to MXP with the game. Keep "MXP". -->
+    <string name="settings_force_mxp_on_hint">For games that send MXP links and menus without MXP being agreed first; Mudlet turns it on itself the first time a game does. While it is on, MXP is read even with MXP off on the Connection page: to have no MXP at all, turn both off.</string>
     <!-- Words a player might search the settings for to find "Read MXP the game does not offer", besides the words of its name and
          description, separated by commas. Use the words a player of your language would search for. -->
     <string name="settings_force_mxp_on_keywords">MXP, links, menus, markup</string>

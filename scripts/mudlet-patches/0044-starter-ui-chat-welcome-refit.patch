@@ -16,7 +16,7 @@ welcome back at the new wrap, then checks that chat in the window keeps its line
 native/tests/test_mudlet_engine.py.
 
 Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
-Upstream: not opened yet
+Upstream: Mudlet/Mudlet#12993
 
 diff --git a/src/mudlet-lua/tests/StarterUiChatWelcome_spec.lua b/src/mudlet-lua/tests/StarterUiChatWelcome_spec.lua
 new file mode 100644

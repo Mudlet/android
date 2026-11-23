@@ -1,5 +1,7 @@
 package org.mudlet.android.ui
 
+import android.content.Context
+import android.content.SharedPreferences
 import android.content.res.Resources
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -10,10 +12,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.core.content.edit
 import androidx.core.graphics.createBitmap
 import org.mudlet.android.R
+import org.mudlet.android.engine.EngineService
 import org.mudlet.android.protocol.EngineMessage
 import org.mudlet.android.protocol.KeptPixels
+import org.mudlet.android.protocol.MapAutoDownload
 import org.mudlet.android.protocol.MapBehindText
 import org.mudlet.android.protocol.MapDownloadState
 import org.mudlet.android.protocol.MapPoint
@@ -126,6 +131,19 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
         private set
 
     /**
+     * Whether the game screen shows the download the app began by itself ([MapAutoDownload]): from when it began until
+     * the player dismisses it or how it ended, or downloads again, a load going by itself once shown.
+     */
+    var autoNotice by mutableStateOf(false)
+        private set
+
+    /** Why the engine refused the download the app began by itself, which [autoNotice] shows as its failure. */
+    var autoRefusal by mutableStateOf<String?>(null)
+        private set
+
+    private val auto = MapAutoDownload(prefs(session.app).getBoolean(autoKey(session.name), false))
+
+    /**
      * The rooms found for the room an exit leads to ([findDestinations]), apart from either map's [MapRooms.search], so
      * the exits dialog lists them over either map; null while none is asked. A refusal shows here, not on the map.
      */
@@ -214,11 +232,16 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
             }
             return true
         }
+        if (request == "mapAreas" && replyTo != null && auto.refused(replyTo)) {
+            // Not the player's to see, as they asked for nothing; the next offer asks again
+            Log.i(TAG, "the map's areas were refused, so whether to download the offered map waits for the next offer")
+            return true
+        }
         if (files.onRefused(request, reason)) return true
         // A search's refusal names it, so it is the map's that asked it whichever map sent last
         when (request) {
             "appMapPointer", "setAppMapSize", "cancelMapDownload" -> {}
-            "downloadMap" -> downloadAsked = false
+            "downloadMap" -> onDownloadRefused(reason)
             "setMapViewOnly" -> if (!askedViewOnly) return false
             "moveMap", "followPlayer" -> if (mover.awaiting) mover.clear() else return false
             "findRooms" -> if (rooms.searching(replyTo)) rooms.onRefused(request) else return false
@@ -227,6 +250,13 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
         }
         refused = reason
         return true
+    }
+
+    private fun onDownloadRefused(reason: String) {
+        downloadAsked = false
+        if (!autoNotice) return
+        autoRefusal = reason
+        if (session === EngineClient.front) Announcer.announce(session.app.resources.getString(R.string.map_download_failed, reason), assertive = true)
     }
 
     /** The mapper window asked for the map viewed or edited: a refusal is its, not this map's. */
@@ -253,8 +283,11 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
             refused = null
             download = NO_DOWNLOAD
             downloadEnd = null
+            autoNotice = false
+            autoRefusal = null
         }
         downloadAsked = false
+        auto.attached()
         files.onAttached(sameInstance)
         rooms.onAttached(sameInstance)
         sent = Size.NONE
@@ -324,11 +357,47 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
             // Only NO_DOWNLOAD itself, as no frame the engine sent is that object
             was === NO_DOWNLOAD -> downloadEnd = message.takeIf { it.state != MapDownloadState.LOADED }
         }
+        if (auto.offered(message)) {
+            val id = session.newRequestId()
+            if (session.send(Requests.mapAreas(id))) auto.asked(id)
+        }
+    }
+
+    /**
+     * The engine's answer to the areas [MapAutoDownload] asked for as the game offered its map: false when it did not ask
+     * it. Where the map has none with rooms, the offered map downloads, which is told to TalkBack in [resources]' words if
+     * [speak].
+     */
+    internal fun onAreas(message: EngineMessage.Areas, resources: Resources, speak: Boolean): Boolean {
+        val id = (message.replyTo as? Number)?.toLong() ?: return false
+        val answer = auto.areas(id, message.areas.isNotEmpty(), downloadAsked)
+        if (answer == MapAutoDownload.Answer.NOT_ASKED) return false
+        if (answer == MapAutoDownload.Answer.WAIT) return true
+        prefs(session.app).edit { putBoolean(autoKey(session.name), true) }
+        if (answer == MapAutoDownload.Answer.KEEP_MAP) return true
+        // Only that it happens: the host is the game's, which no log line carries
+        Log.i(TAG, "downloading the offered map by itself, as the map has no rooms")
+        autoRefusal = null
+        autoNotice = true
+        if (sendDownload()) {
+            if (speak) Announcer.announce(resources.getString(R.string.map_auto_download_running, download.host), assertive = false)
+        } else {
+            val reason = resources.getString(R.string.profiles_error_not_attached)
+            autoRefusal = reason
+            if (speak) Announcer.announce(resources.getString(R.string.map_download_failed, reason), assertive = true)
+        }
+        return true
     }
 
     /** Downloads the map the game offers, in place of the profile's. False as for [ProfileSession.send]. */
     fun downloadMap(): Boolean {
         if (downloadAsked) return true
+        autoNotice = false
+        autoRefusal = null
+        return sendDownload()
+    }
+
+    private fun sendDownload(): Boolean {
         refused = null
         downloadEnd = null
         downloadAsked = session.send(Requests.downloadMap())
@@ -343,10 +412,32 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
 
     /** The player read [end], or it was shown long enough; a later end stays. */
     fun dismissDownloadEnd(end: EngineMessage.MapDownload) {
-        if (downloadEnd === end) downloadEnd = null
+        if (downloadEnd !== end) return
+        downloadEnd = null
+        autoNotice = false
+    }
+
+    /**
+     * The player dismissed [autoNotice], and how the download ended with it; one still running runs on, which the map in
+     * front still shows.
+     */
+    fun dismissAutoNotice() {
+        autoNotice = false
+        autoRefusal = null
+        downloadEnd = null
     }
 
     companion object {
+        /** Forgets that the profile [name] decided its offered map ([MapAutoDownload]), as when it is deleted. */
+        internal fun forgetAutoDownload(context: Context, name: String) = prefs(context).edit { remove(autoKey(name)) }
+
+        private fun prefs(context: Context): SharedPreferences = context.getSharedPreferences(EngineService.PREFS, Context.MODE_PRIVATE)
+
+        // A stored name (CLAUDE.md): by the profile's name ignoring case, as the engine takes it
+        private fun autoKey(name: String) = PREF_AUTO_DOWNLOAD + name.lowercase()
+
+        private const val PREF_AUTO_DOWNLOAD = "mapAutoDownload:"
+
         /** What [download] holds until the engine says otherwise: no map offered and none downloading. */
         val NO_DOWNLOAD = EngineMessage.MapDownload(
             offered = false,

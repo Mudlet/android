@@ -48,6 +48,15 @@ map in the corner"). The desktop draws no map of its own in a corner: its mapper
 the console. A phone has no room for that window, the map in front hides the text, and without a corner map a player
 with no mapper script would see where they are only by bringing the map to the front.
 
+## The map the game offers
+
+The first time a game offers its map (GMCP's `Client.Map`) to a profile whose map has no rooms, the app downloads and
+loads it by itself, and says so on the game screen, which TalkBack reads; it never does so again for that profile, nor
+into a map with rooms (`docs/architecture.md`, "Downloading the map"). The desktop only offers it, as "Download from
+game" in the empty map's right-click menu and a button in the profile's mapper settings. A phone player starting a
+game expects the map the game offers, and the desktop's offer is in menus and settings a touch player rarely finds. It
+could go to the desktop as an option.
+
 ## The map info box
 
 The map info (the built-in `Short` and `Full`, and a script's `registerMapInfo()`) is text the app lays over its own

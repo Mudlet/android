@@ -390,6 +390,7 @@ object EngineClient {
         if (error == null) {
             Settings.setAwaitsDefaults(name, false)
             Settings.setAwaitsInputClear(name, false)
+            AppMapClient.forgetAutoDownload(app, name)
         }
         onAnswer(error)
     }) { Requests.deleteProfile(name, it) }

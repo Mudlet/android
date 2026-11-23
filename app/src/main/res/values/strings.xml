@@ -2103,6 +2103,9 @@
     <string name="map_download_offered">No map to show yet. The game offers its map from %1$s.</string>
     <!-- Shown while the map downloads; %1$s is the host it comes from -->
     <string name="map_download_running">Downloading the map from %1$s…</string>
+    <!-- Shown at the bottom of the game screen, and read out by TalkBack, as the app downloads by itself the map the
+         game offers, once, because the profile's map has no rooms yet; %1$s is the host it comes from -->
+    <string name="map_auto_download_running">No map yet: downloading the map the game offers from %1$s…</string>
     <!-- The map download's progress bar, read by a screen reader -->
     <string name="map_download_progress">Map download</string>
     <!-- The button that stops the map download -->

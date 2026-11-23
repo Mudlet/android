@@ -488,7 +488,11 @@ private fun ProfileGameScreen(
                             Modifier.fillMaxSize(),
                         )
                     }
-                    SnackbarHost(snackbars, Modifier.align(Alignment.BottomCenter))
+                    // The map in front and the map beside the text show the download in their own bar
+                    Column(Modifier.align(Alignment.BottomCenter), horizontalAlignment = Alignment.CenterHorizontally) {
+                        if (!mapOpen && !mapBeside) MapAutoDownloadNotice()
+                        SnackbarHost(snackbars)
+                    }
                 }
                 InputLine(
                     hiddenInput = hidden,

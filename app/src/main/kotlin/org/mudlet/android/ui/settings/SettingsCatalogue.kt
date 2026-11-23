@@ -81,6 +81,7 @@ enum class SettingsCategory(
     SCREEN_READER(false, R.string.settings_screen_reader, R.string.settings_screen_reader_summary, R.drawable.ic_accessibility),
     NOTIFICATIONS(false, R.string.settings_notifications, R.string.settings_notifications_summary, R.drawable.ic_notifications),
     TEST_BUILDS(false, R.string.settings_test_builds, R.string.settings_test_builds_summary, R.drawable.ic_system_update, offered = { PtbUpdates.applies }),
+    EXPERIMENTAL(false, R.string.settings_experimental_page, R.string.settings_experimental_page_summary, R.drawable.ic_auto_fix_high),
 }
 
 /**
@@ -140,15 +141,18 @@ sealed class SettingEntry(
         val run: (game: String) -> Unit,
     ) : SettingEntry(category, label, hint, keywords)
 
-    /** One of a few choices, a radio button each. */
+    /** One of a few choices, a radio button each, with a line under it that says what it is where [choiceHint] gives one. */
     class Choice<E : Enum<E>>(
         category: SettingsCategory,
         override val setting: Settings.EnumSetting<E>,
         label: Int,
         keywords: Int,
+        val choiceHint: ((E) -> Int)? = null,
         val choiceLabel: (E) -> Int,
     ) : Value(category, label, null, keywords) {
         fun choiceLabels(): List<Int> = setting.entries.map(choiceLabel)
+
+        fun choiceHints(): List<Int>? = choiceHint?.let(setting.entries::map)
 
         /** The index in [choiceLabels] of [owner]'s choice. */
         fun chosen(owner: SettingsOwner): Int = setting.entries.indexOf(owner.value(setting))
@@ -743,6 +747,27 @@ val settingsCatalogue: List<SettingEntry> by lazy {
             R.string.settings_check_test_builds_hint,
             R.string.settings_check_test_builds_keywords,
         ),
+        SettingEntry.Choice(
+            SettingsCategory.EXPERIMENTAL,
+            Settings.scriptEditorDesign,
+            R.string.settings_script_editor_design,
+            R.string.settings_script_editor_design_keywords,
+            choiceHint = {
+                when (it) {
+                    Settings.ScriptEditorDesign.CURRENT -> R.string.settings_script_editor_current_hint
+                    Settings.ScriptEditorDesign.WORKBENCH -> R.string.settings_script_editor_workbench_hint
+                    Settings.ScriptEditorDesign.ONE_PAGE -> R.string.settings_script_editor_one_page_hint
+                    Settings.ScriptEditorDesign.RECIPES -> R.string.settings_script_editor_recipes_hint
+                }
+            },
+        ) {
+            when (it) {
+                Settings.ScriptEditorDesign.CURRENT -> R.string.settings_script_editor_current
+                Settings.ScriptEditorDesign.WORKBENCH -> R.string.settings_script_editor_workbench
+                Settings.ScriptEditorDesign.ONE_PAGE -> R.string.settings_script_editor_one_page
+                Settings.ScriptEditorDesign.RECIPES -> R.string.settings_script_editor_recipes
+            }
+        },
     ).also { entries ->
         // A game's page changes the game's settings in Mudlet, which only Mudlet's own settings can be
         check(entries.all { it.category.forGame == ((it as? SettingEntry.Value)?.setting?.mudlet ?: (it is SettingEntry.Action)) }) {

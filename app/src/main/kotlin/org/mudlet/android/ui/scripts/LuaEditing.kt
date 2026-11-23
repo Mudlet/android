@@ -93,3 +93,20 @@ fun lineStart(text: String, line: Int): Int {
 
 /** How many lines [text] has: one more than its line breaks. */
 fun lineCount(text: String): Int = text.count { it == '\n' } + 1
+
+/** Where a snippet ([insertSnippet]) leaves the cursor. */
+const val SNIPPET_CURSOR = '|'
+
+/**
+ * [text] with [snippet], a piece of Lua typed whole, in place of what is selected, from [start] to [end]: its first
+ * [SNIPPET_CURSOR] is where the cursor is left, after it where it has none, and each of its lines after the first
+ * starts as deep as the line it is typed on.
+ */
+fun insertSnippet(text: String, start: Int, end: Int, snippet: String): LuaEdit {
+    val from = minOf(start, end).coerceIn(0, text.length)
+    val indent = text.substring(text.lastIndexOf('\n', from - 1) + 1, from).takeWhile { it == ' ' || it == '\t' }
+    val lines = snippet.replace("\n", "\n" + indent)
+    val mark = lines.indexOf(SNIPPET_CURSOR)
+    if (mark < 0) return insertAt(text, start, end, lines)
+    return insertAt(text, start, end, lines.removeRange(mark, mark + 1)).copy(cursor = from + mark)
+}

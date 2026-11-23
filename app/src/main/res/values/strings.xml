@@ -1512,6 +1512,35 @@
     <!-- Words a player might search the settings for to find "Check for new test builds", besides the words of its
          name and description, separated by commas. Use the words a player of your language would search for. -->
     <string name="settings_check_test_builds_keywords">update, upgrade, PTB, nightly, version, download, APK</string>
+    <!-- A page of the app's own settings, the same for every game: what is still being tried out and may change or go,
+         such as other designs of the script editor -->
+    <string name="settings_experimental_page">Experimental</string>
+    <!-- Under "Experimental" in the list of settings pages, what that page holds -->
+    <string name="settings_experimental_page_summary">Designs still being tried out</string>
+    <!-- A setting on the "Experimental" page: which of four designs the script editor (where triggers, aliases,
+         scripts, timers, keys and buttons are made and changed) has. Each design shows the same items and saves them
+         the same way, so a player can switch at any time -->
+    <string name="settings_script_editor_design">Script editor design</string>
+    <!-- Words a player might search the settings for to find "Script editor design", besides the words of its name
+         and its choices, separated by commas. Use the words a player of your language would search for. -->
+    <string name="settings_script_editor_design_keywords">triggers, aliases, scripts, Lua, layout, look</string>
+    <!-- The first choice of "Script editor design": the editor as it has been, the default -->
+    <string name="settings_script_editor_current">Current</string>
+    <!-- Under "Current": what that design is like -->
+    <string name="settings_script_editor_current_hint">A folder at a time, and a page for each item</string>
+    <!-- The second choice of "Script editor design": a design for those who write much Lua, named after a desk with
+         tools to hand -->
+    <string name="settings_script_editor_workbench">Workbench</string>
+    <!-- Under "Workbench": what that design is like -->
+    <string name="settings_script_editor_workbench_hint">The folders as a tree, and each item opens on its Lua</string>
+    <!-- The third choice of "Script editor design": every item on one page -->
+    <string name="settings_script_editor_one_page">One page</string>
+    <!-- Under "One page": what that design is like. Folding an item saves it, and an Undo is offered -->
+    <string name="settings_script_editor_one_page_hint">Every item in one list, changed where it is and saved as you fold it</string>
+    <!-- The fourth choice of "Script editor design": items explained in words, as a recipe's steps -->
+    <string name="settings_script_editor_recipes">Recipes</string>
+    <!-- Under "Recipes": what that design is like -->
+    <string name="settings_script_editor_recipes_hint">Cards that say when each item runs and what it does, changed a step at a time</string>
 
     <!-- Asked once, the first time the app runs with TalkBack on -->
     <string name="screen_reader_offer_title">Tell games you use a screen reader?</string>
@@ -3084,6 +3113,150 @@
     <string name="line_trigger_make">Make trigger</string>
     <!-- A snackbar when the engine refuses to delete a script item; %1$s is its reason, in English -->
     <string name="scripts_refused_delete">Not deleted: %1$s</string>
+
+    <!-- The strings from here to the errors_ ones are the script editor's other designs, which the setting "Script
+         editor design" picks: workbench_ for Workbench, onepage_ for One page, recipes_ for Recipes, and designs_ for
+         more than one of them -->
+    <!-- A title bar button, read by a screen reader, while the search shows: it hides the search -->
+    <string name="designs_search_close">Close the search</string>
+    <!-- A title bar button, read by a screen reader: it opens a menu that makes a new trigger, alias, script, timer,
+         key or button, or a folder or toolbar, at the top level -->
+    <string name="designs_add">Add</string>
+    <!-- A switch on an item's page, on Workbench's Settings tab and Recipes' overview: whether Mudlet uses the item at
+         all -->
+    <string name="designs_on">Switched on</string>
+    <!-- Under "Switched on" -->
+    <string name="designs_on_hint">Off, it stays in the profile but does nothing</string>
+    <!-- Workbench. What a screen reader says a tap on an opened folder's row does: it hides what is in it -->
+    <string name="workbench_close_folder">close the folder</string>
+    <!-- Workbench. The menu button on a folder's row, read by a screen reader: it opens a menu that makes an item in
+         the folder or opens the folder's page. %1$s is the folder's name -->
+    <string name="workbench_menu">More for %1$s</string>
+    <!-- Workbench. The first tab of an item's page: its Lua code -->
+    <string name="workbench_code">Code</string>
+    <!-- Workbench. The second tab of an item's page, beside Code: its name, patterns, options and the rest -->
+    <string name="workbench_settings">Settings</string>
+    <!-- One page. The first chip over the list: it shows every kind of item together -->
+    <string name="onepage_all">All</string>
+    <!-- One page. Under the chips: how the page is used. Folding an item applies it, with an Undo offered -->
+    <string name="onepage_hint">Tap an item to change it where it is. Folding it again applies it.</string>
+    <!-- One page. What a screen reader says a tap on a heading does while its items show: it hides them -->
+    <string name="onepage_hide">hide its items</string>
+    <!-- One page. What a screen reader says a tap on a heading does while its items are hidden: it shows them -->
+    <string name="onepage_show">show its items</string>
+    <!-- One page. A heading's menu button, read by a screen reader: it opens a menu that makes a new item or folder
+         there, or opens the folder to edit. %1$s is where, such as "Triggers › Combat" -->
+    <string name="onepage_menu">More for %1$s</string>
+    <!-- One page. The button at the top of an item unfolded, read by a screen reader: it folds the item to its row
+         again, which applies what was changed. %1$s is the item's name -->
+    <string name="onepage_fold">Fold and apply %1$s</string>
+    <!-- One page. The button at the foot of an item unfolded: it folds the item to its row again, which applies what
+         was changed -->
+    <string name="onepage_done">Done</string>
+    <!-- One page. A button in a trigger unfolded that shows the options few triggers use -->
+    <string name="onepage_more">More options</string>
+    <!-- One page. The same button while those options show: it hides them -->
+    <string name="onepage_fewer">Fewer options</string>
+    <!-- Recipes. The title bar's button, read by a screen reader: it opens the drawer that lists the kinds of items
+         and their folders -->
+    <string name="recipes_menu">Open the list of folders</string>
+    <!-- Recipes. The title of an item's page while it shows all its parts, and the button on a part's page that goes
+         back to it, with what was changed kept -->
+    <string name="recipes_overview">Overview</string>
+    <!-- Recipes. The label before what makes an item run, on its card, and the title of the page that changes it -->
+    <string name="recipes_when">When</string>
+    <!-- Recipes. The label before what an item does once it runs, on its card, and the title of the page that changes
+         it -->
+    <string name="recipes_then">Then</string>
+    <!-- Recipes. The title of an item's third part: its name and the options few items change -->
+    <string name="recipes_more">Name and options</string>
+    <!-- Recipes. After "When", for a trigger's pattern of the Substring type. %1$s is the pattern's text -->
+    <string name="recipes_when_substring">A line has “%1$s”</string>
+    <!-- Recipes. After "When", for a trigger's pattern of the Start of line type. %1$s is the pattern's text -->
+    <string name="recipes_when_start">A line starts with “%1$s”</string>
+    <!-- Recipes. After "When", for a trigger's pattern of the Exact match type. %1$s is the pattern's text -->
+    <string name="recipes_when_exact">A line is exactly “%1$s”</string>
+    <!-- Recipes. After "When", for a trigger's pattern of the Perl regex type. %1$s is the regular expression -->
+    <string name="recipes_when_regex">A line matches %1$s</string>
+    <!-- Recipes. After "When", for a trigger's pattern of the Lua function type. %1$s is the Lua code -->
+    <string name="recipes_when_lua">This Lua returns true: %1$s</string>
+    <!-- Recipes. After "When", for a trigger's pattern of the Line spacer type. %1$s is a number of lines -->
+    <string name="recipes_when_spacer">Lines to skip: %1$s</string>
+    <!-- Recipes. After "When", for a trigger's pattern of the Colour trigger type -->
+    <string name="recipes_when_color">Text comes in the colours it names</string>
+    <!-- Recipes. After "When", for a trigger's pattern of the Prompt type -->
+    <string name="recipes_when_prompt">The game shows its prompt</string>
+    <!-- Recipes. After a trigger's first patterns on its card: how many more it has. %1$d is the number -->
+    <plurals name="recipes_when_more">
+        <item quantity="one">and %1$d more pattern</item>
+        <item quantity="other">and %1$d more patterns</item>
+    </plurals>
+    <!-- Recipes. After "When", for a trigger or an alias that has no pattern yet -->
+    <string name="recipes_when_none">Nothing yet: it needs a pattern</string>
+    <!-- Recipes. After "When", for an alias. %1$s is its pattern, a regular expression -->
+    <string name="recipes_when_alias">You type what matches %1$s</string>
+    <!-- Recipes. After "When", for a script with event handlers. %1$s is the events' names, with commas between -->
+    <string name="recipes_when_events">The profile loads, or one of these events is raised: %1$s</string>
+    <!-- Recipes. After "When", for a script with no event handlers -->
+    <string name="recipes_when_script">The profile loads</string>
+    <!-- Recipes. After "When", for a timer. %1$s is its time, such as "00:01:30.000" -->
+    <string name="recipes_when_timer">Every %1$s</string>
+    <!-- Recipes. After "When", for an offset timer, which runs once, that long after its folder's timer. %1$s is its
+         time, such as "00:00:05.000" -->
+    <string name="recipes_when_offset">%1$s after its folder\'s timer</string>
+    <!-- Recipes. After "When", for a key. %1$s is the keys held and the key, such as "Control + F1" -->
+    <string name="recipes_when_key">You press %1$s</string>
+    <!-- Recipes. After "When", for a button that is clicked -->
+    <string name="recipes_when_click">You tap its button</string>
+    <!-- Recipes. After "When", for a button that stays down until it is tapped again -->
+    <string name="recipes_when_push">You tap its button to push it down, and again to let it up</string>
+    <!-- Recipes. After "Then", for an item that sends a command. %1$s is the command -->
+    <string name="recipes_then_send">Send “%1$s” to the game</string>
+    <!-- Recipes. After "Then", for a push-down button's command when it is let up. %1$s is the command -->
+    <string name="recipes_then_send_up">Send “%1$s” when let up</string>
+    <!-- Recipes. After "Then", for an item with Lua code. %1$s is how long it is, such as "12 lines" -->
+    <string name="recipes_then_lua">Run its Lua (%1$s)</string>
+    <!-- Recipes. How long an item's Lua is, in "Run its Lua (%1$s)". %1$d is the number of lines -->
+    <plurals name="recipes_lua_lines">
+        <item quantity="one">%1$d line</item>
+        <item quantity="other">%1$d lines</item>
+    </plurals>
+    <!-- Recipes. Under the first lines of an item's Lua on its overview: how many more lines there are. %1$d is the
+         number -->
+    <plurals name="recipes_more_lines">
+        <item quantity="one">and %1$d more line</item>
+        <item quantity="other">and %1$d more lines</item>
+    </plurals>
+    <!-- Recipes. After "Then", for an item that sends nothing and has no Lua yet -->
+    <string name="recipes_then_none">Nothing yet</string>
+    <!-- Recipes. What a screen reader says a tap on a part of an item's overview does: it opens the page that changes
+         that part -->
+    <string name="recipes_change">change it</string>
+    <!-- Recipes. Over a page that changes one part of an item. %1$d is which part it is, %2$d how many there are -->
+    <string name="recipes_step">Part %1$d of %2$d</string>
+    <!-- Recipes. On the page that changes a trigger's patterns -->
+    <string name="recipes_when_trigger_hint">A trigger runs when a line from the game matches its patterns.</string>
+    <!-- Recipes. On the page that changes an alias's pattern -->
+    <string name="recipes_when_alias_hint">An alias runs when a command you type matches its pattern.</string>
+    <!-- Recipes. On the page that changes a script's event handlers -->
+    <string name="recipes_when_script_hint">A script\'s code runs when the profile loads. Name events here to have Mudlet call the function of the script\'s name when one is raised.</string>
+    <!-- Recipes. On the page that changes a timer's time -->
+    <string name="recipes_when_timer_hint">A timer runs again each time its time has passed, while it is switched on.</string>
+    <!-- Recipes. On the page that changes a key's keys -->
+    <string name="recipes_when_key_hint">A key runs when you press its keys on a keyboard.</string>
+    <!-- Recipes. On the page that changes how a button is pressed -->
+    <string name="recipes_when_button_hint">A button runs when you tap it on its toolbar.</string>
+    <!-- Recipes. On the page that changes what an item does once it runs -->
+    <string name="recipes_then_hint">What it sends to the game, as if you had typed it, and the Lua it runs.</string>
+    <!-- Recipes. On the page that changes an item's name and options -->
+    <string name="recipes_more_hint">What it is called in the lists, and how it behaves.</string>
+    <!-- Recipes. The button at the foot of a page that changes one part of an item: it goes to the next part. %1$s is
+         that part's title, such as "Then" -->
+    <string name="recipes_next">Next: %1$s</string>
+    <!-- Recipes. The button that leaves the last part of an item for the item's overview, with what was changed kept -->
+    <string name="recipes_finish">Done</string>
+    <!-- Recipes. Under the Lua: the line the cursor is on, %1$d, of how many there are, %2$d -->
+    <string name="recipes_line">Line %1$d of %2$d</string>
 
     <!-- The error console's title, as desktop Mudlet's editor calls the list of a profile's Lua errors; %1$s is the
          profile's name, such as "Achaea" -->

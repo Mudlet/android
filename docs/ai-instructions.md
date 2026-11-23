@@ -63,6 +63,8 @@ Procedures too long for this file are in `.agents/skills/<name>/SKILL.md` (Claud
   - the application id `org.mudlet.mudlet` (`.ptb` for the PTB);
   - the SharedPreferences `settings` (the keys in `data/Settings.kt`), `engine` (`qpaPlatform`, `lastProfile`,
     `startSizes`, and `lastHost:`, `lastPort:` and `lastTls:` before a profile's name) and `ui`;
+  - the values the enum settings in `settings` store, their constants' names, such as `scriptEditorDesign`'s `CURRENT`,
+    `WORKBENCH`, `ONE_PAGE` and `RECIPES`;
   - `PasswordStore`'s file `passwords/profiles.json`, its keys (the lowercased profile name, and `proxy:` before it
     for the proxy's password) and KeyStore alias `profile-passwords`;
   - the engine's files: `files/mudlet/` (`profiles/<name>/`, `profile-order.json`, and what Mudlet keeps under the

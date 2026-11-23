@@ -175,6 +175,28 @@ class ScriptItemsClientTest {
     }
 
     @Test
+    fun aDeleteTakesTheUndoOfTheItemsApplyAwayAndIsSaidAtOnce() {
+        val other = ScriptItemKey(ScriptItemKind.ALIAS, 8)
+        opened(alias("kick"))
+        scripts.edit(alias("punch"))
+        scripts.apply(key)
+        answer(take("editScriptItem"), alias("punch"))
+        scripts.notices.firstOrNull()?.let(scripts::shown)
+        assertTrue(scripts.notices.isEmpty())
+
+        scripts.edit(alias("slap"))
+        scripts.apply(key)
+        answer(take("editScriptItem"), alias("slap"))
+        scripts.deleteLater(other, "other")
+        scripts.deleteLater(key, "slap")
+        assertEquals(
+            "an Undo of the apply would put back what is deleted, and hold the delete's Undo back behind it",
+            listOf<ScriptNotice>(ScriptNotice.Deleted(other, "other"), ScriptNotice.Deleted(key, "slap")),
+            scripts.notices.toList(),
+        )
+    }
+
+    @Test
     fun aDraftTheEngineNowHasIsNoDraft() {
         opened(alias("kick"))
         scripts.edit(alias("punch"))
@@ -306,6 +328,45 @@ class ScriptItemsClientTest {
         assertTrue(scripts.deleting.isEmpty())
         assertNull(scripts.saved[key])
         assertNull(scripts.drafts[key])
+    }
+
+    @Test
+    fun aDeletedItemAndWhatIsInItStayOutOfTheListUntilTheEngineListsItAgain() {
+        listed(listOf(node(1, 0, "Combat", folder = true), node(2, 1, "Hit"), node(3, 0, "slap"), node(7, 0, "kick")))
+        scripts.deleteLater(ScriptItemKey(ScriptItemKind.ALIAS, 1), "Combat")
+        scripts.commitDeletes()
+        val asked = take("scriptItems")
+        take("deleteScriptItem")
+        assertEquals(listOf(node(3, 0, "slap"), node(7, 0, "kick")), scripts.lists[ScriptItemKind.ALIAS])
+        assertTrue(scripts.onItems(EngineMessage.ScriptItems(listOf(node(7, 0, "kick")), asked.getLong("id"))))
+        assertEquals(listOf(node(7, 0, "kick")), scripts.lists[ScriptItemKind.ALIAS])
+    }
+
+    @Test
+    fun aListAskedBeforeADeleteIsAnsweredWithoutWhatWasDeleted() {
+        val items = listOf(node(3, 0, "slap"), node(7, 0, "kick"))
+        listed(items)
+        scripts.ask(ScriptItemKind.ALIAS)
+        val before = take("scriptItems")
+        scripts.deleteLater(key, "kick")
+        scripts.commitDeletes()
+        val after = take("scriptItems")
+        take("deleteScriptItem")
+        assertTrue(scripts.onItems(EngineMessage.ScriptItems(items, before.getLong("id"))))
+        assertEquals("listed before the delete", listOf(node(3, 0, "slap")), scripts.lists[ScriptItemKind.ALIAS])
+        assertTrue(scripts.onItems(EngineMessage.ScriptItems(items, after.getLong("id"))))
+        assertEquals("the engine has it still", items, scripts.lists[ScriptItemKind.ALIAS])
+    }
+
+    @Test
+    fun aDeleteThatCannotBeSentLeavesTheItemListed() {
+        val items = listOf(node(7, 0, "kick"))
+        listed(items)
+        scripts.deleteLater(key, "kick")
+        attached = false
+        scripts.commitDeletes()
+        assertEquals(items, scripts.lists[ScriptItemKind.ALIAS])
+        assertEquals(listOf(ScriptNotice.Deleted(key, "kick"), ScriptNotice.NotSent), scripts.notices.toList())
     }
 
     @Test

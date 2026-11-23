@@ -260,6 +260,12 @@ object Settings {
     /** "Show game text in notifications": a game's newest line on its "new game text" notification, not only the count. */
     val gameTextInNotifications = MarkerSetting("notificationGameText") { EngineNotifications.gameTextMarker(it) }
 
+    /**
+     * "Script editor design": the script editor the library opens as, the current one or one of the three tried beside
+     * it (docs/architecture.md, "The script editor's designs"). Stored by the constant's name, so those are stored names.
+     */
+    val scriptEditorDesign = EnumSetting("scriptEditorDesign", ScriptEditorDesign.CURRENT, ScriptEditorDesign.entries) { it.name }
+
     private val all = listOf(
         textSize,
         readNewText,
@@ -333,6 +339,7 @@ object Settings {
         mapBesideText,
         wallpaperColours,
         gameTextInNotifications,
+        scriptEditorDesign,
     )
 
     /** The settings Mudlet keeps with each profile, whose app values a game added in the app is given. */
@@ -439,6 +446,14 @@ object Settings {
         SCRIPT("script"),
         ALWAYS("always"),
         NEVER("never"),
+    }
+
+    /** The script editor's designs, in the order the setting lists them. */
+    enum class ScriptEditorDesign {
+        CURRENT,
+        WORKBENCH,
+        ONE_PAGE,
+        RECIPES,
     }
 
     /**

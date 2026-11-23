@@ -46,6 +46,13 @@ private val TimePart.label: Int
 /** A timer's time, in the four fields the desktop editor has, and what it sends each time it fires. */
 @Composable
 internal fun TimerFields(timer: ScriptItemDetails.Timer, onChange: (ScriptItemDetails.Timer) -> Unit) {
+    TimerTime(timer, onChange)
+    CommandField(R.string.scripts_timer_command, timer.command) { onChange(timer.copy(command = it)) }
+}
+
+/** A timer's time, in the four fields the desktop editor has, under what it is: how often, or how long after its timer. */
+@Composable
+internal fun TimerTime(timer: ScriptItemDetails.Timer, onChange: (ScriptItemDetails.Timer) -> Unit) {
     SectionHeader(stringResource(if (timer.offset) R.string.scripts_timer_after else R.string.scripts_timer_every), fieldWidth)
     for (parts in TimePart.entries.chunked(TIME_FIELDS_IN_A_ROW)) {
         Row(fieldWidth, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -57,7 +64,6 @@ internal fun TimerFields(timer: ScriptItemDetails.Timer, onChange: (ScriptItemDe
         }
     }
     if (timer.offset) Note(R.string.scripts_timer_offset)
-    CommandField(R.string.scripts_timer_command, timer.command) { onChange(timer.copy(command = it)) }
 }
 
 @get:StringRes
@@ -99,12 +105,23 @@ private fun keyLabel(key: Int, engineName: String = ""): String = when (key) {
     else -> keyNameOf(key)?.let { stringResource(it) } ?: QtKeys.symbol(key) ?: engineName.ifEmpty { stringResource(R.string.scripts_key_code, key.toString(16)) }
 }
 
+/** The keys [binding] is pressed with, as "Control + F1": the keys held, then the key. */
+@Composable
+internal fun keyCombination(binding: ScriptItemDetails.Key): String = (heldKeys(binding.modifiers).map { stringResource(it.label) } + keyLabel(binding.key, binding.engineKeyName)).joinToString(" + ")
+
 /**
  * A key binding's key, picked from a sheet of those a keyboard has, the keys held with it, and what it sends. A key the
  * sheet does not have, set on the desktop, stays until another is picked.
  */
 @Composable
 internal fun KeyFields(binding: ScriptItemDetails.Key, onChange: (ScriptItemDetails.Key) -> Unit) {
+    KeyPick(binding, onChange)
+    CommandField(R.string.scripts_key_command, binding.command) { onChange(binding.copy(command = it)) }
+}
+
+/** A key binding's key, picked from a sheet of those a keyboard has, and the keys held with it. */
+@Composable
+internal fun KeyPick(binding: ScriptItemDetails.Key, onChange: (ScriptItemDetails.Key) -> Unit) {
     var picking by rememberSaveable { mutableStateOf(false) }
     SectionHeader(stringResource(R.string.scripts_key_binding), fieldWidth)
     OutlinedButton({ picking = true }, fieldWidth) { Text(stringResource(R.string.scripts_key_pick, keyLabel(binding.key, binding.engineKeyName))) }
@@ -118,7 +135,6 @@ internal fun KeyFields(binding: ScriptItemDetails.Key, onChange: (ScriptItemDeta
             )
         }
     }
-    CommandField(R.string.scripts_key_command, binding.command) { onChange(binding.copy(command = it)) }
     if (picking) {
         TitledSheet(stringResource(R.string.scripts_key_sheet), stringResource(R.string.scripts_key_sheet_close), onDismiss = { picking = false }) {
             FlowRow(
@@ -176,10 +192,22 @@ internal fun ButtonFields(button: ScriptItemDetails.Button, part: ButtonPart, on
 
         ButtonPart.BUTTON -> {
             CommandField(R.string.scripts_button_command, button.commandDown) { onChange(button.copy(commandDown = it)) }
-            SwitchField(R.string.scripts_button_push_down, R.string.scripts_button_push_down_hint, button.pushDown) { onChange(button.copy(pushDown = it)) }
+            ButtonPushDown(button, onChange)
             if (button.pushDown) CommandField(R.string.scripts_button_command_up, button.commandUp) { onChange(button.copy(commandUp = it)) }
         }
     }
+    ButtonCss(button, onChange)
+}
+
+/** Whether a button stays down when pressed, until it is pressed again. */
+@Composable
+internal fun ButtonPushDown(button: ScriptItemDetails.Button, onChange: (ScriptItemDetails.Button) -> Unit) {
+    SwitchField(R.string.scripts_button_push_down, R.string.scripts_button_push_down_hint, button.pushDown) { onChange(button.copy(pushDown = it)) }
+}
+
+/** The style sheet of a button, a menu or a toolbar. */
+@Composable
+internal fun ButtonCss(button: ScriptItemDetails.Button, onChange: (ScriptItemDetails.Button) -> Unit) {
     OutlinedTextField(
         button.css,
         { onChange(button.copy(css = it)) },
@@ -193,12 +221,12 @@ internal fun ButtonFields(button: ScriptItemDetails.Button, part: ButtonPart, on
 
 /** What an item sends to the game as it is. */
 @Composable
-private fun CommandField(@StringRes label: Int, command: String, onCommand: (String) -> Unit) {
+internal fun CommandField(@StringRes label: Int, command: String, onCommand: (String) -> Unit) {
     OutlinedTextField(command, onCommand, fieldWidth.padding(top = 8.dp), label = { Text(stringResource(label)) }, singleLine = true)
 }
 
 @Composable
-private fun Note(@StringRes text: Int) {
+internal fun Note(@StringRes text: Int) {
     Text(
         stringResource(text),
         fieldWidth.padding(horizontal = 4.dp, vertical = 8.dp),

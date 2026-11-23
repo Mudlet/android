@@ -19,6 +19,7 @@ import org.mudlet.android.ui.scripts.ScriptItemKey
 import org.mudlet.android.ui.scripts.SearchOptions
 import org.mudlet.android.ui.scripts.changedFrom
 import org.mudlet.android.ui.scripts.key
+import org.mudlet.android.ui.scripts.withoutHidden
 
 /**
  * The profile's triggers, aliases, scripts, timers, keys and buttons as the script library shows and edits them
@@ -91,6 +92,9 @@ internal class ScriptItemsClient(private val newId: () -> Long, private val send
     }
 
     private val pending = HashMap<Long, Pending>()
+
+    // The items deleted since each list still to be answered was asked for, which the engine listed before it deleted them
+    private val deletedSince = HashMap<Long, MutableList<ScriptItemKey>>()
 
     // What the last move sent is to say once the list after it comes, unless the engine refuses it first, as it
     // answers in order: a moveScriptItem is answered only when refused, and with no id
@@ -198,6 +202,8 @@ internal class ScriptItemsClient(private val newId: () -> Long, private val send
     /** Hides [key] from the lists, with [ScriptNotice.Deleted] offering Undo; it is deleted at [commitDelete]. */
     fun deleteLater(key: ScriptItemKey, name: String) {
         if (key !in hidden) hidden.add(key)
+        // Its Undo would put back an item now gone, and as notices show one at a time, hold this one's Undo back behind it
+        queued.removeAll { it is ScriptNotice.Applied && it.item.key == key }
         tell(ScriptNotice.Deleted(key, name))
     }
 
@@ -212,7 +218,11 @@ internal class ScriptItemsClient(private val newId: () -> Long, private val send
         opened.remove(key)
         edited.remove(key)
         problems.remove(key)
-        if (send(Requests.deleteScriptItem(key.kind, key.id))) ask(key.kind) else tell(ScriptNotice.NotSent)
+        if (!send(Requests.deleteScriptItem(key.kind, key.id))) return tell(ScriptNotice.NotSent)
+        // Until the engine lists its kind again the item would show, and a card would ask for its fields
+        listed[key.kind]?.let { listed[key.kind] = it.withoutHidden(key.kind, listOf(key)) }
+        for ((id, asked) in pending) if (asked is Pending.List && asked.kind == key.kind) deletedSince.getOrPut(id) { mutableListOf() }.add(key)
+        ask(key.kind)
     }
 
     /** Deletes every item whose Undo is still offered, as the screen that offered it goes. */
@@ -241,8 +251,9 @@ internal class ScriptItemsClient(private val newId: () -> Long, private val send
 
     /** The engine's answer to [ask]: false when this did not ask it. */
     fun onItems(message: EngineMessage.ScriptItems): Boolean {
-        val asked = pending.remove(message.replyTo.asId()) as? Pending.List ?: return false
-        listed[asked.kind] = message.items
+        val id = message.replyTo.asId()
+        val asked = pending.remove(id) as? Pending.List ?: return false
+        listed[asked.kind] = message.items.withoutHidden(asked.kind, deletedSince.remove(id).orEmpty())
         if (asked.afterMove) {
             moving?.let(::tell)
             moving = null
@@ -346,6 +357,7 @@ internal class ScriptItemsClient(private val newId: () -> Long, private val send
     /** What the last link did not answer is not answered; a new engine instance loaded the profile again, with new ids. */
     fun onAttached(sameInstance: Boolean) {
         pending.clear()
+        deletedSince.clear()
         moving = null
         if (!sameInstance) {
             listed.clear()

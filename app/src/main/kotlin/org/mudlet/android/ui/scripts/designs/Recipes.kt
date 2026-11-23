@@ -395,6 +395,7 @@ internal fun RecipesLibrary(
                         Card(scripts, key, node, children, where = null, key == selected) { if (node.holdsItems(children)) openFolder = node.id else onOpen(key) }
                     }
                 }
+                item(key = "design") { EditorDesignRow(itemWidth) }
             }
         }
     }

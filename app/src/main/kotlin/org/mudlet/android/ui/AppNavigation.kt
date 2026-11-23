@@ -265,7 +265,7 @@ fun AppNavigation(
                 val activity = LocalActivity.current
                 // A delete whose Undo is still offered is done as the library goes, but not for a rotation, which brings it back
                 DisposableEffect(front) { onDispose { if (activity?.isChangingConfigurations != true) front.scripts.commitDeletes() } }
-                // The item open beside the library, encoded
+                // The item open beside the library, or unfolded in One page, encoded: the same one stays open across a change of design
                 var open by rememberSaveable { mutableStateOf<String?>(null) }
                 val toGame = entry.whileShown { nav.popBackStack(Routes.GAME, inclusive = false) }
                 val design = Settings.scriptEditorDesign.value
@@ -281,6 +281,8 @@ fun AppNavigation(
                         colors = ConsoleColors.of(front.status["consoleColors"]),
                         onVariables = toVariables,
                         changingConfigurations = { activity?.isChangingConfigurations == true },
+                        start = open?.let(ScriptItemKey::decode),
+                        onUnfold = { open = it?.encode() },
                         actions = toErrors,
                     )
                 } else {

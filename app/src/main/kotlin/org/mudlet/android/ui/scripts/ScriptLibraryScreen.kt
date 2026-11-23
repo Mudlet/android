@@ -68,6 +68,7 @@ import org.mudlet.android.ui.MudletScaffold
 import org.mudlet.android.ui.ScriptItemsClient
 import org.mudlet.android.ui.UiLine
 import org.mudlet.android.ui.ansiText
+import org.mudlet.android.ui.scripts.designs.EditorDesignRow
 import org.mudlet.android.ui.settings.MAX_WIDTH
 import org.mudlet.android.ui.settings.Overline
 
@@ -121,6 +122,7 @@ internal val ScriptItemKind.newName: Int
  * first places the engine found it, by the desktop editor's options, each a chip. At the foot, the last of the game's lines, [console] in [colors], go back to the game as [onBack] does. [actions] go first in
  * the title bar.
  * After the kinds' chips, one opens the profile's Lua variables through [onVariables].
+ * Last in the list, [EditorDesignRow] names the editor's design and changes it.
  */
 @Composable
 internal fun ScriptLibraryScreen(
@@ -203,6 +205,7 @@ internal fun ScriptLibraryScreen(
                 }
                 searchResults(query, options, lists, selected, scripts, onEnter = ::enter, onOpen = onOpen)
             }
+            item(key = "design") { EditorDesignRow(itemWidth) }
         }
     }
 }

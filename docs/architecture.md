@@ -1197,6 +1197,9 @@ changes nothing in the profile. Each covers the six kinds and the Variables; whe
 it uses the current editor's parts: a kind's fields (`ScriptKindFields.kt`), the Lua field, the move sheet, the
 search's places and Help. Lua is checked on Apply only, as in the current editor, and what is wrong
 with it shows on the item's own page, with a button that goes to its line.
+Each design's library also has the setting last in its list, as a row marked experimental (`EditorDesignRow`,
+`DesignPicker.kt`) that lists the same four choices; a switch keeps the item open beside the library, or the one
+unfolded in One page, open in the design picked.
 - Workbench (`Workbench.kt`): a tab at the foot for each kind, and its items as one tree of dense rows that open in
   place, each with a tick box that switches it on or off and, for what holds items, a menu that adds to it and edits
   it. An item's page has its Lua first, in the editor, and all else on a second tab, with Apply in the title bar.
@@ -1213,6 +1216,8 @@ with it shows on the item's own page, with a button that goes to its line.
   opens it and a swipe from the edge does not.
 Each design has a walk-through against the fake engine (`WorkbenchTest`, `OnePageTest`, `RecipesTest`) and its
 pseudo-locale test, and `EditorDesignSwitchTest` switches between them with the library open.
+`EditorDesignSwitchTest` also switches through each library's row, and reads the choice back on Settings' page, and
+`EditorDesignPseudoLocaleTest` fits the row and its list in the pseudo-locales.
 
 ### The error console
 The script library's title bar has an Errors button that opens the profile's error console

@@ -57,6 +57,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
@@ -227,18 +228,29 @@ internal fun Overline(text: String) {
     Text(text, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
 }
 
-/** One radio button a choice, in a group under the setting's label, each read with the line under it that says what it is. */
 @Composable
 private fun ChoiceRows(entry: SettingEntry.Choice<*>, owner: SettingsOwner) {
+    Text(stringResource(entry.label), Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp), style = MaterialTheme.typography.bodyLarge)
+    ChoiceButtons(entry, owner, Modifier.padding(bottom = 4.dp))
+}
+
+/**
+ * One radio button a choice of [entry], in a group, each read with the line under it that says what it is, [inset]
+ * from the sides; a pick changes [owner]'s value, then calls [onChosen].
+ */
+@Composable
+internal fun ChoiceButtons(entry: SettingEntry.Choice<*>, owner: SettingsOwner, modifier: Modifier = Modifier, inset: Dp = 16.dp, onChosen: () -> Unit = {}) {
     val chosen = entry.chosen(owner)
     val hints = entry.choiceHints()
-    Text(stringResource(entry.label), Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp), style = MaterialTheme.typography.bodyLarge)
-    Column(Modifier.selectableGroup().padding(bottom = 4.dp)) {
+    Column(modifier.selectableGroup()) {
         entry.choiceLabels().forEachIndexed { i, label ->
             Row(
                 Modifier.fillMaxWidth().heightIn(min = 48.dp)
-                    .selectable(i == chosen, role = Role.RadioButton) { entry.choose(owner, i) }
-                    .padding(horizontal = 16.dp, vertical = if (hints == null) 0.dp else 8.dp),
+                    .selectable(i == chosen, role = Role.RadioButton) {
+                        entry.choose(owner, i)
+                        onChosen()
+                    }
+                    .padding(horizontal = inset, vertical = if (hints == null) 0.dp else 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 RadioButton(i == chosen, onClick = null)

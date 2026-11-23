@@ -1314,6 +1314,11 @@ And the main window's size, or the console's columns and rows, given with the st
 their first line (`THeadlessSession::Options::mainWindowSize` and `screenSize`, `0043-headless-main-window-size-at-start.patch`).
 And the starter UI's chat welcome printed again at its window's width when the window grows, while it is all the chat
 window holds (`BaseUI.fitDock()`, `0044-starter-ui-chat-welcome-refit.patch`).
+And the starter UI in a main window compact in width or height: only its bars along the top and a button for each
+chat tab along the bottom, no dock and no map, as the app's own map is a button away; a button opens its tab, a mini
+console over the console's text, and closes it (`BaseUI.compactWindow()`, `0050-starter-ui-compact-layout.patch`).
+A console a script made over all of the main console's text, as such a tab is, hides it from TalkBack
+(`WindowLayout.consoleCovered`), as a pane of the stacked layout does.
 [`c-device.md`](decisions/hosting-results/c-device.md) has the emulator run of the earlier build, which read Mudlet's console model
 and needed a patch.
 
@@ -1458,8 +1463,10 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
 - the main window's info: `setMainWindowDevice` refused with a field out of place, kept from before a profile opens
   and read back by `getMainWindowInfo()` in dp, the landscape window given to a profile that is not adaptive and the
   upright one given to the starter UI read as such, `sysMainWindowClassChangeEvent` raised for each change of class
-  and not for one within a class, the starter UI's dock along the bottom of a narrow main window and at the side of a
-  short one, and `adaptive` in `mainArea` while the starter UI is shown or a script has `setAdaptiveLayout()` on;
+  and not for one within a class, the starter UI in a compact main window, upright and on its side, with its bars
+  along the top, no dock or map, and a button for each chat tab along the bottom that opens its tab over the text and
+  closes it, named for TalkBack, and `adaptive` in `mainArea` while the starter UI is shown or a script has
+  `setAdaptiveLayout()` on;
 - the starter UI's chat window built in a narrow main window that then widens: its welcome printed again at the new
   width, and chat in it keeping its lines through a resize;
 - script windows: a Geyser `MiniConsole` as `windows` with its geometry, and its `cecho()` as `windowText` with its
@@ -2487,6 +2494,10 @@ alias of run-lua-code, one of desktop Mudlet's default packages, which a profile
       first lines wrapped at its full width, also in the profile opened first after the app starts.
     - With the starter UI, turn a tablet or unfold a phone so the game area widens: the chat window's welcome line
       fills its new width, while chat the game sent there keeps the lines it arrived on.
+    - With the starter UI on a phone, upright and then on its side: its bars along the top, a button for each chat tab
+      along the bottom and no map. A button opens its tab over the game's text and closes it; with TalkBack, the bars
+      are read by name with their values, the buttons as buttons with their unread counts, and the game's text is not
+      read while a tab covers it.
     - A console a script gave a scroll bar (`lua enableScrollBar("<name>")`) with more rows than fit has a thumb at
       its right edge, which moves as the rows scroll and scrolls them when dragged; `disableScrollBar` takes it away.
     - With TalkBack on: swiping goes from the console to the input line, then the pinned commands, then

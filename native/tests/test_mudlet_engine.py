@@ -1658,8 +1658,9 @@ def main_window_info():
     gives: setMainWindowDevice refused with a field out of place and kept from before a profile opens; the upright
     window the game screen gives the starter UI, which lays out for any shape (adaptive in mainArea), and the landscape
     one it gives a profile that does not, read as such; sysMainWindowClassChangeEvent raised for a change of class and
-    not for one within a class; and the starter UI's dock along the bottom of a narrow main window and at the side of a
-    short one."""
+    not for one within a class; and the starter UI's compact layout in an upright and a landscape phone's window: no
+    dock or map, a button for each chat tab along the bottom that a screen reader names, opening its tab over the
+    console and closing it again."""
     profile = "Main Window Info Test"
     proc, c = start_engine(profile)
     seen = []
@@ -1692,9 +1693,42 @@ def main_window_info():
     c.send({"t": "runLua", "code": "BaseUI.build()"})
     seen_or_next(c, windows_with("BaseUI_chat_all", "miniConsole", lambda w: w.get("columns", 0) > 0), seen, since, timeout=15,
                  what="the starter UI built")
+    # 48 dp buttons with 4 above and below, at 1.5 Mudlet pixels a dp
     borders = 'getBorderBottom() .. " " .. getBorderRight()'
-    bottom, right = map(int, said("narrow", borders).split())
-    check(bottom > 0 and right == 0, f"in a narrow main window the starter UI docks along the bottom: bottom {bottom}, right {right}")
+    bottom, right = map(int, said("compact", borders).split())
+    check(bottom == 84 and right == 0,
+          f"in a compact main window the starter UI has a row of chat buttons along the bottom and no dock: bottom {bottom}, right {right}")
+    got = said("dock", 'tostring(BaseUI.container.hidden) .. " " .. tostring(BaseUI.map ~= nil) .. " " '
+                       '.. BaseUI.chats.all.wrapAt .. " " .. tostring(BaseUI.chatWelcomeWrap)')
+    hidden, mapped, wrap, welcome_wrap = got.split()
+    check((hidden, mapped) == ("true", "false"), f"its dock hidden and no map made: {got}")
+    check(wrap == welcome_wrap, f"the chat window's welcome printed again at the width the open tab has: {got}")
+
+    button, pane = "BaseUI_chat_button_tells", "BaseUI_chat_tells"
+    m = seen_or_none(c, lambda m: m["t"] == "label" and m["name"] == button and m.get("accessibleName") == "Tells chat", seen, 0)
+    check(m is not None and m.get("accessibleButton") is True,
+          f"a screen reader reads the Tells button as a button named for its tab: {m or window_of(seen, button, 'label')}")
+    strip = last_of([m for m in seen if m["t"] == "label" and m["name"] == "BaseUI_chat_buttonsadjLabel"], "label")
+    check(strip is not None and strip.get("accessibleButton") is False, f"but not the row the buttons are on: {strip}")
+
+    def tap(label):
+        since = len(seen)
+        for kind, buttons in (("press", 1), ("release", 0)):
+            c.send({"t": "pointer", "window": label, "type": kind, "x": 5, "y": 5, "button": 1, "buttons": buttons})
+        return since
+
+    since = tap(button)
+    seen_or_none(c, windows_with(pane, "miniConsole", lambda w: w["visible"]), seen, since)
+    w, area = window_of(seen, pane, "miniConsole"), last_of(seen, "mainArea")
+    check(w is not None and area is not None and w["visible"]
+          and (w["x"], w["y"], w["w"], w["h"]) == (area["textX"], area["textY"], area["textW"], area["textH"]),
+          f"tapped, it opens its tab over the console: {w} over {area}")
+    m = seen_or_none(c, lambda m: m["t"] == "label" and m["name"] == button and m.get("accessibleName") == "Tells chat, open", seen, since)
+    check(m is not None, f"and a screen reader hears it is open: {last_of([m for m in seen if m['t'] == 'label' and m['name'] == button], 'label')}")
+    since = tap(button)
+    seen_or_none(c, windows_with(pane, "miniConsole", lambda w: not w["visible"]), seen, since)
+    w = window_of(seen, pane, "miniConsole")
+    check(w is not None and not w["visible"], f"tapped again, it closes it: {w}")
 
     c.send({"t": "runLua", "code": 'registerAnonymousEventHandler("sysMainWindowClassChangeEvent", function(...) '
                                    f'echo("changed " .. select("#", ...) .. " " .. {info} .. "\\n") end)'})
@@ -1705,7 +1739,7 @@ def main_window_info():
     c.send({"t": "setMainWindowSize", "w": 1350, "h": 600})
     m = c.wait_for(lambda m: m["t"] in ("line", "tail") and m["text"].startswith("changed 1 900x400"), collect=seen)
     bottom, right = map(int, said("short", borders).split())
-    check(bottom == 0 and right > 0, f"and in a short one it docks at the side: bottom {bottom}, right {right}")
+    check(bottom == 84 and right == 0, f"and in a landscape one too: bottom {bottom}, right {right}")
     changes = [m["text"] for m in seen[since:] if m["t"] in ("line", "tail") and m["text"].startswith("changed ")]
     check(changes == ["changed 1 420x820 compact medium portrait fine true 1 1.5",
                       "changed 1 900x400 expanded compact landscape fine true 1 1.5"],

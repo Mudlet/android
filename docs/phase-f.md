@@ -179,6 +179,9 @@ everything at one scale `s` (screen pixels per Mudlet pixel):
 - A profile whose scripts lay out for any shape (`setAdaptiveLayout()`, which the starter UI calls while it is shown;
   `adaptive` on `mainArea`) is drawn fitted in the automatic layout at any width, as the stacked layout's landscape
   size would hide the shape it lays out for. The player's choice of stacked still stands.
+- In a main window compact in width or height, the starter UI shows only its bars, along the top, and a button for each
+  chat tab, along the bottom, whose tab opens over the console's text (patch 0050); no map, as the app's own is a
+  button away. The size class is Mudlet's, from the main window, so it is the same on any device or platform.
 - Scripts read the main window with `getMainWindowInfo()` (Mudlet's, carried as patch 0047): the window
   `getMainWindowSize()` measures, divided by the `pixelScale` the app sends in `setMainWindowDevice` on the profile's
   socket, so in dp. Stacked, that is the landscape window Mudlet is given, as its scripts are drawn into it; fitted,
@@ -527,6 +530,8 @@ Phase E's requirements apply to every pull request here; in short, and what they
   where the box cuts them.
 - **Mini consoles** are lists TalkBack moves through line by line, as the main console after U6. Their new lines are
   not announced: Mudlet announces only the main console's (`announceIncomingText`).
+  One over all of the main console's text, as the starter UI's open chat tab is in a compact main window, takes the
+  console out of the reading (`WindowLayout.consoleCovered`), as a pane of the stacked layout does.
 - **48 dp.** Script geometry can make a clickable label or a text box small: its touch bounds grow to 48 dp around
   it, drawn at its own size, the higher in `stack` winning where two overlap.
 - **No gesture alone.** Long press has its accessibility action; the map's pinch has zoom buttons; a script

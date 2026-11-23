@@ -94,6 +94,19 @@ class WindowLayoutTest {
     }
 
     @Test
+    fun aConsoleOverAllOfTheMainConsolesTextCoversItButALabelOrASmallerOneDoesNot() {
+        // The starter UI in a compact main window: a chat tab open over the text, between the vitals and the buttons
+        val main = mainArea(400, 800, 50, 40, 0, 48, 400, 704)
+        fun covered(vararg windows: ScriptWindow) = WindowLayout.of(state(main, *windows), area(800f, 1600f, fitted = true)).consoleCovered
+        assertTrue(covered(window("chat", x = 0, y = 48, w = 400, h = 704)))
+        assertTrue(covered(window("chat", x = 0, y = 0, w = 400, h = 800)))
+        assertFalse(covered(window("chat", x = 0, y = 48, w = 400, h = 704, shown = false)))
+        assertFalse(covered(window("chat", x = 0, y = 48, w = 400, h = 700)))
+        assertFalse(covered(window("overlay", WindowKind.LABEL, x = 0, y = 48, w = 400, h = 704)))
+        assertFalse(covered())
+    }
+
+    @Test
     fun fittedDocksTakeAQuarterEachUpToHalfAndTheRestArePages() {
         val left = window("left", WindowKind.USER_WINDOW, dock = ScriptWindow.Dock(true, "left", false, "Left"))
         val right = window("right", WindowKind.USER_WINDOW, dock = ScriptWindow.Dock(true, "right", false, "Right"))

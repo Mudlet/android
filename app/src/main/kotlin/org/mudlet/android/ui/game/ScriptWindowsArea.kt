@@ -292,7 +292,8 @@ private fun WindowsArea(
         // desktop paints its main frame; not under the docks, which are outside that frame there, nor the switcher's
         // row, which is the app's own and stays black
         Box(Modifier.placeAt(layout.main, density).background(windowColour(windows.mainArea?.borderColor ?: -1, CONSOLE_BACKGROUND)))
-        content(Modifier.placeAt(layout.console, density).coveredBy(layout.console), layout.mapperDrawn)
+        val console = Modifier.placeAt(layout.console, density)
+        content(if (layout.consoleCovered) console.clearAndSetSemantics {} else console.coveredBy(layout.console), layout.mapperDrawn)
         // What else is drawn over the game area, which a map in its corner stops short of
         fun drawnBesides(map: PlacedWindow?) = layout.windows.filter { it !== map && it.scrollBox == null }.map { it.rect } + layout.dockHeaders.map { it.rect } + layout.frameTabs.map { it.rect }
 
@@ -357,8 +358,6 @@ private suspend fun PointerInputScope.consumeAll() {
         while (true) awaitPointerEvent().changes.forEach { it.consume() }
     }
 }
-
-private fun PxRect.contains(other: PxRect): Boolean = other.x >= x && other.y >= y && other.right <= right && other.bottom <= bottom
 
 @Composable
 private fun rememberConsoleMetrics(textSizeSp: Int): ConsoleMetrics {

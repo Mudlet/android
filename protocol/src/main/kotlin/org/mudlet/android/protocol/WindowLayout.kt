@@ -21,6 +21,9 @@ data class PxRect(val x: Float, val y: Float, val w: Float, val h: Float) {
         return if (r > left && b > top) PxRect(left, top, r - left, b - top) else null
     }
 
+    /** Whether all of [other] lies inside this. */
+    fun contains(other: PxRect): Boolean = other.x >= x && other.y >= y && other.right <= right && other.bottom <= bottom
+
     /** This rectangle moved [dx] across and [dy] down. */
     fun offset(dx: Float, dy: Float): PxRect = PxRect(x + dx, y + dy, w, h)
 }
@@ -165,6 +168,13 @@ data class WindowLayout(
      * mapper that is a page no one opened, its tab the only sign of it, is not.
      */
     val mapperDrawn: Boolean get() = (windows.asSequence() + paneWindows).any { it.window.kind == WindowKind.MAPPER }
+
+    /**
+     * Whether a console a script made covers all of the main console's text, as the starter UI's open chat tab does in a
+     * compact main window, so that the main console is out of sight.
+     */
+    val consoleCovered: Boolean
+        get() = windows.any { it.scrollBox == null && it.window.kind in ScriptWindows.CONSOLE_KINDS && it.rect.contains(console) }
 
     /**
      * What `setMainWindowDevice` gives at [density] pixels per dp, by which Mudlet divides [mainWindowSize] for scripts:

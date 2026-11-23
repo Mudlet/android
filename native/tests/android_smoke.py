@@ -416,6 +416,29 @@ def run(dev, apk):
         raise SmokeFailure(f"the mini console is hidden: {chat}")
     ok(f"the UI has the mini console and its line: {chat}")
 
+    step("the starter UI in the upright phone's compact main window: a health bar and a button for each chat tab, no "
+         "dock or map, and a button opening its tab and closing it again")
+    tabs = ("all", "tells", "channels")
+    dev.command("lua", code='BaseUI.build() BaseUI.ensureGauge("hp") BaseUI.fitDock()')
+
+    def chat_pane(s):
+        return window_named(s, "BaseUI_chat_tells", "miniConsole") or {}
+
+    state = dev.wait("the starter UI's bar and buttons in the UI",
+                     lambda s: s["status"].get("luaResult", "").startswith("refused")
+                     or (all(window_named(s, f"BaseUI_chat_button_{t}", "label") for t in tabs)
+                         and (window_named(s, "BaseUI_hp_gauge_back", "label") or {}).get("shown")), 30)
+    if state["status"].get("luaResult", "").startswith("refused"):
+        raise SmokeFailure(f"the engine refused the starter UI's build: {state['status']['luaResult']}")
+    mapper = [w for w in state.get("windows", []) if w["kind"] == "mapper" and w["shown"]]
+    if mapper or chat_pane(state).get("shown") is not False:
+        raise SmokeFailure(f"the starter UI shows a map ({mapper}) or a chat tab before one is opened: {chat_pane(state)}")
+    ok("the starter UI shows its health bar and the chat buttons, with no map and no chat tab open")
+    for want in (True, False):
+        dev.command("lua", code='BaseUI.toggleChat("tells")')
+        dev.wait(f"the Tells tab {'open' if want else 'closed'}", lambda s: chat_pane(s).get("shown") is want, 30)
+    ok("the Tells button's toggle opens its tab and closes it again")
+
     step("a script's sound plays from :engine through Android's media stream, and on with the screen off")
     if any(state == "started" for _, state, _ in engine_players(engine_pid)):
         raise SmokeFailure(f"the engine plays audio before any sound was asked for: {engine_players(engine_pid)}")

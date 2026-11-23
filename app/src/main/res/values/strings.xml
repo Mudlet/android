@@ -940,9 +940,10 @@
          terminal code games use for them; keep it as it is), and tell the game they are shown -->
     <string name="settings_game_links">Links from the game (OSC 8)</string>
     <!-- Under "Links from the game (OSC 8)", what the switch does. A link can send a command, fill in the input line or
-         open a web page. The switch covers OSC 8 links only: links a game sends with MXP (MUD eXtension Protocol) are
-         turned on and off by the switch "MXP" on the game's "Connection" page. Keep "OSC 8" and "MXP" as they are. -->
-    <string name="settings_game_links_hint">Shows the OSC 8 links a game puts in its text, which can send a command, fill in the input line or open a web page, and tells the game they work. Off, they are plain text. MXP links follow the MXP switch on the Connection page.</string>
+         open a web page. The switch covers OSC 8 links only: links a game sends with MXP (MUD eXtension Protocol) follow
+         the switch "MXP" on the game's "Connection" page and "Read MXP the game does not offer" on its "Advanced" page,
+         and can show while either is on. Keep "OSC 8" and "MXP" as they are. -->
+    <string name="settings_game_links_hint">Shows the OSC 8 links a game puts in its text, which can send a command, fill in the input line or open a web page, and tells the game they work. Off, they are plain text. MXP links have their own switches, on the Connection and Advanced pages.</string>
     <!-- Words a player might search the settings for to find "Links from the game (OSC 8)", besides the words of its
          name and description, separated by commas. Use the words a player of your language would search for. -->
     <string name="settings_game_links_keywords">hyperlinks, links, URL, web, click, tap</string>
@@ -1301,8 +1302,9 @@
     <string name="settings_force_mxp_on">Read MXP the game does not offer</string>
     <!-- Under "Read MXP the game does not offer", what the switch does. Mudlet turns the switch on itself, once for
          each game, when the game sends MXP that was never agreed. "MXP off on the Connection page" is the switch "MXP"
-         on the game's "Connection" page, which only stops Mudlet agreeing to MXP with the game. Keep "MXP". -->
-    <string name="settings_force_mxp_on_hint">For games that send MXP links and menus without MXP being agreed first; Mudlet turns it on itself the first time a game does. While it is on, MXP is read even with MXP off on the Connection page: to have no MXP at all, turn both off.</string>
+         on the game's "Connection" page, which only stops Mudlet agreeing to MXP with the game. Turned off after Mudlet
+         turned it on, MXP is read until the game is next connected. Keep "MXP". -->
+    <string name="settings_force_mxp_on_hint">For games that send MXP links and menus without MXP being agreed first; Mudlet turns it on itself the first time a game does. While it is on, MXP is read even with MXP off on the Connection page: to have no MXP at all, turn both off. Turning it off may only take effect when you reconnect.</string>
     <!-- Words a player might search the settings for to find "Read MXP the game does not offer", besides the words of its name and
          description, separated by commas. Use the words a player of your language would search for. -->
     <string name="settings_force_mxp_on_keywords">MXP, links, menus, markup</string>

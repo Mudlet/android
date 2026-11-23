@@ -12,6 +12,10 @@ import javax.xml.parsers.DocumentBuilderFactory
 /** The settings screen's search, and how it names a page to open */
 class SettingsSearchTest {
     private val readNewText = listOf("Read new text aloud", "While TalkBack is on, the game's new text is read out as it arrives.", "speech, announce")
+    private val english by lazy {
+        val strings = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(File("src/main/res/values/strings.xml")).getElementsByTagName("string")
+        (0 until strings.length).map { strings.item(it) as Element }.associate { it.getAttribute("name") to it.textContent }
+    }
 
     @Test
     fun eachWordOfTheQueryIsPartOfOneOfTheTexts() {
@@ -33,9 +37,13 @@ class SettingsSearchTest {
 
     @Test
     fun mxpFindsTheGamesLinksSwitch_whoseHintSaysWhereMxpLinksAreTurnedOff() {
-        val strings = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(File("src/main/res/values/strings.xml")).getElementsByTagName("string")
-        val english = (0 until strings.length).map { strings.item(it) as Element }.associate { it.getAttribute("name") to it.textContent }
         assertTrue(searchMatches("MXP", listOf("settings_game_links", "settings_game_links_hint", "settings_game_links_keywords").map(english::getValue)))
+    }
+
+    @Test
+    fun specialOptionsFindsTheForcedMxpSwitch_whereTheEnginesMessageSaysItIs() {
+        val texts = listOf("settings_force_mxp_on", "settings_force_mxp_on_hint", "settings_force_mxp_on_keywords", "settings_advanced")
+        assertTrue(searchMatches("Special Options", texts.map(english::getValue)))
     }
 
     @Test

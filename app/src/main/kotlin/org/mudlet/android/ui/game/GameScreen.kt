@@ -213,6 +213,7 @@ private fun ProfileGameScreen(
     var gamesOpen by rememberSaveable { mutableStateOf(false) }
     var picked by remember { mutableStateOf<String?>(null) }
     val snackbars = remember { SnackbarHostState() }
+    val selectionBar = remember { LineSelectionBarSlot() }
     val scope = rememberCoroutineScope()
     val notSent = stringResource(R.string.input_not_sent)
     val context = LocalContext.current
@@ -468,6 +469,7 @@ private fun ProfileGameScreen(
                             colors = colors,
                             onTextSize = Settings.textSize::set,
                             onScreenSize = EngineClient::setGameConsoleSize,
+                            selectionBar = selectionBar,
                             consoleModifier.tourTarget(TourTarget.CONSOLE),
                             links = c.links,
                             onMakeTrigger = onMakeTrigger,
@@ -487,6 +489,8 @@ private fun ProfileGameScreen(
                             onBackProgress = { backProgress = it },
                             Modifier.fillMaxSize(),
                         )
+                    } else {
+                        LineSelectionBarHost(selectionBar, Modifier.align(Alignment.BottomCenter).fillMaxWidth())
                     }
                     SnackbarHost(snackbars, Modifier.align(Alignment.BottomCenter))
                 }

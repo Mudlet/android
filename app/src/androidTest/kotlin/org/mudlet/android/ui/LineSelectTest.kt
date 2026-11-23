@@ -27,6 +27,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
 import androidx.test.uiautomator.UiDevice
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -42,7 +43,8 @@ import org.mudlet.android.ui.game.GAME_TITLE_TAG
  * Selecting lines of the game's text against a fake engine: "Select from here" in a line's long press menu starts a
  * selection, a tap on another line takes it there, and Copy puts the lines on the clipboard as desktop copies them; with
  * TalkBack, the lines' actions "Select from here" and "Select to here" do the same without a touch, and each change of
- * the selection is said once. Timestamps shown beside the lines are not copied.
+ * the selection is said once; Done, drawn with its label and read before the lines, and Back end it without copying.
+ * Timestamps shown beside the lines are not copied.
  */
 @RunWith(AndroidJUnit4::class)
 class LineSelectTest {
@@ -124,7 +126,19 @@ class LineSelectTest {
     }
 
     @Test
-    fun backAndTheCloseButtonEndASelectionWithoutCopying() {
+    fun doneShownWithItsLabelAndReadBeforeTheLinesAndBackEndASelectionWithoutCopying() {
+        val clipped = clipboard()
+        perform(line(1), string(R.string.console_select_from_here))
+        waitFor(hasText(count(1)))
+        // Its label is drawn, as its text, not only told TalkBack, and TalkBack reaches it before the lines
+        val done = hasText(string(R.string.console_selection_done)) and hasClickAction()
+        compose.onNode(done).assertIsDisplayed()
+        TalkBackReading(compose).assertInOrder(listOf("Done" to done, "the first line" to line(0)))
+        activate(done)
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(count(1))).fetchSemanticsNodes().isEmpty() }
+        compose.onNode(line(1)).assert(notSelected)
+        assertEquals("Done copies nothing", clipped, clipboard())
+
         perform(line(0), string(R.string.console_select_from_here))
         waitFor(hasText(count(1)))
         UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).pressBack()
@@ -132,12 +146,6 @@ class LineSelectTest {
         compose.onNode(line(0)).assert(notSelected)
         // Still on the game screen: Back only ended the selection
         compose.onNode(hasTestTag(GAME_TITLE_TAG)).assertIsDisplayed()
-
-        perform(line(1), string(R.string.console_select_from_here))
-        waitFor(hasText(count(1)))
-        activate(hasContentDescription(string(R.string.console_selection_close)))
-        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(count(1))).fetchSemanticsNodes().isEmpty() }
-        compose.onNode(line(1)).assert(notSelected)
     }
 
     // The line's node, read with its time first

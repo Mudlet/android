@@ -1741,16 +1741,18 @@
         <item quantity="one">%d line selected</item>
         <item quantity="other">%d lines selected</item>
     </plurals>
-    <!-- Under the count in the bar shown while lines of the game's text are selected: how to select more lines -->
-    <string name="console_selection_hint">Tap another line to select up to it</string>
+    <!-- Under the count in the bar shown while lines of the game's text are selected: how to select more lines, and that
+         the bar's Copy and Share buttons (console_selection_copy, console_selection_share) then finish the selection -->
+    <string name="console_selection_how">Tap another line to select up to it, then Copy or Share</string>
     <!-- Button in the bar shown while lines of the game's text are selected: puts the selected lines on the clipboard and ends the selection -->
     <string name="console_selection_copy">Copy</string>
     <!-- Button in the bar shown while lines of the game's text are selected: offers the selected lines to Android's share sheet and ends the selection -->
     <string name="console_selection_share">Share</string>
+    <!-- Button in the bar shown while lines of the game's text are selected: ends the selection without copying or
+         sharing, as Android's own selection bars' Done does -->
+    <string name="console_selection_done">Done</string>
     <!-- The title of Android's share sheet when sharing the selected lines of the game's text -->
     <string name="console_selection_share_title">Share lines</string>
-    <!-- TalkBack's label for the close button of the bar shown while lines of the game's text are selected: ends the selection without copying -->
-    <string name="console_selection_close">Stop selecting lines</string>
     <!-- A short message once the selected lines of the game's text are on the clipboard (before Android 13, which says so itself) -->
     <string name="console_selection_copied">Lines copied</string>
     <!-- A message when no app on the device can take the shared lines of the game's text -->

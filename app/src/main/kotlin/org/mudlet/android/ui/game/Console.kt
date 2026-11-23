@@ -23,12 +23,13 @@ import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -59,6 +60,8 @@ import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.isCtrlPressed
 import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
@@ -127,9 +130,9 @@ private const val CELLS_MEASURED = 100
  * and to hand its text to [onMakeTrigger], to make a trigger from; TalkBack has actions to copy it and make the trigger.
  *
  * That menu, and TalkBack's action "Select from here", also start a selection of whole lines at the line; while one is
- * open a tap on a line, or TalkBack's action "Select to here", takes it to that line, and [LineSelectionBar] copies or
- * shares the lines, joined as desktop's copy joins them. Each line reads whether it is selected for itself, so a change
- * draws again only the lines it changes.
+ * open a tap on a line, or TalkBack's action "Select to here", takes it to that line, and [LineSelectionBar], which
+ * [selectionBar] has the game screen draw, copies or shares the lines, joined as desktop's copy joins them. Each line
+ * reads whether it is selected for itself, so a change draws again only the lines it changes.
  *
  * Each match of [searchQuery] is drawn as desktop's search draws it, and the list goes to [searchFound], the number of
  * the line a search found, each time a search finds one.
@@ -153,6 +156,7 @@ fun Console(
     colors: ConsoleColors,
     onTextSize: (Int) -> Unit,
     onScreenSize: (columns: Int, rows: Int) -> Unit,
+    selectionBar: LineSelectionBarSlot,
     modifier: Modifier = Modifier,
     links: ConsoleLinksClient? = null,
     onMakeTrigger: ((String) -> Unit)? = null,
@@ -292,15 +296,39 @@ fun Console(
     val selecting by remember { derivedStateOf { selectionState.value != null } }
     BackHandler(enabled = selecting) { selectionState.value = null }
     val selectedBackground = colors.foreground.copy(alpha = SELECTED_ALPHA)
-    // Room above the lines for the selection's bar, so the first line can be scrolled out from under it; the list keeps
-    // its size, which the game is told
-    var selectionBarHeight by remember { mutableIntStateOf(0) }
-    val selectionBarRoom = if (selecting) with(density) { selectionBarHeight.toDp() } else 0.dp
+    val countOf = { s: LineSelection -> s.indicesIn(firstLine, itemCount).count { !notDrawn(it) } }
+    val textOf = { s: LineSelection ->
+        copiedLines(s, firstLine, itemCount) { i ->
+            lineAt(i)?.takeUnless { it.deleted }?.let { it.readAs(linkSpans(it.runs, it.text.length), linksOf(i)) }
+        }
+    }
+    val latestCountOf by rememberUpdatedState(countOf)
+    val latestTextOf by rememberUpdatedState(textOf)
+    if (selecting) {
+        DisposableEffect(selectionBar) {
+            val bar = @Composable { m: Modifier ->
+                LineSelectionBar(selectionState, { latestCountOf(it) }, { latestTextOf(it) }, onClose = { selectionState.value = null }, m)
+            }
+            selectionBar.bar = bar
+            onDispose {
+                selectionBar.bar = null
+                selectionBar.top = null
+            }
+        }
+    }
+    // Room under the lines for as much of the selection's bar as is over the console, so the last line can be scrolled
+    // out from under it; the list keeps its size, which the game is told
+    var consoleBottom by remember { mutableFloatStateOf(0f) }
+    val barTop = selectionBar.top
+    val selectionBarRoom = if (selecting && barTop != null) with(density) { (consoleBottom - barTop).coerceAtLeast(0f).toDp() } else 0.dp
 
     val wheelScroll = Modifier.wheelScroll(cell, { cell.fit(consoleSize, sidePaddingPx)?.second }) { rows ->
         listState.dispatchRawDelta(rows * cell.height.toFloat())
     }
-    Box(modifier.background(colors.background).pinchToZoom({ latestTextSize }, { latestOnTextSize(it) }).then(wheelScroll)) {
+    Box(
+        modifier.background(colors.background).pinchToZoom({ latestTextSize }, { latestOnTextSize(it) }).then(wheelScroll)
+            .onGloballyPositioned { consoleBottom = it.boundsInWindow().bottom },
+    ) {
         behindText()
         LazyColumn(
             Modifier.fillMaxSize().onSizeChanged { consoleSize = it }.then(caretKeys).onFocusChanged {
@@ -314,7 +342,7 @@ fun Console(
                 }
             },
             state = listState,
-            contentPadding = PaddingValues(start = CONSOLE_SIDE_PADDING, top = selectionBarRoom, end = CONSOLE_SIDE_PADDING),
+            contentPadding = PaddingValues(start = CONSOLE_SIDE_PADDING, end = CONSOLE_SIDE_PADDING, bottom = selectionBarRoom),
         ) {
             // Each line's key is its number, so the lines in view stay put as the oldest are dropped
             items(itemCount, key = { i -> if (i < lineCount) firstLine + i else TAIL_KEY }) { i ->
@@ -387,22 +415,9 @@ fun Console(
                 }
             }
         }
-        if (selecting) {
-            LineSelectionBar(
-                selectionState,
-                countOf = { s -> s.indicesIn(firstLine, itemCount).count { !notDrawn(it) } },
-                textOf = { s ->
-                    copiedLines(s, firstLine, itemCount) { i ->
-                        lineAt(i)?.takeUnless { it.deleted }?.let { it.readAs(linkSpans(it.runs, it.text.length), linksOf(i)) }
-                    }
-                },
-                onClose = { selectionState.value = null },
-                Modifier.align(Alignment.TopCenter).fillMaxWidth().onSizeChanged { selectionBarHeight = it.height },
-            )
-        }
         if (!following) {
             val newLines = (linesAdded - seenUpTo).coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
-            ExtendedFloatingActionButton({ following = true }, Modifier.align(Alignment.BottomEnd).padding(12.dp)) {
+            ExtendedFloatingActionButton({ following = true }, Modifier.align(Alignment.BottomEnd).padding(bottom = selectionBarRoom).padding(12.dp)) {
                 Icon(painterResource(R.drawable.ic_arrow_downward), contentDescription = null)
                 Spacer(Modifier.width(8.dp))
                 Text(

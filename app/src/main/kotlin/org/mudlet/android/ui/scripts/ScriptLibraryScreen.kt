@@ -68,7 +68,6 @@ import org.mudlet.android.ui.MudletScaffold
 import org.mudlet.android.ui.ScriptItemsClient
 import org.mudlet.android.ui.UiLine
 import org.mudlet.android.ui.ansiText
-import org.mudlet.android.ui.scripts.designs.EditorDesignRow
 import org.mudlet.android.ui.settings.MAX_WIDTH
 import org.mudlet.android.ui.settings.Overline
 
@@ -205,7 +204,6 @@ internal fun ScriptLibraryScreen(
                 }
                 searchResults(query, options, lists, selected, scripts, onEnter = ::enter, onOpen = onOpen)
             }
-            item(key = "design") { EditorDesignRow(itemWidth) }
         }
     }
 }

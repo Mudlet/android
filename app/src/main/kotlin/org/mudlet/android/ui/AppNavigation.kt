@@ -282,7 +282,6 @@ fun AppNavigation(
                         onVariables = toVariables,
                         changingConfigurations = { activity?.isChangingConfigurations == true },
                         start = open?.let(ScriptItemKey::decode),
-                        onUnfold = { open = it?.encode() },
                         actions = toErrors,
                     )
                 } else {

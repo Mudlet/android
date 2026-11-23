@@ -30,8 +30,8 @@ import org.mudlet.android.protocol.Profile
 
 /**
  * Selecting lines of the game's text (LineSelectTest) in the debug build's pseudo-locales, as PseudoLocaleTest checks
- * the screens: the line menu's "Select from here" and the selection's bar, its count, hint, Copy and Share, are not cut
- * short, and pass the accessibility checks.
+ * the screens: the line menu's "Select from here" and the selection's bar, its count, hint, Copy, Share and Done, are
+ * not cut short, and pass the accessibility checks.
  */
 @RunWith(Parameterized::class)
 @SdkSuppress(minSdkVersion = Build.VERSION_CODES.TIRAMISU)
@@ -77,7 +77,8 @@ class SelectLinesPseudoLocaleTest(private val locale: String) {
         val action = compose.onNode(hasText(LINES.last())).fetchSemanticsNode().config[SemanticsActions.CustomActions].single { it.label == selectTo }
         compose.runOnIdle { action.action() }
         val count = compose.activity.resources.getQuantityString(R.plurals.console_selection_count, LINES.size, LINES.size)
-        for (text in listOf(count, string(R.string.console_selection_hint), string(R.string.console_selection_copy), string(R.string.console_selection_share))) {
+        val bar = listOf(R.string.console_selection_how, R.string.console_selection_copy, R.string.console_selection_share, R.string.console_selection_done).map(::string)
+        for (text in listOf(count) + bar) {
             assertFits(text)
         }
     }

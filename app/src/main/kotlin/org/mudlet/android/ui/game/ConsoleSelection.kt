@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -32,6 +33,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.traversalIndex
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.mudlet.android.R
 import org.mudlet.android.protocol.LineSelection
@@ -118,7 +120,7 @@ internal fun LineSelectionBar(
         FlowRow(m, horizontalArrangement = Arrangement.End) {
             TextButton({ handOver { copyText(context, clipLabel, it, copied) } }) { Text(stringResource(R.string.console_selection_copy)) }
             TextButton({ handOver { shareText(context, it, shareTitle, noShare) } }) { Text(stringResource(R.string.console_selection_share)) }
-            TextButton(onClose) { Text(stringResource(R.string.console_selection_done)) }
+            TextButton({}) { Text(stringResource(R.string.console_selection_done), Modifier.width(8.dp), maxLines = 1, overflow = TextOverflow.Ellipsis) }
         }
     }
     Surface(

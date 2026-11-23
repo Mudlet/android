@@ -1027,6 +1027,18 @@ drawn by `ui/game/AppMap.kt`):
 - Known limits: the button is only in the map in front, not behind the text, which takes no touches, and only while
   no map is drawn, so a newer map the game offers over a loaded one is not offered; Mudlet sets no
   time limit, so a stalled download runs until cancelled.
+- Once in a profile's life the app downloads the offered map by itself, with no tap (`MapAutoDownload`): as the first
+  offer comes, not as the profile is made, it asks the map's areas that have rooms (`mapAreas`), and only where there
+  are none, so a map the player loaded, made or edited is never replaced, it sends `downloadMap`. That offer decides
+  the profile either way, downloaded or kept, a failed download included: `mapAutoDownload:` before the profile's
+  lowercased name in the `engine` preferences, removed as the profile is deleted. Only an offer from a host, with no
+  download asked for since the profile loaded, counts. The game screen shows it at its bottom while the map in front
+  and the map beside the text, which show it in their bar, do not: "No map yet: downloading the map the game offers
+  from <host>…", read out as it begins, with Cancel while Mudlet can stop it, then how it ended as the bar says it,
+  read out once as above; a refusal of `downloadMap` shows there as its failure. The button stays for the player's
+  own download.
+  The engine offers only an `http` or `https` map with a host (Mudlet patch `0051-map-web-links-only.patch`, meant for
+  the desktop too), so the app's own host check is a second guard: a game cannot have either download read a file.
 
 ### Map files
 The full-screen map's folder button opens a menu that loads a map from a file, saves the map to one as Mudlet's own
@@ -1687,6 +1699,11 @@ device shows, below the UI's debug hook:
   restarted engine's UI showing neither it nor the offer; the notification permission, explained and then asked on
   Android 13 and later, on a fresh install; and a PNG from the engine's own writer for maps read by Android's decoder,
   each pixel as the writer was given it (`MapPngTest`).
+  The map the game offers downloaded by itself (`MapAutoDownloadTest`): an offer to a map with no rooms sending
+  `downloadMap` with no tap, shown at the game screen's bottom and read out once, not as a live region, its Cancel at
+  least 48 dp, then that it loaded, and a restarted engine's offer asking nothing; a map with rooms kept, nothing asked
+  again and the button still offered; a failure read out at once, not tried again, and a refusal shown as one; the
+  decision read under its stored name; the notice whole in en-XA and ar-XB, running with Cancel and failed (`MapAutoDownloadPseudoLocaleTest`).
   The app's map in the corner (`AppMapCornerTest`), on the five screens of `ScriptMapCornerTest`: there where the
   console has room, grown and placed as a small mapper is, none of its panel over it, each button touched within 48 dp,
   the newest line's text clear of it and its panel, and TalkBack reading it after the console, then its panel, with the

@@ -817,7 +817,7 @@ class ProfileSession internal constructor(
 
                 is EngineMessage.Rooms -> post { appMap.onRooms(message) || windows.mapRooms.onRooms(message) }
 
-                is EngineMessage.Areas -> post { appMap.rooms.onAreas(message) || windows.mapRooms.onAreas(message) }
+                is EngineMessage.Areas -> post { appMap.onAreas(message, app.resources, front()) || appMap.rooms.onAreas(message) || windows.mapRooms.onAreas(message) }
 
                 is EngineMessage.Envs -> post { appMap.rooms.onEnvs(message) || windows.mapRooms.onEnvs(message) }
 

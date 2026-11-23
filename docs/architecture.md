@@ -2225,7 +2225,7 @@ testers, and says which parts each kind of phone needs. A `lua ...` command type
 alias of run-lua-code, one of desktop Mudlet's default packages, which a profile's first load installs
 (`HostManager::openProfile()`). The Self-test takes `lua ...` itself.
 
-1. Install the APK with libmudlet (CI's `mudlet-libmudlet-debug-apk`) with `adb install -r app-debug.apk`. Open it
+1. Install the APK (CI's `mudlet-debug-apk`) with `adb install -r app-debug.apk`. Open it
    and allow notifications. It opens on "Profiles"; tap "Self-test" for the checks below (debug builds only: a release
    build has no self-test).
 2. **The critical check: does Qt start in a service-only process?**

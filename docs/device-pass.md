@@ -286,7 +286,7 @@ Please never put your game password, or anything else private, in a report or a 
 
 ## For developers
 
-Testers who have a computer with `adb` and CI's debug APK (`mudlet-libmudlet-debug-apk`, which has the Self-test
+Testers who have a computer with `adb` and CI's debug APK (`mudlet-debug-apk`, which has the Self-test
 screen) can also run the full list behind this page: "On-device checklist" in [`architecture.md`](architecture.md),
 whose items 2 to 13 and 33, and a few steps elsewhere, need the Self-test. Reports go in the same form, with the
 checklist's item numbers.

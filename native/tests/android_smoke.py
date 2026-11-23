@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Smoke test of the debug APK with libmudlet as its engine, on an emulator (CI's emulator jobs) or a device, from the
+"""Smoke test of the debug APK, on an emulator (CI's emulator jobs) or a device, from the
 host through adb. The only test that runs the real engine on Android: a crash there, such as Lua 5.1's FORTIFY abort
 in luaL_openlibs, passes every build-time check.
 

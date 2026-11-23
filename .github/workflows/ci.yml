@@ -21,7 +21,7 @@ name: CI
 #   docs, README and the like     only this workflow's own small jobs (docs/protocol.md: the real engine on the host,
 #                                 whose ProtocolSpecTest reads it)
 #   Kotlin (app/, engine-service/, protocol/, suggest/)
-#                                 ktlint, the arm64 APK with libmudlet (with the JVM tests and Android lint) and the
+#                                 ktlint, the arm64 APK (with the JVM tests and Android lint) and the
 #                                 emulator suite (smoke test and the instrumented tests, on minSdk and the newest API),
 #                                 libmudlet from its cache; protocol/ also the real engine on the host, which runs its
 #                                 tests; app/ and engine-service/ also the strings check (scripts/check-strings.py)

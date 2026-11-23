@@ -232,17 +232,23 @@ def engine_pss(pid):
     return int(m.group(1))
 
 
-# Mudlet's own output (TAudioMixer) is one AudioTrack or AAudio stream, which dumpsys audio lists with its process
-PLAYER = re.compile(r"u/pid:\s*(\d+)/(\d+).*?state:\s*(\w+).*?usage=(\w+)")
+# One AudioTrack or AAudio stream per line, its id (piid from API 30, ID before) ahead of its process
+PLAYER = re.compile(r"\b(?:piid|ID):(\d+)\b.*?u/pid:\s*(\d+)/(\d+).*?state:\s*(\w+).*?usage=(\w+)")
 
-# A two second 440 Hz tone as a 16-bit mono WAV, written by Lua 5.1, which has no string.pack
+# The engine's first sound keeps an output of its own, as Mudlet checks the media backend only then (TMediaVoice), and
+# Qt's FFmpeg backend closes that output and opens another at each pass of a loop, so a tone shorter than the check
+# would be seen between two outputs, the first gone or the next not yet started
+TONE_SECONDS = 30
+
+# A 440 Hz tone as a 16-bit mono WAV, written by Lua 5.1, which has no string.pack: one second, 440 whole cycles,
+# repeated
 TONE_LUA = (
     'local function le(n, b) local s = "" for _ = 1, b do s = s .. string.char(n % 256) n = math.floor(n / 256) end '
     'return s end '
     'local rate, samples = 8000, {} '
-    'for i = 0, rate * 2 - 1 do local v = math.floor(math.sin(i * 2 * math.pi * 440 / rate) * 8000) '
+    'for i = 0, rate - 1 do local v = math.floor(math.sin(i * 2 * math.pi * 440 / rate) * 8000) '
     'if v < 0 then v = v + 65536 end samples[#samples + 1] = le(v, 2) end '
-    'local data = table.concat(samples) '
+    f'local data = string.rep(table.concat(samples), {TONE_SECONDS}) '
     'local f = assert(io.open(getMudletHomeDir() .. "/smoke-tone.wav", "wb")) '
     'f:write("RIFF" .. le(36 + #data, 4) .. "WAVEfmt " .. le(16, 4) .. le(1, 2) .. le(1, 2) .. le(rate, 4) '
     '.. le(rate * 2, 4) .. le(2, 2) .. le(16, 2) .. "data" .. le(#data, 4) .. data) f:close() '
@@ -251,15 +257,17 @@ TONE_LUA = (
 
 
 def engine_players(pid):
-    """The (state, usage) of each audio player dumpsys audio lists for the process pid."""
-    return [(m.group(3), m.group(4)) for m in PLAYER.finditer(shell("dumpsys audio")) if m.group(2) == str(pid)]
+    """The (id, state, usage) of each audio player dumpsys audio lists for the process pid."""
+    return [(int(m.group(1)), m.group(4), m.group(5)) for m in PLAYER.finditer(shell("dumpsys audio"))
+            if m.group(3) == str(pid)]
 
 
 def wait_for_player(pid, what, timeout):
+    """The (id, usage) of each player of pid's that has started, once one has."""
     deadline = time.monotonic() + timeout
     while True:
         players = engine_players(pid)
-        playing = [usage for state, usage in players if state == "started"]
+        playing = [(player, usage) for player, state, usage in players if state == "started"]
         if playing:
             return playing
         if time.monotonic() > deadline:
@@ -409,28 +417,36 @@ def run(dev, apk):
     ok(f"the UI has the mini console and its line: {chat}")
 
     step("a script's sound plays from :engine through Android's media stream, and on with the screen off")
-    if any(state == "started" for state, _ in engine_players(engine_pid)):
+    if any(state == "started" for _, state, _ in engine_players(engine_pid)):
         raise SmokeFailure(f"the engine plays audio before any sound was asked for: {engine_players(engine_pid)}")
+    asked = time.monotonic()
     dev.command("lua", code=TONE_LUA)
     try:
         playing = wait_for_player(engine_pid, "the engine to play the script's sound", 30)
     except SmokeFailure as e:
         raise SmokeFailure(f"{e}; the engine's last Lua answer: {dev.command('state')['status'].get('luaResult')}")
+    usages = {usage for _, usage in playing}
     # USAGE_GAME plays on the media stream too, so the media volume buttons set both
-    if not set(playing) <= {"USAGE_MEDIA", "USAGE_GAME"}:
-        raise SmokeFailure(f"the engine's sound plays as {playing}, not on Android's media stream")
-    ok(f"the engine plays the script's sound as {playing}")
+    if not usages <= {"USAGE_MEDIA", "USAGE_GAME"}:
+        raise SmokeFailure(f"the engine's sound plays as {sorted(usages)}, not on Android's media stream")
+    ok(f"the engine plays the script's sound as {sorted(usages)}")
     shell("input keyevent KEYCODE_SLEEP")
     time.sleep(5)
     wakefulness = re.search(r"mWakefulness=(\w+)", shell("dumpsys power"))
     asleep = engine_players(engine_pid)
+    took = time.monotonic() - asked
     shell("input keyevent KEYCODE_WAKEUP")
     shell("wm dismiss-keyguard", check=False)
     if not wakefulness or wakefulness.group(1) == "Awake":
         raise SmokeFailure(f"the screen did not go off: dumpsys power says {wakefulness and wakefulness.group(0)}")
-    if not any(state == "started" for state, _ in asleep):
-        raise SmokeFailure(f"the sound stopped with the screen off: dumpsys audio lists {asleep}")
-    ok("the sound plays on with the screen off")
+    if took >= TONE_SECONDS:
+        raise SmokeFailure(f"the screen-off check took {took:.1f} s, so the {TONE_SECONDS} s tone may have reached "
+                           "the end of a pass, where its output is closed and another opened: nothing to tell")
+    playing_ids = {player for player, _ in playing}
+    if not any(player in playing_ids and state == "started" for player, state, _ in asleep):
+        raise SmokeFailure(f"the sound stopped with the screen off: the output it played through, "
+                           f"{sorted(playing_ids)}, is not playing; dumpsys audio lists {asleep}")
+    ok(f"the sound plays on with the screen off, through the same output, {took:.1f} s after it was asked for")
     shell(f"am start -W -n {ACTIVITY}")
     dev.wait("the UI to attach again after the screen came back on",
              lambda s: s["link"].startswith("attached to pid") and s["enginePid"] == engine_pid, 60)

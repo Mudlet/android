@@ -1558,8 +1558,10 @@ for a running profile is the one kept for its restore.
 - that `am send-trim-memory` has the engine save the profile;
 - that a Geyser `MiniConsole` and the line a script `cecho()`s on it reach the UI;
 - that a sound a script plays (`playSoundFile()`, a tone its Lua writes) plays from `:engine` as Android's media
-  stream (`dumpsys audio` lists Mudlet's one output, `TAudioMixer`, with `USAGE_MEDIA` or `USAGE_GAME`, both on the
-  media volume), and plays on with the screen off;
+  stream (`dumpsys audio` lists its output with `USAGE_MEDIA` or `USAGE_GAME`, both on the
+  media volume), and plays on with the screen off, through the same output (its `piid`): as the engine's first sound
+  it keeps an output of its own, as Mudlet checks the media backend only then (`TMediaVoice`), not `TAudioMixer`'s; Qt's
+  FFmpeg backend closes that and opens another at each pass of a loop, so the tone (30 s) outlasts the check;
 - that the first `ttsSpeak()` a script makes is spoken and raises `ttsSpeechStarted`, on a device with a text to
   speech engine: Android's engine binds to the TTS service after it is built, and Mudlet patch 0035 keeps what is
   said until then;

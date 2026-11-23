@@ -17,7 +17,7 @@ Tested by HeadlessSessionTest (test_aMainWindowGivenAtStartIsWhatTheFirstScriptR
 test_aScreenSizeGivenAtStartIsWhatTheFirstScriptReads) and by Mudlet/android's native/tests/test_mudlet_engine.py.
 
 Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
-Upstream: not opened yet
+Upstream: Mudlet/Mudlet#12992
 
 diff --git a/docs/headless.md b/docs/headless.md
 index a1ff07e13..d6de93416 100644

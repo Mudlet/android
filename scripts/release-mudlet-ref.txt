@@ -1,4 +1,4 @@
 # The Mudlet/Mudlet commit a stable release builds its engine from (docs/release.md, "The Mudlet it builds"): a full
 # commit SHA, or a release tag Mudlet-x.y.z once a Mudlet release has the headless engine and the patches in
 # scripts/mudlet-patches apply to it. Move it to a commit the PTB has built and tested before tagging a release.
-6d49337bb0a76b6488bb11a810b21cbde1d33f92
+353f9ac18c42490cf72edab38d424895eeed4d5b

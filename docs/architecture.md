@@ -1249,9 +1249,7 @@ first, as a later patch may change the lines an earlier one is checked against. 
 compiles against the checkout's headers too, so a checkout built elsewhere, as CI's libmudlet build from its cache,
 is patched before `build-apk.sh` all the same (`.github/actions/libmudlet`). Today there
 are fourteen: the app's own map and the room search (see "The map behind the text"), downloading the map the game
-offers (see "Downloading the map"), `setGameScreenSize()`, which tells the game the app console's columns and
-rows without resizing the main window that `setMainWindowSize` gave, a label's live region in its
-`labelContent()`, a text box's content (`textBoxContent()`) with the player's typing in it (`setTextBoxText()`),
+offers (see "Downloading the map"),
 a label's accessible value, which Geyser's gauges set and screen readers read as a progress bar's, several
 headless sessions sharing one pool of profiles, each with one profile (`0007-headless-shared-pool.patch`; see
 [`multi-profile.md`](multi-profile.md)), and an MXP frame's tab header, its pages' titles and the one in front
@@ -1348,13 +1346,13 @@ keeps the profiles' passwords in the KeyStore.
 | `scriptWindows()`, read at `profileLoaded`, then at each `scriptWindowsChanged` | `windows`, only the windows that changed and those `removed`; all of them, with `full`, to a UI that attaches. A close sends an empty list |
 | `windowLines()`, the last 300 rows, at `profileLoaded` and at each `windowTextChanged` | `windowText`; any rows on request with `getWindowText` |
 | `Options::mainWindowSize` at the start (carried) and `setMainWindowSize()`, then `mainConsoleGrid()`, `mainConsoleTextRect()` and `mainBorderColor()` at `profileLoaded` and at each `mainConsoleAreaChanged` and `mainBorderColorChanged` | `setMainWindowSize`, kept and given to each profile as it starts, before its first script, and again as it loads; on the control socket, only kept, for the profiles opened after it; `mainArea` |
-| `Options::screenSize` at the start while it has no main window's size, `setScreenSize()` until the profile has the main window's size, then `setGameScreenSize()` (carried), at `profileLoaded`, at the start's end and at each change | `setScreenSize`, kept and given to each profile as it starts and again as it loads; on the control socket, only kept, for the profiles opened after it |
+| `Options::screenSize` at the start while it has no main window's size, `setScreenSize()` until the profile has the main window's size, then `setGameScreenSize()`, at `profileLoaded`, at the start's end and at each change | `setScreenSize`, kept and given to each profile as it starts and again as it loads; on the control socket, only kept, for the profiles opened after it |
 | `setMainWindowDevice()` (carried patch 0047), as a profile begins loading, and while it runs once no profile of the pool is loading; `adaptiveLayout()` with `mainArea`'s other fields and at each `adaptiveLayoutChanged` | `setMainWindowDevice`, kept and given to each profile as it starts; on the control socket, only kept, for the profiles opened after it; `adaptive` in `mainArea` |
 | `setUserWindowGeometry()`, `closeUserWindow()` | `placeUserWindow`, `closeUserWindow` |
 | `submitWindowCommandLine()`; `windowCommandLineTextChanged` | `sendWindowCommandLine`; `windowCommandLine` |
 | `labelContent()` of each label, read with `scriptWindows()` | `label` after the `windows`, for each label whose content changed; every label to a UI that attaches |
 | `followLabelLink()` (carried patch); a web link is the UI's | `followLabelLink`, answered only when refused, and always for a web link |
-| `textBoxContent()` of each text box, read with `scriptWindows()`; `setTextBoxText()` (carried patch) | `textBox` after the `windows`, for each text box whose content changed, and every text box to a UI that attaches; `setTextBoxText`, answered only when refused, by `error` and then the box's `textBox`, each counted in its `typed` |
+| `textBoxContent()` of each text box, read with `scriptWindows()`; `setTextBoxText()` | `textBox` after the `windows`, for each text box whose content changed, and every text box to a UI that attaches; `setTextBoxText`, answered only when refused, by `error` and then the box's `textBox`, each counted in its `typed` |
 | `pointer()` | `pointer`, answered only when refused |
 | `frameTabs` of each MXP frame's script window, read with `scriptWindows()`; `selectFrameTab()` (carried patch) | `tabs`, `tabTitles` and `tabCurrent` in the header frame's `windows` entry; `selectFrameTab`, answered only when refused |
 | none: the engine reads the file itself, with `QImageReader` or as a `QIcon` | `getImage`, answered by `image` as a PNG |

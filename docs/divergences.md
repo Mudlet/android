@@ -9,8 +9,8 @@ difference away removes it.
 ## The size the game is told
 
 The game (telnet NAWS) is told the columns and rows of the app's console in the font and text size the app draws in,
-while scripts see the main window at the size the app gives in pixels (`setGameScreenSize()`, carried in
-`0003-headless-game-screen-size.patch`; `docs/protocol.md`, `setScreenSize`). The desktop tells the game the grid of
+while scripts see the main window at the size the app gives in pixels (`setGameScreenSize()`, from
+Mudlet/Mudlet#12962; `docs/protocol.md`, `setScreenSize`). The desktop tells the game the grid of
 the console Mudlet draws. Telling the game that grid on a phone would make it wrap lines for a console the player does
 not see, while the layout scripts made for their window size would break if that size followed the phone's console.
 

@@ -21,10 +21,10 @@ Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet 
 Upstream: not opened yet
 
 diff --git a/docs/headless.md b/docs/headless.md
-index 81e1a43..b3147f5 100644
+index 98697ad..dadbabd 100644
 --- a/docs/headless.md
 +++ b/docs/headless.md
-@@ -1096,6 +1096,12 @@ there were more, and the levels of that area that have rooms. Both calls are fal
+@@ -1101,6 +1101,12 @@ there were more, and the levels of that area that have rooms. Both calls are fal
  `appMapPointer()` are, and for a map whose last draw showed no area; `followPlayerOnMap()` also with no room
  for the player.
  
@@ -38,10 +38,10 @@ index 81e1a43..b3147f5 100644
  the area's that has rooms, shown about the same point; an area is shown following the player where they are in
  it, else about the room nearest the middle of the level shown, or of its level with the most rooms where it has
 diff --git a/src/TMapPainter.cpp b/src/TMapPainter.cpp
-index 10e6ed9..1adae28 100644
+index 33770af..4fd9de5 100644
 --- a/src/TMapPainter.cpp
 +++ b/src/TMapPainter.cpp
-@@ -2949,7 +2949,11 @@ void TMapPainter::paintFrame(QPainter& painter, PaintResult& result, const std::
+@@ -3066,7 +3066,11 @@ void TMapPainter::paintFrame(QPainter& painter, PaintResult& result, const std::
      if (viewSettled) {
          viewSettled(*this);
      }
@@ -54,7 +54,7 @@ index 10e6ed9..1adae28 100644
  
      if (!mHelpMsg.isEmpty()) {
          painter.setPen(QColor(255, 155, 50));
-@@ -3027,6 +3031,38 @@ void TMapPainter::resolveAreaExitClick(QPainter& painter, const QMap<int, QPoint
+@@ -3144,6 +3148,38 @@ void TMapPainter::resolveAreaExitClick(QPainter& painter, const QMap<int, QPoint
      }
  }
  
@@ -93,7 +93,7 @@ index 10e6ed9..1adae28 100644
  int TMapPainter::paintMapInfo(const QElapsedTimer& renderTimer,
                                QPainter& painter,
                                Host* pHost,
-@@ -3052,8 +3088,7 @@ int TMapPainter::paintMapInfo(const QElapsedTimer& renderTimer,
+@@ -3169,8 +3205,7 @@ int TMapPainter::paintMapInfo(const QElapsedTimer& renderTimer,
          return yOffset;
      }
  
@@ -103,7 +103,7 @@ index 10e6ed9..1adae28 100644
          return yOffset;
      }
  
-@@ -3068,22 +3103,9 @@ int TMapPainter::paintMapInfo(const QElapsedTimer& renderTimer,
+@@ -3185,22 +3220,9 @@ int TMapPainter::paintMapInfo(const QElapsedTimer& renderTimer,
      }
      painter.setFont(font);
  
@@ -130,10 +130,10 @@ index 10e6ed9..1adae28 100644
  
  #ifdef QT_DEBUG
 diff --git a/src/TMapPainter.h b/src/TMapPainter.h
-index 11dc1d2..6c1a434 100644
+index 7722640..08d5748 100644
 --- a/src/TMapPainter.h
 +++ b/src/TMapPainter.h
-@@ -121,6 +121,9 @@ struct TMapPainterView
+@@ -122,6 +122,9 @@ struct TMapPainterView
      bool isCenterViewCall = false;
      // Drawn over the map but under the map info box
      std::function<void(QPainter&)> mPaintBelowInfoBox;
@@ -143,7 +143,7 @@ index 11dc1d2..6c1a434 100644
      // A click at mPHighlight that the drawing of a room resolves: it clears mPick, and mStartSpeedWalk when the
      // room it lands on is one to speedwalk to
      QPoint mPHighlight;
-@@ -149,6 +152,14 @@ public:
+@@ -150,6 +153,14 @@ public:
      void setView(const View& view) { static_cast<View&>(*this) = view; }
      const View& view() const { return *this; }
  
@@ -158,7 +158,7 @@ index 11dc1d2..6c1a434 100644
      // What painting a view resolved, for its caller to act on: no Lua runs in here but the map info contributors'
      struct PaintResult
      {
-@@ -161,10 +172,15 @@ public:
+@@ -162,10 +173,15 @@ public:
          // Rooms outside the area now shown left the selection, so its room list is stale
          bool selectionPruned = false;
          int lodExitIndexRoomsHandedOver = -1;
@@ -175,10 +175,10 @@ index 11dc1d2..6c1a434 100644
      static int paintMapInfo(const QElapsedTimer& renderTimer,
                              QPainter& painter,
 diff --git a/src/TNullMapView.cpp b/src/TNullMapView.cpp
-index 4eb74dd..21b044c 100644
+index 839f6fb..1052ccc 100644
 --- a/src/TNullMapView.cpp
 +++ b/src/TNullMapView.cpp
-@@ -345,6 +345,7 @@ void TNullMapView::render(QPainter& painter, const QSize& size)
+@@ -346,6 +346,7 @@ void TNullMapView::render(QPainter& painter, const QSize& size)
          mView = frame;
      });
      mView = result.view;
@@ -187,7 +187,7 @@ index 4eb74dd..21b044c 100644
      collectDrawnRooms();
      if (result.areaChanged) {
 diff --git a/src/TNullMapView.h b/src/TNullMapView.h
-index 08b2b2c..7443ac2 100644
+index 5b6acf3..aef0f27 100644
 --- a/src/TNullMapView.h
 +++ b/src/TNullMapView.h
 @@ -47,6 +47,11 @@ public:
@@ -202,7 +202,7 @@ index 08b2b2c..7443ac2 100644
      bool rendered() const { return !mView.mSize.isEmpty(); }
      QSize renderedSize() const { return mView.mSize; }
      // Whether the last render() laid out an area's rooms, which a press and a wheel turn act on
-@@ -159,6 +164,7 @@ private:
+@@ -160,6 +165,7 @@ private:
      int mFollowedRoomId = 0;
      int mFollowedAreaId = 0;
      bool mLaidOut = false;
@@ -211,10 +211,10 @@ index 08b2b2c..7443ac2 100644
      // follows the player
      bool mFollowing = true;
 diff --git a/src/headless/THeadlessSession.h b/src/headless/THeadlessSession.h
-index 879d151..0459f7e 100644
+index 7ff4fe5..1492803 100644
 --- a/src/headless/THeadlessSession.h
 +++ b/src/headless/THeadlessSession.h
-@@ -746,6 +746,28 @@ public:
+@@ -751,6 +751,28 @@ public:
      };
      // None before that map has drawn an area, or with no such map
      std::optional<MapView> mapView(MapTarget map) const;
@@ -243,14 +243,14 @@ index 879d151..0459f7e 100644
      // A room findRooms() found
      struct RoomMatch
      {
-@@ -1565,6 +1587,7 @@ private:
+@@ -1569,6 +1591,7 @@ private:
      QString mProfileName;
      // The app's map, which the profile holds
      QPointer<TNullMapView> mpAppMap;
 +    bool mMapInfoPainted = true;
      QString mErrorString;
-     bool mShuttingDown = false;
-     bool mLoadFailed = false;
+     // A local: link that followWindowLink() last followed without an item, which opened its menu and changed its
+     // selection: its console's notifier, as one made again under the name starts with no menu open, and the issue
 diff --git a/src/headless/THeadlessSessionMap.cpp b/src/headless/THeadlessSessionMap.cpp
 index caa8d6e..3a30bd6 100644
 --- a/src/headless/THeadlessSessionMap.cpp

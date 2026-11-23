@@ -35,7 +35,7 @@ these calls' signals.
 | `bool pointer(const QString& window, const WindowPointerEvent& event)` | 809 | The app's pointer on a window, in its pixels: label callbacks with the GUI's event table, click-through, `sysWindowMousePressEvent`/`ReleaseEvent`, the wheel scrolling a console, Qt's implicit grab |
 | `struct WindowPointerEvent` | 772 | `type` (`press`, `release`, `doubleClick`, `move`, `enter`, `leave`, `wheel`), `position` (`QPointF`), `button`, `buttons`, `modifiers`, `angleDelta` |
 | `windowCommandLineText()`, `setWindowCommandLineText()`, `submitWindowCommandLine()`; signal `windowCommandLineTextChanged(profile, commandLines)` | 374-382, 1005 | Command lines from `createCommandLine()` and a console's `enableCommandLine()` |
-| `bool setMainWindowSize(const QSize& pixels)`, `QSize mainConsoleGrid() const`, `QRect mainConsoleTextRect() const`; signal `mainConsoleAreaChanged(profile, grid, textRect)` | 547-551, 1034 | The main window's area in pixels, which the borders (`setBorderTop()` and the rest) take from; the console's grid and where its text goes. `setScreenSize()` (columns, rows) is the other way to size it; the later of the two holds. Once the profile has the main window's size, the engine gives the console's columns and rows to the carried `setGameScreenSize()` instead, which tells the game them and resizes nothing |
+| `bool setMainWindowSize(const QSize& pixels)`, `QSize mainConsoleGrid() const`, `QRect mainConsoleTextRect() const`; signal `mainConsoleAreaChanged(profile, grid, textRect)` | 547-551, 1034 | The main window's area in pixels, which the borders (`setBorderTop()` and the rest) take from; the console's grid and where its text goes. `setScreenSize()` (columns, rows) is the other way to size it; the later of the two holds. Once the profile has the main window's size, the engine gives the console's columns and rows to `setGameScreenSize()` instead, which tells the game them and resizes nothing |
 | `QColor mainBorderColor() const`; signal `mainBorderColorChanged(profile, color)` (carried) | - | The colour `setBorderColor()` gives the borders around the console, which the desktop paints its main frame in: black until a script sets one |
 
 A Geyser gauge, button or container is not a window: a gauge is its `<name>_back`, `<name>_front` and `<name>_text`
@@ -137,7 +137,7 @@ without it).
 
 `setMainWindowSize` and version 4's `setScreenSize` both size the main window in upstream's API, which keeps the
 later. The app sends both, and the engine keeps them apart: once a profile has the size `setMainWindowSize` gave, the
-console's columns and rows go to `setGameScreenSize()`, carried in `scripts/mudlet-patches/` until Mudlet has it,
+console's columns and rows go to `setGameScreenSize()` (Mudlet/Mudlet#12962),
 which tells the game (NAWS) that size and leaves the main window's alone. So, in whichever order the two messages
 came, scripts read the main window's size the windows UI measured (`getMainWindowSize()`, and the borders and windows
 placed by it), and the game is told the console the player sees, which in the stacked layout is not Mudlet's grid
@@ -652,10 +652,7 @@ which labels do not have yet; the app reads that text as the gauge's state as be
 > a label's live region". PR text: a frontend that draws labels itself needs it to announce a label's changes as the
 > desktop's screen reader support does.
 
-Interim: replaced. The app carries this as `scripts/mudlet-patches/0004-headless-label-live-region.patch` until
-Mudlet merges it; the engine sends it as the `label`'s `liveRegion` (`protocol.md`, "Labels").
-Mudlet/Mudlet#12937 made `TLabelModel::setLiveRegion()` tell the view of a change, so the patch carries only
-`LabelContent`'s field, its test, its line in `docs/headless.md` and a comment.
+Done: Mudlet/Mudlet#12963 has it; the engine sends it as the `label`'s `liveRegion` (`protocol.md`, "Labels").
 
 ### 4. Text boxes
 
@@ -668,9 +665,8 @@ Mudlet/Mudlet#12937 made `TLabelModel::setLiveRegion()` tell the view of a chang
 > window calls. PR title: "Headless: text boxes' content". PR text: `createTextEdit()` boxes are listed by
 > `scriptWindows()` but an app cannot draw or edit them.
 
-Interim: replaced. The app carries this as the `headless-text-boxes` patch in `scripts/mudlet-patches/` until Mudlet
-merges it; the engine sends it as the `textBox` frame and takes the player's typing as `setTextBoxText`
-(`protocol.md`, "Text boxes").
+Done: Mudlet/Mudlet#12964 has it; the engine sends it as the `textBox` frame and takes the player's typing as
+`setTextBoxText` (`protocol.md`, "Text boxes").
 
 ### 5. MXP frame tabs
 

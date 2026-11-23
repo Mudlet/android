@@ -13,10 +13,10 @@ Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet 
 Upstream: not opened yet
 
 diff --git a/src/Host.cpp b/src/Host.cpp
-index 54ff520..bd61174 100644
+index bcc256b..2003c7a 100644
 --- a/src/Host.cpp
 +++ b/src/Host.cpp
-@@ -3096,7 +3096,7 @@ bool Host::hasConsoleView() const
+@@ -3111,7 +3111,7 @@ bool Host::hasConsoleView() const
  
  bool Host::mapOpen() const
  {
@@ -26,7 +26,7 @@ index 54ff520..bd61174 100644
  
  TMapViewFrontend* Host::mapViewFrontend() const
 diff --git a/src/Host.h b/src/Host.h
-index 994ffec..f7a224e 100644
+index 7c8d66f..7565cd6 100644
 --- a/src/Host.h
 +++ b/src/Host.h
 @@ -399,7 +399,8 @@ public:
@@ -40,10 +40,10 @@ index 994ffec..f7a224e 100644
      // The mapper whose 2D map scripts ask about; with no console view, the one the null view has recorded
      TMapViewFrontend* mapViewFrontend() const;
 diff --git a/src/TNullConsoleFrontend.h b/src/TNullConsoleFrontend.h
-index 069eb72..1d64586 100644
+index fedc322..249c2c9 100644
 --- a/src/TNullConsoleFrontend.h
 +++ b/src/TNullConsoleFrontend.h
-@@ -392,6 +392,9 @@ public:
+@@ -394,6 +394,9 @@ public:
      TMapViewFrontend* mapView() const { return mpEmbeddedMapper ? mpEmbeddedMapper.data() : mMapWidget ? mMapWidget->pView.get() : nullptr; }
      // Called by the map view where the GUI asks T2DMap for an update(), for an app that draws the map
      std::function<void()> mMapRepaintRequested;
@@ -54,7 +54,7 @@ index 069eb72..1d64586 100644
      // TMainConsole shows the dlgMapper drawing the map after a load; a closed map widget's dock keeps it hidden
      void showLoadedMap() override { showEmbeddedMapper(); }
 diff --git a/src/TNullMapView.cpp b/src/TNullMapView.cpp
-index 8f6fd9d..38a4aa2 100644
+index 9ac6110..2076576 100644
 --- a/src/TNullMapView.cpp
 +++ b/src/TNullMapView.cpp
 @@ -37,9 +37,10 @@
@@ -79,7 +79,7 @@ index 8f6fd9d..38a4aa2 100644
      TEvent areaViewedChangedEvent{};
      areaViewedChangedEvent.mArgumentList.append(qsl("sysMapAreaChanged"));
      areaViewedChangedEvent.mArgumentTypeList.append(ARGUMENT_TYPE_STRING);
-@@ -225,6 +229,36 @@ void TNullMapView::render(QPainter& painter, const QSize& size)
+@@ -226,6 +230,36 @@ void TNullMapView::render(QPainter& painter, const QSize& size)
      }
  }
  
@@ -116,7 +116,7 @@ index 8f6fd9d..38a4aa2 100644
  bool TNullMapView::showsArea() const
  {
      return mLaidOut && mpHost->mpMap->mpRoomDB->getArea(mView.mAreaID);
-@@ -265,7 +299,9 @@ void TNullMapView::press(const QPoint& position, const Qt::MouseButton button, c
+@@ -266,7 +300,9 @@ void TNullMapView::press(const QPoint& position, const Qt::MouseButton button, c
                      mpHost->mpMap.data(), mView.mMultiSelectionSet, multiSelection, mView.mMultiSelectionHighlightRoomId, TMapPainter::roomsAtPoint(mView, *pArea, position), modifiers);
          }
      }
@@ -128,7 +128,7 @@ index 8f6fd9d..38a4aa2 100644
  }
  
 diff --git a/src/TNullMapView.h b/src/TNullMapView.h
-index bcd59b6..c4b83b9 100644
+index 53de5d4..4472f40 100644
 --- a/src/TNullMapView.h
 +++ b/src/TNullMapView.h
 @@ -38,7 +38,9 @@ class QSize;
@@ -152,7 +152,7 @@ index bcd59b6..c4b83b9 100644
      // As T2DMap::slot_toggleMapViewOnly(), which raises mapModeChangeEvent
      void setViewOnly(bool viewOnly);
      // As T2DMap::init() switches a new map to editing where the profile was saved so, which raises the event too:
-@@ -96,6 +101,7 @@ private:
+@@ -97,6 +102,7 @@ private:
      int centredRoomId() const { return mRecentre ? mFollowedRoomId : mView.mRoomID; }
  
      Host* mpHost = nullptr;
@@ -161,7 +161,7 @@ index bcd59b6..c4b83b9 100644
      bool mPaintScheduled = false;
      // What T2DMap keeps between frames: the view last drawn, as the pointer and the selection have changed it since,
 diff --git a/src/headless/THeadlessSession.h b/src/headless/THeadlessSession.h
-index b7f8711..701da71 100644
+index fc9664c..adc83bc 100644
 --- a/src/headless/THeadlessSession.h
 +++ b/src/headless/THeadlessSession.h
 @@ -52,6 +52,7 @@ class QTimer;
@@ -172,7 +172,7 @@ index b7f8711..701da71 100644
  class QKeyEvent;
  class QMimeData;
  class QPoint;
-@@ -619,6 +620,39 @@ public:
+@@ -635,6 +636,39 @@ public:
      // script opens in a profile saved as editing raises mapModeChangeEvent with "editing" before it is there, as the
      // GUI's does, with no mapViewOnlyChanged.
      bool setMapViewOnly(bool viewOnly);
@@ -212,7 +212,7 @@ index b7f8711..701da71 100644
      // A window the profile's scripts made, or the console of an MXP frame the game opened, as the GUI would show
      // it, for the app to draw: Mudlet draws none of them. A Geyser gauge, button or container is the labels and
      // windows it is made of. An MXP frame is a mini console in all but who made it: the same text, links, scroll
-@@ -1159,9 +1193,15 @@ private:
+@@ -1232,9 +1266,15 @@ private:
      // pointer() on the mapper's window
      bool pointMapper(const ScriptWindow& mapper, const WindowPointerEvent& event);
      void noteMapPointer(const QPointF& position);
@@ -226,8 +226,8 @@ index b7f8711..701da71 100644
 +    // The app's map, which the profile holds
 +    QPointer<TNullMapView> mpAppMap;
      QString mErrorString;
-     bool mShuttingDown = false;
-     bool mLoadFailed = false;
+     // A local: link that followWindowLink() last followed without an item, which opened its menu and changed its
+     // selection: its console's notifier, as one made again under the name starts with no menu open, and the issue
 diff --git a/src/headless/THeadlessSessionMap.cpp b/src/headless/THeadlessSessionMap.cpp
 index 4afec87..a713389 100644
 --- a/src/headless/THeadlessSessionMap.cpp

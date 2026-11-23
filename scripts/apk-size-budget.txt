@@ -5,10 +5,10 @@ headroom-percent 5
 lower-below-percent 10
 
 # name                               total        libraries    dex
-# the debug APKs with libmudlet, built from Mudlet's development (libmudlet.yml)
-libmudlet-arm64-v8a                  111066584    76452160     34335120
-libmudlet-x86_64                     116574089    80035832     34335120
-# the PTB's release APKs and its AAB, minified, with libmudlet (ptb.yml)
+# the debug APKs, built from Mudlet's development (libmudlet.yml)
+debug-arm64-v8a                      111066584    76452160     34335120
+debug-x86_64                         116574089    80035832     34335120
+# the PTB's release APKs and its AAB, minified (ptb.yml)
 ptb-arm64-v8a                        82627241     76717360     4346408
 ptb-x86_64                           85952640     80035832     4346408
 ptb-aab                              115203629    72574991     2130872

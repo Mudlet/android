@@ -47,7 +47,7 @@ The build files default to `~/Programs/Qt/6.12.0` and `~/Android/Sdk`, and build
 
 ### The APK
 
-The one APK to install is the one with libmudlet as its engine. Mudlet installs nothing to link against, so first
+There is one APK to install. Mudlet installs nothing to link against, so first
 build it from a checkout of Mudlet's `development`:
 
 ```sh
@@ -98,7 +98,7 @@ QT_QPA_PLATFORM=offscreen python3 native/tests/test_mudlet_restore.py native/bui
 # :protocol's tests, with the app's Kotlin client against that engine
 QT_QPA_PLATFORM=offscreen native/tests/run_jvm_client_test.sh -PqtRoot=$QT_ROOT
 
-# The debug APK with libmudlet, built with ANDROID_ABI=x86_64, on a running emulator (adb on the PATH)
+# The debug APK, built with ANDROID_ABI=x86_64, on a running emulator (adb on the PATH)
 python3 native/tests/android_smoke.py --apk app/build/outputs/apk/debug/app-debug.apk --out smoke-test \
     --symbols native/build-android-x86_64-mudlet/enginehost
 
@@ -166,7 +166,7 @@ The workflows it calls:
     and that the APK, its libraries and its dex keep to their size budget
     ([`scripts/check-apk-size.sh`](scripts/check-apk-size.sh), CONTRIBUTING.md's "APK size budget"); and that the
     engine carries Mudlet's Lua, its Lua C modules and QtKeychain's KeyStore backend.
-  - It uploads the APK as `mudlet-libmudlet-debug-apk`, the one APK CI makes to install on a phone, and gives its
+  - It uploads the APK as `mudlet-debug-apk`, the one APK CI makes to install on a phone, and gives its
     size, its size on the device, and OpenSSL's share, in the job summary.
   - **desktop-engine** builds libmudlet for the host with the same options
     ([`scripts/build-libmudlet-desktop.sh`](scripts/build-libmudlet-desktop.sh)) and runs the real engine against the

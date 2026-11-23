@@ -36,10 +36,10 @@ dependency scripts use every core unless `JOBS` says otherwise.
 
 ## Build
 
-There is one APK to install: the one with libmudlet as its engine, which CI uploads as `mudlet-libmudlet-debug-apk`.
+There is one APK to install, which CI uploads as `mudlet-debug-apk`.
 
 ```sh
-# The debug APK with libmudlet, from a checkout of Mudlet's development branch: app/build/outputs/apk/debug/app-debug.apk
+# The debug APK, from a checkout of Mudlet's development branch: app/build/outputs/apk/debug/app-debug.apk
 git clone --depth 1 --branch development https://github.com/Mudlet/Mudlet ../mudlet
 scripts/build-mudlet-deps.sh deps/prefix
 scripts/build-libmudlet.sh ../mudlet build deps/prefix
@@ -106,10 +106,10 @@ scripts/check-licences.py --mudlet-source ../mudlet
 # size budget (below)
 scripts/check-apk.sh                       # after scripts/build-apk.sh
 EXTRACTED=true scripts/check-apk.sh        # after scripts/build-apk.sh -PextractNativeLibs=true
-SIZE_BUDGET=libmudlet-arm64-v8a scripts/check-apk.sh   # after the libmudlet build
+SIZE_BUDGET=debug-arm64-v8a scripts/check-apk.sh   # after scripts/build-apk.sh
 scripts/check-apk-size.sh ptb-aab app/build/outputs/bundle/release/app-release.aab   # after scripts/build-release.sh
 
-# The x86_64 APK with libmudlet on a running emulator (CI's emulator job)
+# The x86_64 APK on a running emulator (CI's emulator job)
 python3 native/tests/android_smoke.py --apk app/build/outputs/apk/debug/app-debug.apk --out smoke-test \
     --symbols native/build-android-x86_64-mudlet/enginehost
 # The minified release, as the PTB workflow tests it: its smoke build, after scripts/build-release.sh

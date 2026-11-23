@@ -1,7 +1,7 @@
 name: libmudlet for Android
 
 # Cross-compiles Mudlet's core (mudlet_core, mudlet_headless and the mudlet-headless runner) for arm64-v8a, then
-# builds the app's APK with libmudlet as its engine, the one APK to install, with the app's JVM tests and Android lint;
+# builds the app's APK, the one to install, with the app's JVM tests and Android lint;
 # before that, :suggest's tests, which need no Mudlet. A second job builds libmudlet for the host and runs the engine
 # against the fake game server through the socket protocol, from Python and from :protocol's Kotlin client.
 # The emulator jobs build it all for x86_64 once, then run the APK on an emulator at the app's minSdk (28) and at the
@@ -24,7 +24,7 @@ on:
         type: boolean
         default: true
       android:
-        description: The arm64-v8a APK with libmudlet
+        description: The arm64-v8a APK
         type: boolean
         default: true
       desktop-engine:
@@ -97,7 +97,7 @@ jobs:
         with:
           ndk-version: ${{ steps.toolchain.outputs.ndk-version }}
 
-      - name: Build the APK with libmudlet as the engine
+      - name: Build the APK
         run: LIBMUDLET_BUILD_DIR="$GITHUB_WORKSPACE/build" scripts/build-apk.sh
 
       # the About screen's licence data (app/src/test), after the build staged :engine-service's resources
@@ -124,8 +124,8 @@ jobs:
         with:
           apk-dir: app/build/outputs/apk/debug
           engine: libengine
-          title: APK with libmudlet
-          size-budget: libmudlet-arm64-v8a
+          title: APK
+          size-budget: debug-arm64-v8a
           build-tools-dir: ${{ steps.toolchain.outputs.build-tools-dir }}
 
       # What the runner is checked for in build-libmudlet.sh, now in the engine an app ships
@@ -147,7 +147,7 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
-          name: mudlet-libmudlet-debug-apk
+          name: mudlet-debug-apk
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
@@ -281,7 +281,7 @@ jobs:
       - id: done
         run: echo "done=true" >> "$GITHUB_OUTPUT"
 
-  # The APK with libmudlet and the two test APKs, built for x86_64 once for the emulator jobs below
+  # The APK and the two test APKs, built for x86_64 once for the emulator jobs below
   emulator-build:
     if: inputs.emulator
     runs-on: ubuntu-24.04
@@ -321,7 +321,7 @@ jobs:
           abi: x86_64
           ndk-version: ${{ steps.toolchain.outputs.ndk-version }}
 
-      - name: Build the APK with libmudlet as the engine, and the test APKs
+      - name: Build the APK and the test APKs
         run: >-
           LIBMUDLET_BUILD_DIR="$GITHUB_WORKSPACE/build" scripts/build-apk.sh
           :app:assembleDebugAndroidTest :engine-service:assembleDebugAndroidTest
@@ -332,8 +332,8 @@ jobs:
           apk-dir: app/build/outputs/apk/debug
           engine: libengine
           abi: x86_64
-          title: APK with libmudlet (x86_64, for the emulator)
-          size-budget: libmudlet-x86_64
+          title: APK (x86_64, for the emulator)
+          size-budget: debug-x86_64
           build-tools-dir: ${{ steps.toolchain.outputs.build-tools-dir }}
 
       # The unstripped engine goes too, for ndk-stack to name the frames of a crash on the emulator

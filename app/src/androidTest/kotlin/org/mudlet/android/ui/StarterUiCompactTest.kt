@@ -74,7 +74,7 @@ class StarterUiCompactTest {
         // Automatic draws the starter UI fitted, as it lays out for any shape
         compose.runOnIdle { ScriptWindowsClient.layoutMode = LayoutMode.AUTO }
         // With no main area yet, the console fills the game screen's area
-        starterUi = StarterUiCompact.show(session, compose.onNode(console).fetchSemanticsNode().boundsInRoot, compose.density.density)
+        starterUi = StarterUiCompact.show(session, compose.onNode(console).fetchSemanticsNode().boundsInRoot, compose.density.density, mutation = "strips-as-buttons")
         waitFor(chatButton("Channels chat"))
     }
 

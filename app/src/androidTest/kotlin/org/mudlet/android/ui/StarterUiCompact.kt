@@ -10,7 +10,7 @@ import org.json.JSONObject
  * strips and what is on them are labels, a gauge three; Geyser's containers send no window. Each tab is a hidden mini
  * console over the console's text.
  */
-class StarterUiCompact private constructor(private val w: Int, private val h: Int) {
+class StarterUiCompact private constructor(private val w: Int, private val h: Int, private val mutation: String) {
     private val textH = h - BAR_H - ROW_H
 
     fun pane(key: String, open: Boolean): JSONObject = FakeEngine.window("BaseUI_chat_$key", y = BAR_H, w = w, h = textH, columns = w / CHAR_W, rows = textH / CHAR_H).put("visible", open).put("shown", open)
@@ -18,8 +18,10 @@ class StarterUiCompact private constructor(private val w: Int, private val h: In
     private fun draw(session: FakeEngine.Session) {
         session.mainArea(w, h, w / CHAR_W, textH / CHAR_H, 0, BAR_H, w, textH, adaptive = true)
         session.windows(windows(), full = true)
-        session.label("BaseUI_vitals_baradjLabel", styleSheet = STRIP_STYLE)
-        session.label("BaseUI_chat_buttonsadjLabel", styleSheet = STRIP_STYLE)
+        // BITE: without setAccessibleRole("text"), a strip with Adjustable's click callback is a button
+        val stripsAsButtons = mutation == "strips-as-buttons"
+        session.label("BaseUI_vitals_baradjLabel", accessibleButton = stripsAsButtons, styleSheet = STRIP_STYLE)
+        session.label("BaseUI_chat_buttonsadjLabel", accessibleButton = stripsAsButtons, styleSheet = STRIP_STYLE)
         for ((key, name) in GAUGES) {
             session.label("BaseUI_${key}_gauge_back", accessibleName = name, styleSheet = "background-color: #303030")
             session.label("BaseUI_${key}_gauge_front", styleSheet = "background-color: #a03030")
@@ -34,10 +36,12 @@ class StarterUiCompact private constructor(private val w: Int, private val h: In
         val gaugeW = (w - 2 * BAR_PADDING - BAR_GAP) / 2
         val gauges = GAUGES.flatMapIndexed { i, (key, _) ->
             val x = BAR_PADDING + i * (gaugeW + BAR_GAP)
+            // BITE: the bars drawn over the bottom of the text instead of above it
+            val y = if (mutation == "bars-below-text") h - ROW_H - GAUGE_H - BAR_PADDING else BAR_PADDING
             listOf(
-                FakeEngine.window("BaseUI_${key}_gauge_back", kind = "label", x = x, y = BAR_PADDING, w = gaugeW, h = GAUGE_H),
-                FakeEngine.window("BaseUI_${key}_gauge_front", kind = "label", x = x, y = BAR_PADDING, w = gaugeW / 2, h = GAUGE_H),
-                FakeEngine.window("BaseUI_${key}_gauge_text", kind = "label", x = x, y = BAR_PADDING, w = gaugeW, h = GAUGE_H),
+                FakeEngine.window("BaseUI_${key}_gauge_back", kind = "label", x = x, y = y, w = gaugeW, h = GAUGE_H),
+                FakeEngine.window("BaseUI_${key}_gauge_front", kind = "label", x = x, y = y, w = gaugeW / 2, h = GAUGE_H),
+                FakeEngine.window("BaseUI_${key}_gauge_text", kind = "label", x = x, y = y, w = gaugeW, h = GAUGE_H),
             )
         }
         val buttonW = (w - 2 * ROW_PADDING - (TABS.size - 1) * BUTTON_GAP) / TABS.size
@@ -73,7 +77,7 @@ class StarterUiCompact private constructor(private val w: Int, private val h: In
          * every tab closed and Tells with 2 unread, each gauge at half. The main window is the area's whole dp, rounded
          * down, so the fitted layout draws it no smaller than in dp.
          */
-        fun show(session: FakeEngine.Session, area: Rect, density: Float): StarterUiCompact = StarterUiCompact((area.width / density).toInt(), (area.height / density).toInt()).also { it.draw(session) }
+        fun show(session: FakeEngine.Session, area: Rect, density: Float, mutation: String = ""): StarterUiCompact = StarterUiCompact((area.width / density).toInt(), (area.height / density).toInt(), mutation).also { it.draw(session) }
 
         fun paintButton(session: FakeEngine.Session, key: String, text: String, accessibleName: String) = session.label(button(key), text = text, accessibleName = accessibleName, accessibleButton = true, styleSheet = BUTTON_STYLE)
 

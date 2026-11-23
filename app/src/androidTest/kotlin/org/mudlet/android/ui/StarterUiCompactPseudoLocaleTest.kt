@@ -61,7 +61,7 @@ class StarterUiCompactPseudoLocaleTest(private val locale: String) {
         waitFor(hasText("the main console"))
         compose.runOnIdle { ScriptWindowsClient.layoutMode = LayoutMode.AUTO }
         // With no main area yet, the console fills the game screen's area
-        StarterUiCompact.show(session, compose.onNode(console).fetchSemanticsNode().boundsInRoot, compose.density.density)
+        StarterUiCompact.show(session, compose.onNode(console).fetchSemanticsNode().boundsInRoot, compose.density.density, mutation = "bars-below-text")
         waitFor(hasContentDescription("Channels chat") and hasClickAction())
     }
 

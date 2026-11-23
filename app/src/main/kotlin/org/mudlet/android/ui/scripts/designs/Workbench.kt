@@ -231,6 +231,7 @@ internal fun WorkbenchLibrary(
                     }
                 }
             }
+            item(key = "design") { EditorDesignRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) }
         }
     }
 }

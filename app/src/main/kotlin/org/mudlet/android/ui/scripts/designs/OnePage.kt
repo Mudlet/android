@@ -197,7 +197,8 @@ internal fun pageEntries(lists: Map<ScriptItemKind, List<ScriptItemNode>?>, kind
  * name their folder, narrowed by a chip for each kind and a search. A tap unfolds an item where it is, with its fields
  * and its Lua; folding it, unfolding another or leaving the page applies what was changed, with Undo offered, so there
  * is no Apply button. What is wrong with the Lua so applied shows on its row, and on it unfolded with a button that goes
- * to its line. [start] is unfolded as the page comes. A rotation, which [changingConfigurations] tells, applies nothing.
+ * to its line. [start] is unfolded as the page comes, and [onUnfold] told of each item unfolded, or null once folded. A
+ * rotation, which [changingConfigurations] tells, applies nothing.
  * The other parameters are [org.mudlet.android.ui.scripts.ScriptLibraryScreen]'s.
  */
 @Composable
@@ -211,6 +212,7 @@ internal fun OnePage(
     onVariables: (() -> Unit)?,
     changingConfigurations: () -> Boolean,
     start: ScriptItemKey? = null,
+    onUnfold: (ScriptItemKey?) -> Unit = {},
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     var filter by rememberSaveable { mutableStateOf("") }
@@ -225,6 +227,7 @@ internal fun OnePage(
     val collapsed = closed.split(' ').mapNotNull(ScriptItemKey::decode).toSet()
     var unfolded by rememberSaveable { mutableStateOf(start?.encode()) }
     val open = unfolded?.let(ScriptItemKey::decode)
+    LaunchedEffect(open) { onUnfold(open) }
     var adding by remember { mutableStateOf(false) }
     SearchAsTyped(scripts, query, options)
     val lists = visibleLists(scripts)
@@ -365,6 +368,7 @@ internal fun OnePage(
                     }
                 }
                 if (query.isBlank() && kinds.any { lists[it] == null }) item(key = "loading") { Hint(stringResource(R.string.scripts_loading)) }
+                item(key = "design") { EditorDesignRow(itemWidth) }
             }
             if (lua?.focused == true) {
                 Surface(color = MaterialTheme.colorScheme.surfaceContainer) { LuaKeys(lua) }

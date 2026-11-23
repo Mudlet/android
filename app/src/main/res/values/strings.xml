@@ -930,7 +930,8 @@
     <!-- Under "Undo the game's own wrapping", what the switch does -->
     <string name="settings_undo_wrap_hint">For games that wrap their lines and cannot be told not to: the lines are joined again, so triggers see them whole and the text fits your screen.</string>
     <!-- A short label under the name of a setting still being tried out, such as "Undo the game's own wrapping": it
-         may join or leave split the odd line it should not, and may change -->
+         may join or leave split the odd line it should not, and may change. Also under the script editor's own row
+         for "Script editor design" -->
     <string name="settings_experimental">Experimental</string>
     <!-- Words a player might search the settings for to find "Undo the game's own wrapping" and the width it is
          undone at, besides the words of their names and descriptions, separated by commas. Use the words a player of
@@ -1074,9 +1075,10 @@
          and description, separated by commas. Use the words a player of your language would search for. -->
     <string name="settings_server_encoding_keywords">charset, character set, code page, codepage, accents, garbled, question marks, language</string>
     <!-- Under "Server data encoding", what the player does by tapping it: opens the list of encodings to pick one.
-         Spoken by TalkBack as "double tap to choose" -->
+         Also on the script editor's "Script editor design" row, which opens the list of designs. Spoken by TalkBack
+         as "double tap to choose" -->
     <string name="settings_choose">choose</string>
-    <!-- Closes the list of the server data encodings without changing the game's -->
+    <!-- Closes the list of the server data encodings, or of the script editor's designs, without changing either -->
     <string name="settings_choice_cancel">Cancel</string>
     <!-- One of the server data encodings, as desktop Mudlet names it. Keep the English intact, so a player who has picked
          a language they cannot read can change back, e.g. ISO 8859-2 (Центральная Европа/Central European) -->
@@ -1525,7 +1527,8 @@
     <string name="settings_experimental_page_summary">Designs still being tried out</string>
     <!-- A setting on the "Experimental" page: which of four designs the script editor (where triggers, aliases,
          scripts, timers, keys and buttons are made and changed) has. Each design shows the same items and saves them
-         the same way, so a player can switch at any time -->
+         the same way, so a player can switch at any time. Also the row at the foot of the script editor's list of
+         items, and the title of the list of designs it opens -->
     <string name="settings_script_editor_design">Script editor design</string>
     <!-- Words a player might search the settings for to find "Script editor design", besides the words of its name
          and its choices, separated by commas. Use the words a player of your language would search for. -->

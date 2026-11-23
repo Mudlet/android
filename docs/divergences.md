@@ -145,6 +145,15 @@ profile that loads is given the app's values, over its own, so a script's `getCo
 phone they belong with the player and the device, as TalkBack itself does: kept per profile, every new profile would
 start without the player's choice.
 
+## Where Mudlet's MXP message says the switch is
+
+When a game sends MXP that was never agreed, Mudlet turns "Force MXP processing on" on itself and prints that it can be
+turned off in "Settings > Special Options", the desktop's tab (`cTelnet::autoEnableMXPProcessor`). The app has no such
+tab: the switch is "Read MXP the game does not offer" on a game's Advanced page, and searching the settings for
+"Special Options" finds it (`settings_force_mxp_on_keywords`). The message is left as the desktop prints it, as it is a
+line of the main console that scripts read; giving the engine the app's place for one message would need a frontend
+hook upstream.
+
 ## The changelog
 
 About's "Show changelog" (`ui/about/ChangelogScreen.kt`) lists the app's own release notes

@@ -1306,8 +1306,10 @@
          turned it on, MXP is read until the game is next connected. Keep "MXP". -->
     <string name="settings_force_mxp_on_hint">For games that send MXP links and menus without MXP being agreed first; Mudlet turns it on itself the first time a game does. While it is on, MXP is read even with MXP off on the Connection page: to have no MXP at all, turn both off. Turning it off may only take effect when you reconnect.</string>
     <!-- Words a player might search the settings for to find "Read MXP the game does not offer", besides the words of its name and
-         description, separated by commas. Use the words a player of your language would search for. -->
-    <string name="settings_force_mxp_on_keywords">MXP, links, menus, markup</string>
+         description, separated by commas. Use the words a player of your language would search for. "Special Options"
+         is the desktop's tab for this switch, which Mudlet's message on turning it on itself names: use the name
+         Mudlet's own translation gives that tab. -->
+    <string name="settings_force_mxp_on_keywords">MXP, links, menus, markup, Special Options</string>
     <!-- A switch on a game's Advanced page: let Mudlet prepare the variables a trigger's script reads (matches,
          multimatches, line) only when the script reads them, which makes triggers faster -->
     <string name="settings_lazy_trigger_variables">Prepare trigger variables as scripts read them</string>

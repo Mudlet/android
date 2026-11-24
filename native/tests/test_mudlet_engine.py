@@ -4126,10 +4126,10 @@ def map_download():
     a user name, a password and a token; downloadMap loading it, a Mudlet binary map or an XML one, in place of the
     profile's, with progress at most once a percent, no cancel once the map has arrived, sysMapDownloadEvent, the rooms
     then found and the app's map drawn; a UI that attaches told of it; a download that fails, with Mudlet's reason, or is
-    cancelled, leaving the map as it was; the refusals; a script's map export and import, whose progress is not the
-    download's, even an export's read with downloadMap; and the user name, password and token in no frame or log, nor in
-    the reason a failure gives when the server's own words repeat them, however the password is encoded, and with a
-    space in the user name."""
+    cancelled, leaving the map as it was; a map offered from anywhere but the web, not offered; the refusals; a script's
+    map export and import, whose progress is not the download's, even an export's read with downloadMap; and the user
+    name, password and token in no frame or log, nor in the reason a failure gives when the server's own words repeat
+    them, however the password is encoded, and with a space in the user name."""
     # A password that reads differently percent-encoded, as the URL holds it
     user, password, encoded = "mapuser", "p@ss:w/rd%never", "p%40ss%3Aw%2Frd%25never"
     token = "sekrit-token"
@@ -4141,7 +4141,8 @@ def map_download():
     server.daemon_threads = True
     threading.Thread(target=server.serve_forever, daemon=True).start()
     http_port = server.server_address[1]
-    fake_telnet.MAP_URL_BASE = f"http://{user}:{encoded}@127.0.0.1:{http_port}"
+    # The scheme in capitals, which Mudlet reads as any other web address
+    fake_telnet.MAP_URL_BASE = f"HTTP://{user}:{encoded}@127.0.0.1:{http_port}"
     # A version far past any Mudlet's: refused before the profile's map is touched
     MapServer.FILES["/garbage.dat"] = b"\x7f\xff\xff\xff" + b"not a map " * 100
     MapServer.FILES["/map.xml"] = (b'<?xml version="1.0" encoding="UTF-8"?>\n<map><areas><area id="5" name="Xml Area"/></areas>'
@@ -4201,6 +4202,29 @@ def map_download():
     check(m.get("rooms") == [], f"and its rooms are gone from the profile's map: {m}")
 
     seen_or_next(c, lambda m: m["t"] in ("line", "tail") and "Red bold" in m["text"], seen, 0, timeout=15)
+    # The map just saved, offered from anywhere but the web: not offered, and the console says so without the address
+    web_base = fake_telnet.MAP_URL_BASE
+    for url_base, what in ((f"file://{served}", "a file: URL"), (served, "a bare path"), ("data:text/plain,", "a data: URL")):
+        since = len(seen)
+        fake_telnet.MAP_URL_BASE = url_base
+        try:
+            c.send({"t": "send", "text": "map map.dat"})
+            seen_or_next(c, shown("Map offered"), seen, since, timeout=15)
+        finally:
+            fake_telnet.MAP_URL_BASE = web_base
+        c.send({"t": "runLua", "code": f'echo("checked {what}\\n")'})
+        seen_or_next(c, shown(f"checked {what}"), seen, since)
+        offers = [m for m in seen[since:] if m["t"] == "mapDownload" and m["offered"]]
+        check(not offers, f"a map offered as {what} is not offered: {offers}")
+        warnings = [t for t in texts_of(seen[since:]) if "not at a web (http or https) address" in t]
+        check(warnings and not any(url_base in t for t in warnings),
+              f"the console says it is not offered, without the address: {texts_of(seen[since:])}")
+    try:
+        m = c.ask({"t": "downloadMap"}, answers=("error",), collect=seen)
+        check(m["message"] == "downloadMap: The game has offered no map to download.", f"and there is none to download: {m}")
+    except TimeoutError as e:
+        # Without the refusal, the last offer's download starts and answers nothing: the checks after this still run
+        check(False, f"and there is none to download: {e}")
     since = len(seen)
     c.send({"t": "send", "text": "map map.dat"})
     try:

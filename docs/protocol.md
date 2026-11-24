@@ -718,6 +718,9 @@ and `downloadOfferedMap()`, a Mudlet patch the app carries in `scripts/mudlet-pa
   user name, a password or a token. If the game offers another map while one downloads, `offered` follows the offer,
   but `host` stays the download's: its end names where the map came from, and a `mapDownload` with the new offer's
   host follows it.
+- A map the game offers from anywhere but the web, a `Client.Map` URL that is not `http` or `https` with a host
+  (such as a `file:` URL or a bare path, which would read a file of the player's), is not offered: `offered` stays as
+  it was, and Mudlet's console warns of it, naming none of the URL (Mudlet patch `0051-map-web-links-only.patch`).
 - `downloadMap` downloads it as the desktop does (`TMap::downloadMap()`): a URL whose path ends in `xml` to the
   profile's `map.xml`, read as an XML map, any other to its map folder as `map.dat`, loaded as Mudlet's own map. The
   profile's map is replaced only by a map that arrived whole and reads, which raises `sysMapDownloadEvent`. Mudlet

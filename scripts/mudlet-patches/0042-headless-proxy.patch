@@ -13,8 +13,6 @@ set them, and a player whose network blocks the game could not play there.
   Options::password and setPassword() give the game's: Host::giveProxyPass() keeps it from being replaced by the
   stored one at the load, and the profile's save neither stores it nor writes it to the profile's file. An empty one
   withdraws it, and the stored one, if any, is read again.
-- Host::getConnectionProxy() sets the user name and the password when they are empty too. The proxy object is kept
-  between connections, so one that was removed went on being sent, in the GUI as well.
 - All three calls are refused with errorString() where submit() is.
 - No Lua function is added: scripts do not reach the proxy in the GUI either.
 - docs/headless.md describes them.
@@ -28,10 +26,11 @@ Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet 
 Upstream: not opened yet
 
 diff --git a/docs/headless.md b/docs/headless.md
-index d0b86c1..fb1f4b3 100644
+index 313eb94..dd58f79 100644
 --- a/docs/headless.md
 +++ b/docs/headless.md
-@@ -226,4 +226,18 @@ already waiting is still made, and disconnecting calls that off. Both are false
+@@ -225,6 +225,20 @@ stored with the profile: it counts from the next time the connection is lost or
+ already waiting is still made, and disconnecting calls that off. Both are false where `submit()` is refused
  and when a detail could not be stored, and `setAddress()` also for details `start()` would refuse.
  
 +`proxy()` and `setProxy()` read and change the proxy of the profile preferences, which the connection dialog
@@ -50,25 +49,13 @@ index d0b86c1..fb1f4b3 100644
 +
  Each of `outputLine`'s runs covers part of the line, in order, with the colours and styles the game
  asked for (`THeadlessSession::TextStyle`: bold, italic, underline, overline, strike-out, reverse, blink,
+ fast blink, concealed), and says whether each colour is the profile's own, which a frontend may swap
 diff --git a/src/Host.cpp b/src/Host.cpp
-index 015e40d..f5a4dfe 100644
+index 076e720..ec69d25 100644
 --- a/src/Host.cpp
 +++ b/src/Host.cpp
-@@ -6582,10 +6582,7 @@ std::unique_ptr<QNetworkProxy>& Host::getConnectionProxy()
-     proxy->setHostName(mProxyAddress);
-     proxy->setPort(mProxyPort);
--    if (!mProxyUsername.isEmpty()) {
--        proxy->setUser(mProxyUsername);
--    }
--    if (!mProxyPassword.isEmpty()) {
--        proxy->setPassword(mProxyPassword);
--    }
-+    // Set when empty too: the proxy is kept between connections, and would go on using what was removed
-+    proxy->setUser(mProxyUsername);
-+    proxy->setPassword(mProxyPassword);
- 
-     return mpConnectionProxy;
-@@ -6642,4 +6639,18 @@ void Host::changeGivenPass(const QString& password)
+@@ -6668,6 +6668,20 @@ void Host::changeGivenPass(const QString& password)
+     mTelnet.setAutoLoginPending(hasAutoLoginCredentials() && mTelnet.autoLoginTimersRunning());
  }
  
 +void Host::changeGivenProxyPass(const QString& password)
@@ -87,11 +74,13 @@ index 015e40d..f5a4dfe 100644
 +
  void Host::loadSecuredPassword()
  {
+     // Use async API for QtKeychain integration with file fallback
 diff --git a/src/Host.h b/src/Host.h
-index 0a50af0..7fe163c 100644
+index ec90e2b..f54fe4f 100644
 --- a/src/Host.h
 +++ b/src/Host.h
-@@ -250,4 +250,17 @@ public:
+@@ -249,6 +249,19 @@ public:
+     // if any, is read again as at the load. The automatic login reads it at its password step, so it is for the
      // next connection unless this one's password step is still to come.
      void changeGivenPass(const QString& password);
 +    // The proxy's password given for this run, as givePass() gives the game's: the load does not replace it
@@ -109,17 +98,21 @@ index 0a50af0..7fe163c 100644
 +    void changeGivenProxyPass(const QString& password);
      // A password still being fetched from the keychain counts: the auto-login is timer based, so
      // the password step has to be armed before the read that answers it comes back, or there is
-@@ -1716,4 +1729,5 @@ private:
+     // no prompt left for a late answer to be typed at.
+@@ -1728,6 +1741,7 @@ private:
+     QString mLogin;
      QString mPass;
      bool mPassGiven = false;
 +    bool mProxyPassGiven = false;
      bool mSecuredPasswordPending = false;
      // The store refused the saved password, as against having none or not being there at all
+     bool mSecuredPasswordUnreadable = false;
 diff --git a/src/XMLexport.cpp b/src/XMLexport.cpp
-index 6fb632d..fa44fb9 100644
+index 4384316..5e2119d 100644
 --- a/src/XMLexport.cpp
 +++ b/src/XMLexport.cpp
-@@ -547,6 +547,6 @@ void XMLexport::writeHost(Host* pHost, pugi::xml_node mudletPackage)
+@@ -546,15 +546,15 @@ void XMLexport::writeHost(Host* pHost, pugi::xml_node mudletPackage)
+     const bool useSecureStorage = appVersion >= secureStorageVersion;
  
      if (useSecureStorage) {
 -        // Modern versions: store in secure storage, clear from XML
@@ -128,18 +121,21 @@ index 6fb632d..fa44fb9 100644
 +        if (!pHost->mProxyPassword.isEmpty() && !pHost->proxyPassGiven() && !CredentialManager::storeCredential(pHost->getName(), "proxy", pHost->mProxyPassword)) {
              //: Shown in the profile's main window when it is saved but its proxy password could not be, for example because there is nowhere to keep the key that encrypts it
              pHost->postMessage(tr("[ WARN ]  - The proxy password could not be saved, so the next time this profile is loaded it will have whichever one was saved before, if any."));
-@@ -555,5 +555,5 @@ void XMLexport::writeHost(Host* pHost, pugi::xml_node mudletPackage)
+         }
+         host.append_attribute("mProxyPassword") = "";
      } else {
          // Legacy versions: maintain plaintext password in XML for backward compatibility
 -        host.append_attribute("mProxyPassword") = pHost->mProxyPassword.toUtf8().constData();
 +        host.append_attribute("mProxyPassword") = pHost->proxyPassGiven() ? "" : pHost->mProxyPassword.toUtf8().constData();
      }
      host.append_attribute("mSslTsl") = pHost->mSslTsl ? "yes" : "no";
+     host.append_attribute("mSslIgnoreExpired") = pHost->mSslIgnoreExpired ? "yes" : "no";
 diff --git a/src/XMLimport.cpp b/src/XMLimport.cpp
-index 0c8cc4a..6f71be5 100644
+index 71c175a..aa86eec 100644
 --- a/src/XMLimport.cpp
 +++ b/src/XMLimport.cpp
-@@ -901,15 +901,19 @@ void XMLimport::readHost(Host* pHost)
+@@ -911,17 +911,21 @@ void XMLimport::readHost(Host* pHost)
+     const QVersionNumber secureStorageVersion = QVersionNumber(4, 20, 0);
      const bool useSecureStorage = appVersion >= secureStorageVersion;
  
 +    // One given for this run is the one used, whatever is stored
@@ -162,17 +158,21 @@ index 0c8cc4a..6f71be5 100644
 +    } else if (useSecureStorage && !proxyPassGiven) {
          // Modern application: load from secure storage if available
          CredentialManager::ReadOutcome outcome = CredentialManager::ReadOutcome::NothingStored;
+         pHost->mProxyPassword = CredentialManager::retrieveCredential(pHost->getName(), "proxy", &outcome);
 diff --git a/src/headless/THeadlessSession.cpp b/src/headless/THeadlessSession.cpp
-index 9a3263a..65857ae 100644
+index 6194a14..97c10b4 100644
 --- a/src/headless/THeadlessSession.cpp
 +++ b/src/headless/THeadlessSession.cpp
-@@ -54,4 +54,5 @@
+@@ -53,6 +53,7 @@
+ #include <QSslError>
  #endif
  #include <QTimer>
 +#include <QUrl>
  
  #include <algorithm>
-@@ -553,10 +554,15 @@ void THeadlessSession::beginStart(const Options& asked, std::function<void(Start
+ #include <functional>
+@@ -578,12 +579,17 @@ void THeadlessSession::beginStart(const Options& asked, std::function<void(Start
+     // apply them; a host of only spaces is then none, and a name with spaces round it finds the profile it names
      Options options = asked;
      options.password.clear();
 +    options.proxyPassword.clear();
@@ -192,21 +192,25 @@ index 9a3263a..65857ae 100644
 +    const std::shared_ptr<QString> proxyPassword = ownCopy(asked.proxyPassword);
      std::optional<bool> tls;
      bool stalePasswords = false;
-@@ -566,5 +572,5 @@ void THeadlessSession::beginStart(const Options& asked, std::function<void(Start
+     if (const auto refusal = prepareStart(options, tls, stalePasswords)) {
+@@ -591,13 +597,13 @@ void THeadlessSession::beginStart(const Options& asked, std::function<void(Start
+         return;
      }
      if (!stalePasswords) {
 -        done(finishStart(options, tls, *password));
 +        done(finishStart(options, tls, *password, *proxyPassword));
          return;
      }
-@@ -572,5 +578,5 @@ void THeadlessSession::beginStart(const Options& asked, std::function<void(Start
+     // Calls meanwhile are refused as during the load, until the queued load begins: a shutdown() would take the
      // pool this is about to load into
      mRemovingStalePasswords = true;
 -    removeStalePasswords(this, new CredentialManager(this), mProfileName, {qsl("character"), qsl("proxy")}, [this, options, tls, password, done](const QString& failure) {
 +    removeStalePasswords(this, new CredentialManager(this), mProfileName, {qsl("character"), qsl("proxy")}, [this, options, tls, password, proxyPassword, done](const QString& failure) {
          if (!failure.isEmpty()) {
              mRemovingStalePasswords = false;
-@@ -582,7 +588,7 @@ void THeadlessSession::beginStart(const Options& asked, std::function<void(Start
+             mpPool.reset();
+@@ -607,9 +613,9 @@ void THeadlessSession::beginStart(const Options& asked, std::function<void(Start
+             return;
          }
          // From the event loop, not from inside the store's callback, as the load may delete the session and the store with it
 -        QTimer::singleShot(0ms, this, [this, options, tls, password, done]() {
@@ -216,27 +220,35 @@ index 9a3263a..65857ae 100644
 +            done(finishStart(options, tls, *password, *proxyPassword));
          });
      });
-@@ -703,5 +709,5 @@ std::optional<THeadlessSession::StartResult> THeadlessSession::prepareStart(Opti
+ }
+@@ -728,7 +734,7 @@ std::optional<THeadlessSession::StartResult> THeadlessSession::prepareStart(Opti
+     return std::nullopt;
  }
  
 -THeadlessSession::StartResult THeadlessSession::finishStart(const Options& options, const std::optional<bool> tls, const QString& password)
 +THeadlessSession::StartResult THeadlessSession::finishStart(const Options& options, const std::optional<bool> tls, const QString& password, const QString& proxyPassword)
  {
      // The load runs the event loop, where the frontend may delete the session
-@@ -724,5 +730,5 @@ THeadlessSession::StartResult THeadlessSession::finishStart(const Options& optio
+     const QPointer<THeadlessSession> self(this);
+@@ -749,7 +755,7 @@ THeadlessSession::StartResult THeadlessSession::finishStart(const Options& optio
+     Host* pHost = mpPool->openProfile(
              profileName,
              options.connect,
 -            [this, self, run, supplyTransport = options.supplyTransport, &password](Host* pNewHost) {
 +            [this, self, run, supplyTransport = options.supplyTransport, &password, &proxyPassword](Host* pNewHost) {
                  if (!self) {
                      return;
-@@ -734,4 +740,5 @@ THeadlessSession::StartResult THeadlessSession::finishStart(const Options& optio
+                 }
+@@ -759,6 +765,7 @@ THeadlessSession::StartResult THeadlessSession::finishStart(const Options& optio
+                 }
                  mSecureConnectionOffered = false;
                  mMapOperationCancelable = false;
 +                pNewHost->giveProxyPass(proxyPassword);
                  pNewHost->givePass(password);
                  mShownLinesOfPasses.clear();
-@@ -1460,4 +1467,57 @@ bool THeadlessSession::setAutoReconnect(const bool reconnect)
+                 mSentLineIds.clear();
+@@ -1499,6 +1506,59 @@ bool THeadlessSession::setAutoReconnect(const bool reconnect)
+     return true;
  }
  
 +bool THeadlessSession::proxy(Proxy& proxy)
@@ -294,18 +306,22 @@ index 9a3263a..65857ae 100644
 +
  bool THeadlessSession::runLua(const QString& code)
  {
+     if (!usable()) {
 diff --git a/src/headless/THeadlessSession.h b/src/headless/THeadlessSession.h
-index b93153b..d01ca7e 100644
+index 01f8603..0648698 100644
 --- a/src/headless/THeadlessSession.h
 +++ b/src/headless/THeadlessSession.h
-@@ -91,4 +91,6 @@ public:
+@@ -91,6 +91,8 @@ public:
+         QString login;
          // For this run only; nothing stores it
          QString password;
 +        // The password of the profile's proxy (setProxy()), for this run only too; nothing stores it
 +        QString proxyPassword;
          // An absolute path, made if need be: the folder that holds the profiles, Mudlet.ini and the passwords
          // stored for them, in place of the GUI's folder and the system's keychain, except in an Android app with
-@@ -238,4 +240,26 @@ public:
+         // a Java VM registered with Qt (docs/headless.md), whose profile passwords go to the KeyStore unless
+@@ -274,6 +276,28 @@ public:
+     // when a detail could not be stored; setAddress() also where start() would refuse the details.
      bool setAddress(const QString& host, int port, bool tls);
      bool setAutoReconnect(bool reconnect);
 +    // The profile preferences' proxy: whether the game is reached through a SOCKS5 proxy, and where that is.
@@ -332,10 +348,13 @@ index b93153b..d01ca7e 100644
 +    bool setProxyPassword(const QString& password);
      bool runLua(const QString& code);
      // The profile's settings named in keys, as Lua's getConfig() gives them, into values: a bool, a number or a
-@@ -1621,5 +1645,5 @@ private:
+     // string each, an option of several by its name (showSentText as "never", "always" or "script"). A key
+@@ -1725,7 +1749,7 @@ private:
+     void tellConfigSaved();
      void beginStart(const Options&, std::function<void(StartResult)> done);
      std::optional<StartResult> prepareStart(Options&, std::optional<bool>& tls, bool& stalePasswords);
 -    StartResult finishStart(const Options&, std::optional<bool> tls, const QString& password);
 +    StartResult finishStart(const Options&, std::optional<bool> tls, const QString& password, const QString& proxyPassword);
      void beginInstallPackage(const QString& path, std::function<void(PackageResult)> done);
      void finishInstallPackage(const QString& path, std::function<void(PackageResult)> done);
+     // saved is set once the closes that save have begun, for a session deleted after that

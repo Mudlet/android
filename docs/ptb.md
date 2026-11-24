@@ -3,8 +3,10 @@
 A public test build (PTB) is the app built every night from Mudlet's latest `development` and this repository's
 `main`, as Mudlet's desktop PTBs are. Testers get it two ways:
 
-- **Google Play's open testing track** of the app **Mudlet PTB** (`org.mudlet.mudlet.ptb`): join with a link,
-  install from Play, and Play keeps it up to date;
+- **Google Play's closed testing track** of the app **Mudlet PTB** (`org.mudlet.mudlet.ptb`): join the
+  [Mudlet Android Testers](https://groups.google.com/g/mudlet-ptb-testers) group and then the test with a link,
+  install from Play, and Play keeps it up to date. It moves to open testing, which needs no group, once Play allows
+  (below);
 - the rolling **`ptb` GitHub pre-release**: an APK for each ABI, for people without Play, and the source code
   they are built from.
 
@@ -38,7 +40,8 @@ Every night at 05:23 UTC (after the libmudlet nightly, whose ccache it takes up)
    (`native/tests/android_smoke.py`): the engine service and Qt come up, a profile connects and runs Mudlet's Lua, a
    trigger fires and notifies, and the UI reattaches to a restarted engine. This is what shows that R8 kept what Qt
    and the engine reach by name.
-6. **play**: uploads the AAB to the open testing track (`beta` in Play's API) with
+6. **play**: uploads the AAB to the closed testing track (`alpha` in Play's API), or to the track the repository
+   variable `PLAY_PTB_TRACK` names (`beta` for open testing), with
    [r0adkll/upload-google-play](https://github.com/r0adkll/upload-google-play), pinned to a commit.
 7. **github-release**: replaces the `ptb` pre-release, its tag on this repository's commit, with the APKs, the
    source bundle, `SHA256SUMS.txt` and notes naming both commits. It does not wait for Play: when Play refuses the
@@ -138,7 +141,9 @@ like any app's, with no "install unknown apps" switch and no download to repeat 
   keep the last approved PTB.
 - **Developer account**: a *personal* account made after 13 November 2023 must run a closed test with at least 12
   testers for 14 days before it may use open testing or production. An *organization* account, which needs a D-U-N-S
-  number, has no such wait, and suits Mudlet.
+  number, has no such wait. Mudlet's account is personal, so the PTB starts on closed testing; after 14 days with 12
+  testers opted in, apply for production access (Dashboard), then set up open testing as step 7 describes for closed
+  testing and set the repository variable `PLAY_PTB_TRACK` to `beta`.
 - **Open testing is public**: anyone may join, with no limit, and an app with no production release is found by
   searching Play; testers' feedback is private and gives no public rating. The listing should say it is a nightly.
 
@@ -192,11 +197,12 @@ advanced sideloading flow.
    saying this is a nightly test build, the 512×512 icon, the 1024×500 feature graphic and at least two screenshots.
    [`store-listing.md`](store-listing.md) has the text, the screenshots to take and how, and each of these answers
    with its evidence in the code.
-7. **Open testing, with Play App Signing**: Test and release, Testing, Open testing. Under Countries/regions, add
-   them all; under Testers, leave the tester limit unlimited. "Create new release": when asked how the app is signed,
-   choose the Google-generated app signing key; the AAB's own key then becomes the upload key. Upload
-   `mudlet-ptb.aab`, keep the release notes the workflow wrote (`dist/whatsnew/whatsnew-en-US`), then "Next", "Save",
-   and on the Publishing overview "Send for review". Play reviews it before testers can join.
+7. **Closed testing, with Play App Signing**: Test and release, Testing, Closed testing, the Alpha track. Under
+   Countries/regions, add them all; under Testers, add the Google Group `mudlet-ptb-testers@googlegroups.com`, which
+   anyone can join, and the feedback URL `https://github.com/Mudlet/android/issues`. "Create new release": when asked
+   how the app is signed, choose the Google-generated app signing key; the AAB's own key then becomes the upload key.
+   Upload `mudlet-ptb.aab`, keep the release notes the workflow wrote (`dist/whatsnew/whatsnew-en-US`), then "Next",
+   "Save", and on the Publishing overview "Send for review". Play reviews it before testers can join.
 8. **The service account Play's API uses**: in the Google Cloud console (<https://console.cloud.google.com>), pick
    or create a project, enable the "Google Play Android Developer API" (APIs and services, Library), then IAM and
    admin, Service accounts, "Create service account", named `mudlet-ptb-publisher`, with no project roles. On it,
@@ -217,10 +223,10 @@ sent for review automatically; with Publishing overview's "Managed publishing" o
 
 ## Joining as a tester
 
-- **From Google Play**: open <https://play.google.com/apps/testing/org.mudlet.mudlet.ptb> signed in with your Google
-  account, "Become a tester", then follow its link to Play and install Mudlet PTB. Play updates it like any app. To
-  leave, open the same link and "Leave the program", then uninstall it. Feedback written in Play reaches the
-  developers privately.
+- **From Google Play**: join the [Mudlet Android Testers](https://groups.google.com/g/mudlet-ptb-testers) group, then
+  open <https://play.google.com/apps/testing/org.mudlet.mudlet.ptb> signed in with the same Google account, "Become a
+  tester", then follow its link to Play and install Mudlet PTB. Play updates it like any app. To leave, open the same
+  link and "Leave the program", then uninstall it. Feedback written in Play reaches the developers privately.
 - **From GitHub**: on <https://github.com/Mudlet/android/releases/tag/ptb>, download `mudlet-ptb-arm64-v8a.apk` for
   a phone or tablet (`mudlet-ptb-x86_64.apk` for a Chromebook with an Intel or AMD chip, or an emulator), check it
   against `SHA256SUMS.txt`, open it and allow your browser to install apps (`mudlet-ptb-source.tar` beside it is
@@ -270,7 +276,7 @@ Android never installs an older versionCode over a newer one, so a bad PTB is re
    repository's change was the bad one, revert it on `main` first. The rebuild gets a new, higher versionCode, so Play
    and the pre-release's links offer it as an update.
 3. **While Play reviews it**, the bad build stays on the track. To stop new installs of it sooner, pause the track in
-   Play Console (Testing, Open testing, "Pause track"); testers who have it keep it.
+   Play Console (Testing, Closed testing, "Pause track"); testers who have it keep it.
 4. **Enable the workflow again** once Mudlet's `development` or `main` is fixed.
 
 To take the GitHub APKs down at once: `gh release delete ptb --cleanup-tag --yes`. The next run then builds whatever

@@ -1,8 +1,8 @@
 name: PTB
 
 # Public test builds (docs/ptb.md): every night, Mudlet's latest development as the app org.mudlet.mudlet.ptb, built
-# for arm64-v8a and x86_64, minified, signed, and run on an emulator; then, from main only, the AAB goes to Google
-# Play's open testing track and the APKs, with the source code they are built from, to the rolling `ptb` GitHub
+# for arm64-v8a and x86_64, minified, signed, and run on an emulator; then, from main only, the AAB goes to a Google
+# Play testing track and the APKs, with the source code they are built from, to the rolling `ptb` GitHub
 # pre-release. A night on which neither Mudlet's
 # development nor this repository changed since the last PTB (as the `ptb` pre-release's notes record it) builds
 # nothing. Without the signing secrets it signs with a throwaway key and publishes nothing; on any branch but main it
@@ -242,8 +242,9 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  # Google Play's open testing track ("beta" in the API), from main, once the smoke test passed and the source bundle
-  # is built. The service account's key is best kept in the `play` environment, limited to main (docs/ptb.md)
+  # Google Play's closed testing track ("alpha" in the API), or the one the PLAY_PTB_TRACK variable names, from main,
+  # once the smoke test passed and the source bundle is built. The service account's key is best kept in the `play`
+  # environment, limited to main (docs/ptb.md)
   play:
     needs: [plan, build, notes]
     if: needs.plan.outputs.publish == 'true'
@@ -282,7 +283,7 @@ jobs:
           path: dist
 
       # The AAB carries R8's mapping and the native symbol tables, which Play reads from it
-      - name: Upload to the open testing track
+      - name: Upload to the testing track
         if: steps.creds.outputs.upload == 'true'
         uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
         with:
@@ -290,7 +291,7 @@ jobs:
           packageName: ${{ env.PACKAGE }}
           releaseFiles: dist/mudlet-ptb.aab
           releaseName: ${{ needs.plan.outputs.version-name }}
-          tracks: beta
+          tracks: ${{ vars.PLAY_PTB_TRACK || 'alpha' }}
           status: completed
           whatsNewDirectory: dist/whatsnew
 

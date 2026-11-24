@@ -1537,6 +1537,7 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
 - the map download: a game's GMCP `Client.Map` offering a map from a local web server, as `mapDownload` with only the
   host; `downloadMap` downloading and loading it, a Mudlet binary map and an XML one, with `sysMapDownloadEvent`, no
   Cancel once the map has arrived, its rooms then found and the app's map drawn; `mapDownload` to a UI that attaches;
+  a map offered as a `file:` URL, a bare path or a `data:` URL not offered, Mudlet's warning naming none of it;
   a 404 failing with Mudlet's reason, which names the host but not the path or query, and a file that is no map
   failing, and a slow download sending its progress at most once a percent and cancelled, each leaving the map as it
   was; the refusals; a script's JSON map export and import sending no `mapDownload`, even the export's last progress

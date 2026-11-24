@@ -62,7 +62,8 @@ Procedures too long for this file are in `.agents/skills/<name>/SKILL.md` (Claud
   migration that runs before the first read, and a test that reads the old name. They are:
   - the application id `org.mudlet.mudlet` (`.ptb` for the PTB);
   - the SharedPreferences `settings` (the keys in `data/Settings.kt`), `engine` (`qpaPlatform`, `lastProfile`,
-    `startSizes`, and `lastHost:`, `lastPort:` and `lastTls:` before a profile's name) and `ui`;
+    `startSizes`, `lastHost:`, `lastPort:` and `lastTls:` before a profile's name, and `mapAutoDownload:` before its
+    lowercased name) and `ui`;
   - the values the enum settings in `settings` store, their constants' names, such as `scriptEditorDesign`'s `CURRENT`,
     `WORKBENCH`, `ONE_PAGE` and `RECIPES`;
   - `PasswordStore`'s file `passwords/profiles.json`, its keys (the lowercased profile name, and `proxy:` before it

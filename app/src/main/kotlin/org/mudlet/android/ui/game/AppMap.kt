@@ -34,6 +34,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -41,6 +42,8 @@ import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -713,5 +716,52 @@ private fun MapOffer(modifier: Modifier = Modifier) {
             )
             DownloadMapButton(download.host)
         }
+    }
+}
+
+/**
+ * On the game screen, the download the app began by itself ([AppMapClient.autoNotice]; docs/architecture.md,
+ * "Downloading the map"): that it runs, with Cancel while Mudlet can stop it, then how it ended, a load going by itself
+ * once shown for a moment, as the map in front's bar has it. Not a live region: AppMapClient tells TalkBack, once.
+ */
+@Composable
+internal fun MapAutoDownloadNotice(modifier: Modifier = Modifier) {
+    val appMap = EngineClient.front.appMap
+    if (!appMap.autoNotice) return
+    val download = appMap.download
+    val end = appMap.downloadEnd
+    val refusal = appMap.autoRefusal
+    val running = refusal == null && (download.state == MapDownloadState.DOWNLOADING || appMap.downloadAsked)
+    val text = when {
+        refusal != null -> stringResource(R.string.map_download_failed, refusal)
+        running -> stringResource(R.string.map_auto_download_running, download.host)
+        end != null -> AppMapClient.endText(end, LocalResources.current)
+        else -> null
+    } ?: return
+    if (!running && end?.state == MapDownloadState.LOADED) {
+        LaunchedEffect(end) {
+            delay(LOADED_SHOWN_MS)
+            appMap.dismissDownloadEnd(end)
+        }
+    }
+    val cancel: (@Composable () -> Unit)? = if (running && download.cancelable && EngineClient.enginePid > 0) {
+        {
+            TextButton(appMap::cancelMapDownload, Modifier.heightIn(min = 48.dp), colors = ButtonDefaults.textButtonColors(contentColor = SnackbarDefaults.actionColor)) {
+                Text(stringResource(R.string.map_download_cancel))
+            }
+        }
+    } else {
+        null
+    }
+    Snackbar(
+        modifier.padding(8.dp),
+        action = cancel,
+        dismissAction = {
+            IconButton(appMap::dismissAutoNotice) {
+                Icon(painterResource(R.drawable.ic_close), stringResource(R.string.map_download_dismiss))
+            }
+        },
+    ) {
+        Text(text)
     }
 }

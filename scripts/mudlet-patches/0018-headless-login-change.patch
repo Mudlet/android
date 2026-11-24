@@ -25,7 +25,7 @@ Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet 
 Upstream: not opened yet
 
 diff --git a/docs/headless.md b/docs/headless.md
-index b3147f5..a421948 100644
+index f1cebfd..18bce51 100644
 --- a/docs/headless.md
 +++ b/docs/headless.md
 @@ -205,6 +205,14 @@ With no Java VM registered with Qt - `mudlet-headless` run as a bare executable,
@@ -44,7 +44,7 @@ index b3147f5..a421948 100644
  asked for (`THeadlessSession::TextStyle`: bold, italic, underline, overline, strike-out, reverse, blink,
  fast blink, concealed), and says whether each colour is the profile's own, which a frontend may swap
 diff --git a/src/Host.cpp b/src/Host.cpp
-index 6e2f946..a483510 100644
+index 22e6a34..543e20c 100644
 --- a/src/Host.cpp
 +++ b/src/Host.cpp
 @@ -406,15 +406,7 @@ Host::Host(int port, const QString& hostname, const QString& login, const QStrin
@@ -64,8 +64,8 @@ index 6e2f946..a483510 100644
  
      if (MudletApp::publicTest()) {
          thankForUsingPTB();
-@@ -6599,6 +6591,43 @@ std::unique_ptr<QNetworkProxy>& Host::getConnectionProxy()
-     return mpConnectionProxy;
+@@ -6619,6 +6611,43 @@ void Host::setProxyPassword(const QString& password)
+     mProxyPassword = password;
  }
  
 +void Host::loadStoredPassword()
@@ -109,7 +109,7 @@ index 6e2f946..a483510 100644
  {
      // Use async API for QtKeychain integration with file fallback
 diff --git a/src/Host.h b/src/Host.h
-index 83ef13d..1db6f9d 100644
+index 9ea492f..33efed8 100644
 --- a/src/Host.h
 +++ b/src/Host.h
 @@ -226,6 +226,9 @@ public:
@@ -133,7 +133,7 @@ index 83ef13d..1db6f9d 100644
      // A password still being fetched from the keychain counts: the auto-login is timer based, so
      // the password step has to be armed before the read that answers it comes back, or there is
      // no prompt left for a late answer to be typed at.
-@@ -1552,6 +1559,8 @@ private:
+@@ -1560,6 +1567,8 @@ private:
      bool installPackageFonts(const QString& packageName);
      void processGMCPDiscordStatus(const QJsonObject& discordInfo);
      void processGMCPDiscordInfo(const QJsonObject& discordInfo);
@@ -200,10 +200,10 @@ index eb405f6..be06705 100644
  {
      if (!usable()) {
 diff --git a/src/headless/THeadlessSession.h b/src/headless/THeadlessSession.h
-index 0459f7e..3d4ea56 100644
+index b847643..23cefdc 100644
 --- a/src/headless/THeadlessSession.h
 +++ b/src/headless/THeadlessSession.h
-@@ -218,6 +218,14 @@ public:
+@@ -219,6 +219,14 @@ public:
      // dismissing it then lasts until the game stops hiding input. False while the box would not be open, and
      // where submit() is refused.
      bool dismissHiddenInput();
@@ -218,7 +218,7 @@ index 0459f7e..3d4ea56 100644
      bool runLua(const QString& code);
      // The profile's settings named in keys, as Lua's getConfig() gives them, into values: a bool, a number or a
      // string each, an option of several by its name (showSentText as "never", "always" or "script"). A key
-@@ -1483,6 +1491,7 @@ private:
+@@ -1498,6 +1506,7 @@ private:
      void beginSave(std::function<void(bool)> done);
      void saveEach(QList<QPointer<Host>> profiles, qsizetype closesUnsavedBefore, QStringList unsaved, std::function<void(bool)> done);
      bool storeConnectionDetails(const Options&, std::optional<bool> tls);

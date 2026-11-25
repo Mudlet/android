@@ -88,9 +88,11 @@ Multi-Users in Middle-earth (MUME) in the list let you make a character in a few
    button counts the new lines. Tap it: you are back at the newest line.
 7. Turn the phone sideways and back: nothing is lost or shown twice, and a half-typed command stays.
 8. Pinch the game's text with two fingers: it grows and shrinks.
-9. Walk with the arrow buttons below the input line: one tap walks one room that way. **Write down** whether your
-   thumb reaches them, whether they are in the way, and what the game answered if a button did not walk. The close
-   button beside them puts them away; "Movement pad" in the app's settings, under Appearance, brings them back.
+9. Walk with the strip below the input line: swipe across it the way you want to go, one room per swipe, or tap it
+   for a list of every way. **Write down** whether your thumb reaches it, whether it is in the way, and what the game
+   answered if a swipe did not walk. The close button beside it puts it away; "Movement pad" in the app's settings,
+   under Appearance, brings it back. The wand button beside it lists other designs to try, Classic's arrow buttons
+   among them. **Write down** which you would keep, and why.
 10. Play for ten minutes as you normally would. **Write down** anything slow, odd or hard to do.
 
 ## Part 4. Leave and come back

@@ -35,7 +35,7 @@ import org.mudlet.android.ui.game.HardwareKeyboard
 import org.mudlet.android.ui.game.MOVEMENT_PAD_TAG
 
 /**
- * The game screen's movement pad (MovementPadTest) in the debug build's pseudo-locales, as PseudoLocaleTest checks the
+ * The game screen's classic movement pad (MovementPadTest) in the debug build's pseudo-locales, as PseudoLocaleTest checks the
  * screens: west stays left of east where the language is written from the right, with the pad at the row's end; each
  * key has a name of its own; and what is said once the pad is put away, with its Undo, passes the accessibility checks
  * and is shown whole.
@@ -63,6 +63,7 @@ class MovementPadPseudoLocaleTest(private val locale: String) {
             HardwareKeyboard.attachedOverride = false
             // The fake engine's rule turns the pad off for the tests that are not about it
             Settings.movementPad.reset()
+            Settings.movementPadDesign.set(Settings.MovementPadDesign.CURRENT)
         }
         session = fake.engine.nextSession()
         session.clear()
@@ -138,6 +139,7 @@ class MovementPadPseudoLocaleTest(private val locale: String) {
             R.string.movement_in,
             R.string.movement_out,
             R.string.movement_pad_hide,
+            R.string.settings_movement_pad_design,
         )
 
         const val WAIT_MS = 10_000L

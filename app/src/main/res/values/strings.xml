@@ -931,7 +931,7 @@
     <string name="settings_undo_wrap_hint">For games that wrap their lines and cannot be told not to: the lines are joined again, so triggers see them whole and the text fits your screen.</string>
     <!-- A short label under the name of a setting still being tried out, such as "Undo the game's own wrapping": it
          may join or leave split the odd line it should not, and may change. Also under the script editor's own row
-         for "Script editor design" -->
+         for "Script editor design", and under the title of the movement pad's list of designs -->
     <string name="settings_experimental">Experimental</string>
     <!-- Words a player might search the settings for to find "Undo the game's own wrapping" and the width it is
          undone at, besides the words of their names and descriptions, separated by commas. Use the words a player of
@@ -1078,7 +1078,8 @@
          Also on the script editor's "Script editor design" row, which opens the list of designs. Spoken by TalkBack
          as "double tap to choose" -->
     <string name="settings_choose">choose</string>
-    <!-- Closes the list of the server data encodings, or of the script editor's designs, without changing either -->
+    <!-- Closes the list of the server data encodings, of the script editor's designs or of the movement pad's designs,
+         without changing any -->
     <string name="settings_choice_cancel">Cancel</string>
     <!-- One of the server data encodings, as desktop Mudlet names it. Keep the English intact, so a player who has picked
          a language they cannot read can change back, e.g. ISO 8859-2 (Центральная Европа/Central European) -->
@@ -1550,6 +1551,41 @@
     <string name="settings_script_editor_recipes">Recipes</string>
     <!-- Under "Recipes": what that design is like -->
     <string name="settings_script_editor_recipes_hint">Cards that say when each item runs and what it does, changed a step at a time</string>
+    <!-- A setting on the "Experimental" page: which of four designs the movement pad (the buttons below the game's
+         input line for walking north, east, up, in and so on) has. Each sends the same commands, so a player can
+         switch at any time. Also the button beside the movement pad that opens the list of designs, as a screen reader
+         reads it, and that list's title -->
+    <string name="settings_movement_pad_design">Movement pad design</string>
+    <!-- Words a player might search the settings for to find "Movement pad design", besides the words of its name
+         and its choices, separated by commas. Use the words a player of your language would search for. -->
+    <string name="settings_movement_pad_design_keywords">walk, directions, compass, arrows, swipe, gestures, exits, one hand, layout</string>
+    <!-- The first choice of "Movement pad design": the pad as it was before Swipe became the default -->
+    <string name="settings_movement_pad_current">Classic</string>
+    <!-- Under "Classic" of "Movement pad design": what that design is like -->
+    <string name="settings_movement_pad_current_hint">Twelve buttons in three rows below the input line</string>
+    <!-- The second choice of "Movement pad design": a pad for the thumb of the hand that holds the phone -->
+    <string name="settings_movement_pad_thumb">Thumb pad</string>
+    <!-- Under "Thumb pad": what that design is like. "Fold" puts it away into one button until tapped again -->
+    <string name="settings_movement_pad_thumb_hint">Keeps to the side you choose, folds into one button, and its middle button walks the last way again</string>
+    <!-- The third choice of "Movement pad design": one strip a player swipes across in the direction to walk -->
+    <string name="settings_movement_pad_swipe">Swipe</string>
+    <!-- Under "Swipe": what that design is like -->
+    <string name="settings_movement_pad_swipe_hint">Swipe a direction across one strip to walk that way; tap it for up, down, in and out</string>
+    <!-- The fourth choice of "Movement pad design": only the ways out of the room the player is in, as the game's map
+         has them -->
+    <string name="settings_movement_pad_exits">Room exits</string>
+    <!-- Under "Room exits": what that design is like -->
+    <string name="settings_movement_pad_exits_hint">Only the ways out of your room the map knows, or all twelve where it does not know the room</string>
+    <!-- A setting on the "Experimental" page: which edge of the screen the movement pad keeps to, for a player who
+         holds the phone in the left or the right hand. Only the "Thumb pad", "Swipe" and "Room exits" designs follow it -->
+    <string name="settings_movement_pad_side">Movement pad side</string>
+    <!-- Words a player might search the settings for to find "Movement pad side", besides the words of its name and
+         its choices, separated by commas. Use the words a player of your language would search for. -->
+    <string name="settings_movement_pad_side_keywords">left-handed, right-handed, hand, thumb, edge, walk</string>
+    <!-- A choice of "Movement pad side": the left edge of the screen, whatever the language's direction -->
+    <string name="settings_movement_pad_left">Left</string>
+    <!-- A choice of "Movement pad side": the right edge of the screen, whatever the language's direction -->
+    <string name="settings_movement_pad_right">Right</string>
 
     <!-- Asked once, the first time the app runs with TalkBack on -->
     <string name="screen_reader_offer_title">Tell games you use a screen reader?</string>
@@ -1656,6 +1692,39 @@
     <string name="movement_pad_hidden">Movement pad hidden. Settings, Appearance turns it on again.</string>
     <!-- The button beside "Movement pad hidden…": it shows the movement pad again -->
     <string name="movement_pad_undo">Undo</string>
+    <!-- A button of the "Thumb pad" movement pad, as a screen reader reads it: it folds the pad away into one
+         button below the input line ("Show the movement pad"), which unfolds it again -->
+    <string name="movement_pad_fold">Fold the movement pad</string>
+    <!-- The button below the input line that the folded "Thumb pad" movement pad leaves, as a screen reader reads it:
+         it unfolds the pad -->
+    <string name="movement_pad_unfold">Show the movement pad</string>
+    <!-- A button of the "Thumb pad" movement pad, as a screen reader reads it: it moves the pad to the left edge of the
+         screen, for the left thumb -->
+    <string name="movement_pad_to_left">Move the movement pad to the left</string>
+    <!-- A button of the "Thumb pad" movement pad, as a screen reader reads it: it moves the pad to the right edge of
+         the screen, for the right thumb -->
+    <string name="movement_pad_to_right">Move the movement pad to the right</string>
+    <!-- The middle button of the "Thumb pad" movement pad, as a screen reader reads it: it walks the way the pad last
+         walked again. %1$s is that way's button name, such as "Go north", so it reads "Go north again" -->
+    <string name="movement_again">%1$s again</string>
+    <!-- The middle button of the "Thumb pad" movement pad, as a screen reader reads it before the pad has walked: it
+         will walk the last way again, and does nothing yet -->
+    <string name="movement_again_none">Walk the last way again</string>
+    <!-- On the "Swipe" movement pad, the strip a player swipes across to walk: what it does. A screen reader reads it as
+         the strip's name too. A tap on it lists all twelve directions, up, down, in and out first -->
+    <string name="movement_swipe">Swipe to walk. Tap for up, down, in and out.</string>
+    <!-- What a tap on the "Swipe" movement pad's strip does: it lists the twelve directions to walk. Spoken by TalkBack
+         as "double tap to list the directions" -->
+    <string name="movement_swipe_list">list the directions</string>
+    <!-- A button of the "Room exits" movement pad, as a screen reader reads it: it shows a button for each of the
+         twelve directions, not only the ways out of the room the map knows -->
+    <string name="movement_exits_all">Show all twelve directions</string>
+    <!-- A button of the "Room exits" movement pad, as a screen reader reads it, while it shows all twelve directions:
+         it shows only the ways out of the room the map knows again -->
+    <string name="movement_exits_room">Show only this room\'s exits</string>
+    <!-- On the "Room exits" movement pad, where the map knows the player's room but has none of the twelve directions
+         out of it (a game may still have other ways out) -->
+    <string name="movement_exits_none">The map has no way out of this room</string>
     <!-- The command history: a sheet over the game screen, opened by the input line's History button or Ctrl+R, that searches
          the commands the player sent; each row puts its command on the input line, and has buttons that send, pin
          or unpin, and forget it; %1$s is the command -->

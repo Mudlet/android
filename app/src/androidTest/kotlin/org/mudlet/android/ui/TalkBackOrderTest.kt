@@ -28,6 +28,7 @@ import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.mudlet.android.R
 import org.mudlet.android.data.Settings
+import org.mudlet.android.data.Settings.MovementPadDesign
 import org.mudlet.android.protocol.LayoutMode
 import org.mudlet.android.protocol.Profile
 import org.mudlet.android.ui.EngineMessages.appMap
@@ -127,7 +128,7 @@ class TalkBackOrderTest {
     }
 
     @Test
-    fun theMovementPadIsReadAfterTheInputLineKeyByKeyAndBeforeTheWindows() {
+    fun theMovementPadAPlayerHasFromTheStartIsTheSwipePadReadAfterTheInputLineAndBeforeTheWindows() {
         // On, as it is from the start: the fake engine's rule turns it off for the tests that are not about it
         compose.runOnIdle {
             HardwareKeyboard.attachedOverride = false
@@ -144,23 +145,99 @@ class TalkBackOrderTest {
         val expected = listOf(
             "the input line's Send button" to (hasContentDescription(string(R.string.input_send)) and hasClickAction()),
             key(R.string.movement_pad_hide),
-            key(R.string.movement_in),
-            key(R.string.movement_northwest),
-            key(R.string.movement_north),
-            key(R.string.movement_northeast),
-            key(R.string.movement_up),
-            key(R.string.movement_west),
-            key(R.string.movement_east),
-            key(R.string.movement_out),
-            key(R.string.movement_southwest),
-            key(R.string.movement_south),
-            key(R.string.movement_southeast),
-            key(R.string.movement_down),
+            key(R.string.settings_movement_pad_design),
+            "the swipe strip" to (hasText(string(R.string.movement_swipe)) and hasClickAction()),
             "the mini console" to hasContentDescription(string(R.string.window_description, "chat")),
             "the button bar" to hasContentDescription(string(R.string.bar_description, "Moves")),
         )
         reading.assertInOrder(expected)
         reading.assertEveryControlRead()
+    }
+
+    @Test
+    fun eachMovementPadDesignIsReadAfterTheInputLineItsButtonsTogetherAndItsKeysTogether() {
+        compose.runOnIdle {
+            HardwareKeyboard.attachedOverride = false
+            Settings.movementPad.reset()
+        }
+        showWindowAndBar()
+        waitFor(hasText(WINDOW_ROW))
+        waitFor(hasText("North") and hasClickAction())
+
+        fun key(@StringRes name: Int, vararg args: Any) = string(name, *args) to (hasContentDescription(string(name, *args)) and hasClickAction())
+        val send = "the input line's Send button" to (hasContentDescription(string(R.string.input_send)) and hasClickAction())
+        val windows = listOf(
+            "the mini console" to hasContentDescription(string(R.string.window_description, "chat")),
+            "the button bar" to hasContentDescription(string(R.string.bar_description, "Moves")),
+        )
+        // On the right, as by default: the buttons inside the keys, at the row's start, read first
+        val designs = listOf(
+            // The keys row by row, after the buttons at the row's end
+            MovementPadDesign.CURRENT to listOf(
+                key(R.string.movement_pad_hide),
+                key(R.string.settings_movement_pad_design),
+                key(R.string.movement_in),
+                key(R.string.movement_northwest),
+                key(R.string.movement_north),
+                key(R.string.movement_northeast),
+                key(R.string.movement_up),
+                key(R.string.movement_west),
+                key(R.string.movement_east),
+                key(R.string.movement_out),
+                key(R.string.movement_southwest),
+                key(R.string.movement_south),
+                key(R.string.movement_southeast),
+                key(R.string.movement_down),
+            ),
+            MovementPadDesign.THUMB to listOf(
+                key(R.string.movement_pad_fold),
+                key(R.string.movement_pad_to_left),
+                key(R.string.settings_movement_pad_design),
+                key(R.string.movement_in),
+                key(R.string.movement_northwest),
+                key(R.string.movement_north),
+                key(R.string.movement_northeast),
+                key(R.string.movement_up),
+                key(R.string.movement_west),
+                string(R.string.movement_again_none) to hasContentDescription(string(R.string.movement_again_none)),
+                key(R.string.movement_east),
+                key(R.string.movement_out),
+                key(R.string.movement_southwest),
+                key(R.string.movement_south),
+                key(R.string.movement_southeast),
+                key(R.string.movement_down),
+            ),
+            MovementPadDesign.SWIPE to listOf(
+                key(R.string.movement_pad_hide),
+                key(R.string.settings_movement_pad_design),
+                "the swipe strip" to (hasText(string(R.string.movement_swipe)) and hasClickAction()),
+            ),
+            // No map, so the twelve
+            MovementPadDesign.EXITS to listOf(
+                key(R.string.movement_pad_hide),
+                key(R.string.settings_movement_pad_design),
+                key(R.string.movement_in),
+                key(R.string.movement_northwest),
+                key(R.string.movement_north),
+                key(R.string.movement_northeast),
+                key(R.string.movement_up),
+                key(R.string.movement_west),
+                key(R.string.movement_east),
+                key(R.string.movement_out),
+                key(R.string.movement_southwest),
+                key(R.string.movement_south),
+                key(R.string.movement_southeast),
+                key(R.string.movement_down),
+            ),
+        )
+        for ((design, pad) in designs) {
+            compose.runOnIdle { Settings.movementPadDesign.set(design) }
+            waitFor(pad.last().second)
+            compose.onRoot().tryPerformAccessibilityChecks()
+            val reading = TalkBackReading(compose)
+            reading.assertInOrder(listOf(send) + pad + windows)
+            reading.assertEveryControlRead()
+        }
     }
 
     @Test

@@ -173,6 +173,7 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
         map = MapImage(bitmap, message.w, message.h, message.viewOnly, message.info)
         mapMover.onFrame(message.view)
         mapRooms.onFrame(message.view)
+        session.playerExits.onFrame(MapTarget.MAPPER, message.view)
     }
 
     /**
@@ -188,7 +189,7 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
         val request = message.message.substringBefore(':')
         val reason = message.message.substringAfter(':').trim()
         val replyTo = (message.replyTo as? Number)?.toLong()
-        if (session.appMap.onRefused(request, reason, replyTo)) return
+        if (session.playerExits.onRefused(request, replyTo) || session.appMap.onRefused(request, reason, replyTo)) return
         // One to a search asked again since is not shown, as its answer would not be
         if (request == "findRooms" && !mapRooms.searching(replyTo)) return
         if (request == "moveMap" || request == "followPlayer") mapMover.clear()

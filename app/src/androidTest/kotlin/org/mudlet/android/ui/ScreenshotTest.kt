@@ -53,8 +53,8 @@ import java.util.Base64
 import java.util.concurrent.CompletableFuture
 
 /**
- * Screenshots of the profile list, the game screen with the map behind its text, connected, with its movement pad and
- * after a drop, the
+ * Screenshots of the profile list, the game screen with the map behind its text, connected, with its movement pad in
+ * each of its four designs and after a drop, the
  * settings (the hub, a search and seven pages, one as a change says it waits for the next connection, and in light
  * mode the hub and a page side by side on a tablet), the input line keeping the command sent, the
  * map in front with a downloaded map and dragged off the player, a room's exits on it edited with the rooms found by
@@ -119,9 +119,39 @@ class ScreenshotTest {
             HardwareKeyboard.attachedOverride = false
             Settings.movementPad.set(true)
         }
-        waitFor(hasTestTag(MOVEMENT_PAD_TAG))
+        // The pad a player has from the start, Swipe
+        waitFor(hasText(string(R.string.movement_swipe)) and hasClickAction())
         save("game-movement-pad-$mode")
+        // Its other designs: Classic, Thumb having walked east, and Room exits in a room the map has five ways out of
+        compose.runOnIdle { Settings.movementPadDesign.set(Settings.MovementPadDesign.CURRENT) }
+        waitFor(hasContentDescription(string(R.string.movement_in)))
+        save("game-movement-pad-classic-$mode")
+        compose.runOnIdle { Settings.movementPadDesign.set(Settings.MovementPadDesign.THUMB) }
+        activate(hasContentDescription(string(R.string.movement_east)))
+        session.receive("send")
+        waitFor(hasContentDescription(string(R.string.movement_again, string(R.string.movement_east))))
+        save("game-movement-pad-thumb-$mode")
+        compose.runOnIdle { Settings.movementPadDesign.set(Settings.MovementPadDesign.EXITS) }
+        compose.waitForIdle()
+        // The size the map was asked at last: the pads differ in height, and the first read may have been of the none
+        // asked before the profile was the front. A room of its own, so no frame before this one has named it
+        val mapSize = session.receiveLast("setAppMapSize", readPast = true)
+        val w = mapSize.getInt("w")
+        val h = mapSize.getInt("h")
+        session.send(appMap(mapSize, view = EngineMessages.mapView(w, h, rooms = mapOf(EXITS_ROOM to (w / 2.0 to h / 2.0)), player = EXITS_ROOM)))
+        val exitsAsked = try {
+            session.receive("roomInfo")
+        } catch (e: AssertionError) {
+            val state = compose.runOnIdle { "design ${Settings.movementPadDesign.value}, map ${EngineClient.front.appMap.map?.let { "${it.w}x${it.h}" }}, exits ${EngineClient.front.roomExits}" }
+            throw AssertionError("no roomInfo after a frame at $mapSize: $state", e)
+        }
+        session.send(EngineMessages.room(exitsAsked, EXITS_ROOM, "The Crossroads", steps = 0, exits = EXITS + EngineMessages.exit("up", 6, "Bell tower")))
+        waitFor(hasContentDescription(string(R.string.movement_exits_all)))
+        save("game-movement-pad-exits-$mode")
+        // No view, so the map's moves below start from the frame they are made on
+        session.send(appMap(mapSize))
         compose.runOnIdle {
+            Settings.movementPadDesign.reset()
             Settings.movementPad.set(false)
             HardwareKeyboard.attachedOverride = null
         }
@@ -484,6 +514,9 @@ class ScreenshotTest {
             EngineMessages.exit("s", 4, "Mill road"),
             EngineMessages.exit("w", 5, "Village gate"),
         )
+
+        // The Room exits pad's room: none of [EXITS]'s, nor the map's player room the frames below draw
+        const val EXITS_ROOM = 7
 
         const val ROOM_NAME = "A weapons vault / 56721 (Nu Second Circle of)"
 

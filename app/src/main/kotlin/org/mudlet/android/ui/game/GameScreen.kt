@@ -31,6 +31,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -119,8 +120,9 @@ import kotlin.reflect.KClass
  * first, so Mudlet's retries after a drop are not each read out. Desktop's Alt shortcuts open the screens they open
  * there ([desktopShortcut]), and a hardware key a key binding of the profile takes goes to the engine.
  *
- * Below the row is the movement pad ([MovementPad]), unless the player has put it away, a keyboard is in use, the game
- * hides input or the screen is too small ([movementPadShown]). A tap on a key walks that way ([MovementKey.press]).
+ * Below the row is the movement pad ([MovementPad]), in the design the player picked, unless the player has put it away,
+ * a keyboard is in use, the game hides input or the screen is too small ([movementPadShown]); the Thumb pad folds into
+ * a button at the row's start. A tap on a key walks that way ([MovementKey.press]).
  */
 @Composable
 fun GameScreen(
@@ -211,6 +213,7 @@ private fun ProfileGameScreen(
     var searching by rememberSaveable { mutableStateOf(false) }
     val search = rememberSaveable(saver = ConsoleSearch.Saver) { ConsoleSearch() }
     var gamesOpen by rememberSaveable { mutableStateOf(false) }
+    var padFolded by rememberSaveable { mutableStateOf(false) }
     var picked by remember { mutableStateOf<String?>(null) }
     val snackbars = remember { SnackbarHostState() }
     val selectionBar = remember { LineSelectionBarSlot() }
@@ -526,14 +529,34 @@ private fun ProfileGameScreen(
             if (c.replay.playing) {
                 ReplayBar(c.replay, onPaused = c::setReplayPaused, onFaster = c::changeReplaySpeed, onStop = c::stopReplay, Modifier.fillMaxWidth())
             }
+            val padShown = movementPadShown(hidden, screen)
+            val padDesign = Settings.movementPadDesign.value
+            // Only the Thumb pad folds; another design shows whole, and the Thumb pad is folded again on a switch back
+            val padFoldedAway = padFolded && padDesign == Settings.MovementPadDesign.THUMB
             QuickBar(if (hidden) emptyList() else suggestions.pinned, onSend = ::sendNow, Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+                if (padShown && padFoldedAway) {
+                    IconButton({ padFolded = false }) { Icon(painterResource(R.drawable.ic_directions_walk), stringResource(R.string.movement_pad_unfold)) }
+                }
                 val sounds = c.sounds
                 if (sounds.played || sounds.scriptsMuted || sounds.gameMuted) {
                     SoundButton(sounds.scriptsMuted && sounds.gameMuted, onToggle = { c.toggleAllSoundsMuted() })
                 }
             }
-            if (movementPadShown(hidden, screen)) {
-                MovementPad(onPress = ::walk, onHide = ::hideMovementPad, Modifier.fillMaxWidth().padding(horizontal = 8.dp))
+            if (padShown && !padFoldedAway) {
+                MovementPad(
+                    padDesign,
+                    onPress = ::walk,
+                    onHide = ::hideMovementPad,
+                    onFold = { padFolded = true },
+                    exits = c.roomExits,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                )
+                if (padDesign == Settings.MovementPadDesign.EXITS) {
+                    DisposableEffect(c) {
+                        c.playerExits.watch(true)
+                        onDispose { c.playerExits.watch(false) }
+                    }
+                }
             }
         }
     }

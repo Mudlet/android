@@ -2,6 +2,8 @@ package org.mudlet.android.ui.game
 
 import org.mudlet.android.protocol.KeyBinding
 import org.mudlet.android.protocol.KeyModifier
+import kotlin.math.atan2
+import kotlin.math.hypot
 import kotlin.math.roundToInt
 
 /**
@@ -34,6 +36,18 @@ internal enum class MovementKey(val command: String, val numpad: Char?) {
         // The digit with Num Lock on, as HardwareKeys gives it and as desktop records a binding made on that key
         val key = KeyBinding(digit.code, KeyModifier.KEYPAD.bit)
         return if (key in bindings) MovementPress.Binding(key, digit.toString()) else MovementPress.Command(command)
+    }
+
+    companion object {
+        /** The key for a room's exit [direction] as the engine names it (docs/protocol.md, `room`); null for a special exit. */
+        fun ofExit(direction: String): MovementKey? = entries.firstOrNull { it.exit == direction }
+
+        // A special exit's command can be "u" or "d"
+        private val MovementKey.exit get() = when (this) {
+            UP -> "up"
+            DOWN -> "down"
+            else -> command
+        }
     }
 }
 
@@ -77,4 +91,46 @@ internal object MovementPadLayout {
      * the densities where the division falls a hair under, and have no pad.
      */
     fun dp(px: Int, density: Float): Int = (px / density).roundToInt()
+
+    /** The middle of [rows], a gap in the current design, where the Thumb pad has the key that walks the last way again. */
+    const val MIDDLE_ROW = 1
+    const val MIDDLE_COLUMN = 2
+
+    /** The Swipe pad's list of the ways, those a swipe cannot give first. */
+    val listed: List<MovementKey> = listOf(
+        MovementKey.UP,
+        MovementKey.DOWN,
+        MovementKey.IN,
+        MovementKey.OUT,
+        MovementKey.NORTH,
+        MovementKey.NORTHEAST,
+        MovementKey.EAST,
+        MovementKey.SOUTHEAST,
+        MovementKey.SOUTH,
+        MovementKey.SOUTHWEST,
+        MovementKey.WEST,
+        MovementKey.NORTHWEST,
+    )
+
+    // A swipe's way by its angle, anticlockwise from east, each an eighth of the turn about it
+    private val swipeWays = listOf(
+        MovementKey.EAST,
+        MovementKey.NORTHEAST,
+        MovementKey.NORTH,
+        MovementKey.NORTHWEST,
+        MovementKey.WEST,
+        MovementKey.SOUTHWEST,
+        MovementKey.SOUTH,
+        MovementKey.SOUTHEAST,
+    )
+
+    /**
+     * The way a swipe of [dx] right and [dy] down goes, as on a map with north up; null for one shorter than [least], a
+     * tap. Each compass way takes the eighth of the turn about it.
+     */
+    fun swipe(dx: Float, dy: Float, least: Float): MovementKey? {
+        if (hypot(dx, dy) < least) return null
+        val eighths = (atan2(-dy, dx) / (Math.PI / 4)).roundToInt()
+        return swipeWays[Math.floorMod(eighths, swipeWays.size)]
+    }
 }

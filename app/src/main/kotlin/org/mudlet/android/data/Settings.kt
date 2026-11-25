@@ -251,6 +251,16 @@ object Settings {
     /** "Movement pad": the game screen's keys for walking with one thumb (docs/architecture.md, "The movement pad"). */
     val movementPad = BoolSetting("movementPad", default = true)
 
+    /**
+     * "Movement pad design": the movement pad the game screen has, the Swipe pad unless the player picks the earlier one
+     * or another of those tried beside it (docs/architecture.md, "The movement pad's designs"). Stored by the constant's
+     * name, so those are stored names.
+     */
+    val movementPadDesign = EnumSetting("movementPadDesign", MovementPadDesign.SWIPE, MovementPadDesign.entries) { it.name }
+
+    /** "Movement pad side": the edge the Thumb, Swipe and Room exits pads keep to. Stored by the constant's name, as above. */
+    val movementPadSide = EnumSetting("movementPadSide", MovementPadSide.RIGHT, MovementPadSide.entries) { it.name }
+
     /** "Map beside the text": on an expanded screen, the profile's map beside the game's text, as desktop's docked mapper. */
     val mapBesideText = BoolSetting("mapBesideText", default = true)
 
@@ -336,6 +346,8 @@ object Settings {
         mapInCorner,
         checkTestBuilds,
         movementPad,
+        movementPadDesign,
+        movementPadSide,
         mapBesideText,
         wallpaperColours,
         gameTextInNotifications,
@@ -446,6 +458,20 @@ object Settings {
         SCRIPT("script"),
         ALWAYS("always"),
         NEVER("never"),
+    }
+
+    /** The movement pad's designs, in the order the setting lists them. */
+    enum class MovementPadDesign {
+        CURRENT,
+        THUMB,
+        SWIPE,
+        EXITS,
+    }
+
+    /** The edges of the screen, left and right whatever the language's direction, as a thumb is. */
+    enum class MovementPadSide {
+        LEFT,
+        RIGHT,
     }
 
     /** The script editor's designs, in the order the setting lists them. */

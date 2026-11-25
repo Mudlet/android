@@ -768,6 +768,38 @@ val settingsCatalogue: List<SettingEntry> by lazy {
                 Settings.ScriptEditorDesign.RECIPES -> R.string.settings_script_editor_recipes
             }
         },
+        SettingEntry.Choice(
+            SettingsCategory.EXPERIMENTAL,
+            Settings.movementPadDesign,
+            R.string.settings_movement_pad_design,
+            R.string.settings_movement_pad_design_keywords,
+            choiceHint = {
+                when (it) {
+                    Settings.MovementPadDesign.CURRENT -> R.string.settings_movement_pad_current_hint
+                    Settings.MovementPadDesign.THUMB -> R.string.settings_movement_pad_thumb_hint
+                    Settings.MovementPadDesign.SWIPE -> R.string.settings_movement_pad_swipe_hint
+                    Settings.MovementPadDesign.EXITS -> R.string.settings_movement_pad_exits_hint
+                }
+            },
+        ) {
+            when (it) {
+                Settings.MovementPadDesign.CURRENT -> R.string.settings_movement_pad_current
+                Settings.MovementPadDesign.THUMB -> R.string.settings_movement_pad_thumb
+                Settings.MovementPadDesign.SWIPE -> R.string.settings_movement_pad_swipe
+                Settings.MovementPadDesign.EXITS -> R.string.settings_movement_pad_exits
+            }
+        },
+        SettingEntry.Choice(
+            SettingsCategory.EXPERIMENTAL,
+            Settings.movementPadSide,
+            R.string.settings_movement_pad_side,
+            R.string.settings_movement_pad_side_keywords,
+        ) {
+            when (it) {
+                Settings.MovementPadSide.LEFT -> R.string.settings_movement_pad_left
+                Settings.MovementPadSide.RIGHT -> R.string.settings_movement_pad_right
+            }
+        },
     ).also { entries ->
         // A game's page changes the game's settings in Mudlet, which only Mudlet's own settings can be
         check(entries.all { it.category.forGame == ((it as? SettingEntry.Value)?.setting?.mudlet ?: (it is SettingEntry.Action)) }) {

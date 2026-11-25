@@ -633,8 +633,8 @@ time. The times, their format and colour, and the lag's figures are the desktop'
 ## Selecting the game's text
 
 Desktop Mudlet selects the main console's text by the character, from where a drag starts to where it ends; the app
-selects whole lines, from the line a long press or TalkBack's "Select from here" started on to the one a tap or "Select
-to here" took it to (`docs/architecture.md`, "Copying the game's text"). A character under a fingertip in monospaced
+selects whole lines, from the line a long press or TalkBack's "Select from here" started on to the one a handle, which
+snaps to lines, or "Select to here" took it to (`docs/architecture.md`, "Copying the game's text"). A character under a fingertip in monospaced
 game text is a fraction of the finger's width, and dragging a handle across a list that scrolls as new lines arrive
 lands short or long more often than not; a line is a target a thumb and TalkBack both hit. The lines are copied as the
 desktop copies a selection of whole lines, up to 200,000 characters at once: Android hands the text to the clipboard or

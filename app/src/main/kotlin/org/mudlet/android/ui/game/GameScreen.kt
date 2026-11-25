@@ -216,7 +216,6 @@ private fun ProfileGameScreen(
     var padFolded by rememberSaveable { mutableStateOf(false) }
     var picked by remember { mutableStateOf<String?>(null) }
     val snackbars = remember { SnackbarHostState() }
-    val selectionBar = remember { LineSelectionBarSlot() }
     val scope = rememberCoroutineScope()
     val notSent = stringResource(R.string.input_not_sent)
     val context = LocalContext.current
@@ -472,7 +471,7 @@ private fun ProfileGameScreen(
                             colors = colors,
                             onTextSize = Settings.textSize::set,
                             onScreenSize = EngineClient::setGameConsoleSize,
-                            selectionBar = selectionBar,
+                            onToCommandLine = { picked = it },
                             consoleModifier.tourTarget(TourTarget.CONSOLE),
                             links = c.links,
                             onMakeTrigger = onMakeTrigger,
@@ -483,6 +482,7 @@ private fun ProfileGameScreen(
                             behindText = { if (!mapperDrawn) BackgroundMap(colors, behind, inFront = mapOpen) },
                             caret = caret,
                             onCaretLeft = ::leaveCaret,
+                            obscured = mapOpen,
                         )
                     }
                     if (mapOpen) {
@@ -492,8 +492,6 @@ private fun ProfileGameScreen(
                             onBackProgress = { backProgress = it },
                             Modifier.fillMaxSize(),
                         )
-                    } else {
-                        LineSelectionBarHost(selectionBar, Modifier.align(Alignment.BottomCenter).fillMaxWidth())
                     }
                     // The map in front and the map beside the text show the download in their own bar
                     Column(Modifier.align(Alignment.BottomCenter), horizontalAlignment = Alignment.CenterHorizontally) {

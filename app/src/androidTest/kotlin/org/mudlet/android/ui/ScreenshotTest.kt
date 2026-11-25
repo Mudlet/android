@@ -10,7 +10,10 @@ import android.os.Build
 import androidx.annotation.StringRes
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
@@ -19,6 +22,7 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextClearance
@@ -53,7 +57,8 @@ import java.util.Base64
 import java.util.concurrent.CompletableFuture
 
 /**
- * Screenshots of the profile list, the game screen with the map behind its text, connected, with its movement pad in
+ * Screenshots of the profile list, the game screen with the map behind its text, connected, with a line selected and
+ * Android's text toolbar beside it, with its movement pad in
  * each of its four designs and after a drop, the
  * settings (the hub, a search and seven pages, one as a change says it waits for the next connection, and in light
  * mode the hub and a page side by side on a tablet), the input line keeping the command sent, the
@@ -114,6 +119,18 @@ class ScreenshotTest {
         session.status("connection", "connected")
         compose.waitUntil(WAIT_MS) { EngineClient.front.status["connection"] == "connected" }
         save("game-$mode")
+        // A line selected, with Android's floating text toolbar beside it
+        fun gameLine(i: Int) = hasText(GAME_LINES[i].first, substring = true) and SemanticsMatcher("a line") { it.config.getOrNull(SemanticsActions.CustomActions) != null }
+        val selectedLine = gameLine(1)
+        compose.onNode(selectedLine).performTouchInput { longClick(center) }
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(selectedLine).fetchSemanticsNodes().singleOrNull()?.config?.getOrNull(SemanticsProperties.Selected) == true }
+        compose.waitForIdle()
+        val copy = string(R.string.console_selection_copy)
+        FloatingToolbar.waitFor(copy)
+        save("game-selection-$mode")
+        compose.onNode(gameLine(GAME_LINES.lastIndex)).performTouchInput { click(center) }
+        compose.waitForIdle()
+        FloatingToolbar.assertGone(copy, "the toolbar is still there after the tap")
         // The fake engine's rule keeps the pad away, and so would a keyboard the emulator may have
         compose.runOnIdle {
             HardwareKeyboard.attachedOverride = false

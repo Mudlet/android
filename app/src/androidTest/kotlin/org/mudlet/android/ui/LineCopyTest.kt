@@ -22,6 +22,7 @@ import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -32,9 +33,9 @@ import org.mudlet.android.protocol.Profile
 import org.mudlet.android.ui.game.GAME_TITLE_TAG
 
 /**
- * Copying a line of the game's text against a fake engine: a long press on a line opens a menu that offers to copy and
- * share it beside the trigger, and TalkBack has copying as the action of each line with text, not a blank one; either
- * puts the line on the clipboard as it reads.
+ * Copying a line of the game's text against a fake engine: a long press on a line selects it, with Android's floating
+ * text toolbar offering to copy and share it beside the trigger, and TalkBack has copying as the action of each line with
+ * text, not a blank one; either puts the line on the clipboard as it reads.
  */
 @RunWith(AndroidJUnit4::class)
 class LineCopyTest {
@@ -70,15 +71,16 @@ class LineCopyTest {
     }
 
     @Test
-    fun aLongPressOnALineOffersCopyAndShareBesideTheTriggerAndCopyPutsTheLineOnTheClipboard() {
+    fun aLongPressOnALineOffersCopyAndShareBesideTheTriggerInAndroidsToolbarAndCopyPutsTheLineOnTheClipboard() {
         compose.onNode(hasText(LINE)).performTouchInput { longClick(center) }
-        val copy = hasText(string(R.string.console_copy_line)) and hasClickAction()
-        waitFor(copy)
-        compose.onNode(hasText(string(R.string.console_share_line)) and hasClickAction()).assertIsDisplayed()
-        compose.onNode(hasText(string(R.string.console_make_trigger)) and hasClickAction()).assertIsDisplayed()
-        activate(copy)
+        val copy = string(R.string.console_selection_copy)
+        FloatingToolbar.waitFor(copy)
+        FloatingToolbar.waitFor(string(R.string.console_selection_share))
+        assertTrue(FloatingToolbar.offers(string(R.string.console_selection_trigger)))
+        FloatingToolbar.tap(copy)
         compose.waitUntil(WAIT_MS) { clipboard() == LINE }
-        compose.onNode(copy).assertDoesNotExist()
+        compose.waitForIdle()
+        FloatingToolbar.assertGone(copy, "the toolbar goes once the line is copied")
     }
 
     @Test

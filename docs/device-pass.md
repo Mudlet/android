@@ -257,7 +257,8 @@ The app should take the mouse as desktop Mudlet does.
 2. Rest the pointer on a link in the game's text (words the game underlines): the pointer becomes a hand, and if the
    game gave the link a hint, it shows below the pointer and goes when you move off the link.
 3. Right-click a link that offers a menu (a long press on it opens one): the menu opens. Right-click the text away from
-   links: the line's menu opens (Copy line, Share line). Neither follows the link, and the screen does not go back.
+   links: the line is selected, with Android's text toolbar (Copy, Share) beside it. Neither follows the link, and the
+   screen does not go back.
 4. If your game's screen layout has chat windows, do steps 1 and 3 in one of them too.
 5. Open the map (part 14). Roll the wheel over it: it zooms about the pointer, faster with Ctrl held. A touchpad's pinch
    zooms it too. Right-click a room: it is picked and its card shows. Right-click empty space: nothing changes.

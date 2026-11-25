@@ -33,6 +33,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -46,9 +47,9 @@ import org.mudlet.android.protocol.RUN_UNDERLINE
 /**
  * The game's links in the main console (docs/architecture.md, "The main console's links"), against a fake engine: asked
  * about with no window, followed by a tap, a menu item or TalkBack's action, and asked again after `linksChanged`. A
- * long press on a link with a menu opens that menu; elsewhere on the line it offers to make a trigger from the line. A
- * mouse works it as desktop's console: a right click reveals a spoiler, opens a link's menu or the line's, a link's tool
- * tip shows under the pointer, and the wheel scrolls three rows a notch.
+ * long press on a link with a menu opens that menu; elsewhere on the line it selects the line, whose toolbar offers to
+ * make a trigger from it. A mouse works it as desktop's console: a right click reveals a spoiler, opens a link's menu or
+ * selects the line, a link's tool tip shows under the pointer, and the wheel scrolls three rows a notch.
  */
 @RunWith(AndroidJUnit4::class)
 class ConsoleLinksTest {
@@ -113,7 +114,7 @@ class ConsoleLinksTest {
         compose.onNode(row).performTouchInput { longClick(onLink) }
         compose.waitUntil(WAIT_MS) { displayed("Eat") }
         compose.onNodeWithText("Ways").assertIsDisplayed()
-        assertFalse("the link's menu, not the line's", displayed(makeTrigger()))
+        assertFalse("the link's menu, not a selection", lineSelected())
         compose.onNode(hasText("Drop") and hasClickAction()).assertIsNotEnabled()
         compose.onRoot().tryPerformAccessibilityChecks()
         compose.onNode(hasText("Eat") and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
@@ -126,9 +127,10 @@ class ConsoleLinksTest {
         assertFollowed(item = 0)
         compose.waitUntil(WAIT_MS) { !displayed("Look") }
 
-        // Beside the link, a long press offers a trigger from the line, and follows nothing
+        // Beside the link, a long press selects the line, whose toolbar offers a trigger from it, and follows nothing
         compose.onNode(row).performTouchInput { longClick(beside) }
-        compose.waitUntil(WAIT_MS) { displayed(makeTrigger()) }
+        compose.waitUntil(WAIT_MS) { lineSelected() }
+        assertTrue(FloatingToolbar.offers(string(R.string.console_selection_trigger)))
         assertFalse(displayed("Eat"))
         session.assertNoRequest("followLink", 1_000)
     }
@@ -153,15 +155,16 @@ class ConsoleLinksTest {
         // A right click on it opens its menu, and follows nothing
         compose.onNode(row).performMouseInput { rightClick(onLink) }
         compose.waitUntil(WAIT_MS) { displayed("Eat") }
-        assertFalse("the link's menu, not the line's", displayed(makeTrigger()))
+        assertFalse("the link's menu, not a selection", lineSelected())
         session.assertNoRequest("followLink", 1_000)
         compose.onNode(hasText("Eat") and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
         assertFollowed(item = 2)
         compose.waitUntil(WAIT_MS) { !displayed("Eat") }
 
-        // Beside it, the line's menu
+        // Beside it, the line selected, as a long press does
         compose.onNode(row).performMouseInput { rightClick(beside) }
-        compose.waitUntil(WAIT_MS) { displayed(makeTrigger()) }
+        compose.waitUntil(WAIT_MS) { lineSelected() }
+        assertTrue(FloatingToolbar.offers(string(R.string.console_selection_trigger)))
         session.assertNoRequest("followLink", 1_000)
     }
 
@@ -182,7 +185,7 @@ class ConsoleLinksTest {
         compose.waitUntil(WAIT_MS) { labels().contains(string(R.string.console_link_menu, "wander north")) }
         compose.onNode(row).performMouseInput { rightClick(onLink) }
         session.assertNoRequest("followLink", 1_000)
-        assertFalse(displayed("Eat") || displayed(makeTrigger()))
+        assertFalse(displayed("Eat") || lineSelected())
 
         // Nor on a link without a menu
         session.send(linksChanged(LINK))
@@ -190,7 +193,7 @@ class ConsoleLinksTest {
         compose.waitUntil(WAIT_MS) { labels().contains(string(R.string.console_link_follow, "run north")) }
         compose.onNode(row).performMouseInput { rightClick(onLink) }
         session.assertNoRequest("followLink", 1_000)
-        assertFalse(displayed(makeTrigger()))
+        assertFalse(lineSelected())
     }
 
     @Test
@@ -330,6 +333,8 @@ class ConsoleLinksTest {
     private fun labels() = actions().map { it.label }
 
     private fun makeTrigger() = string(R.string.console_make_trigger)
+
+    private fun lineSelected() = compose.onAllNodes(row).fetchSemanticsNodes().singleOrNull()?.config?.getOrNull(SemanticsProperties.Selected) == true
 
     private fun copyLine() = string(R.string.console_copy_line)
 

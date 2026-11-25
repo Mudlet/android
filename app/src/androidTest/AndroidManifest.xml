@@ -2,8 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <application>
-        <!-- An app that takes selected text, as a translator does, which the game text's selection must offer; it runs in
-             the test APK's own process, so it shows what it was given for UiAutomator to read -->
+        <!-- An app that takes selected text, as a translator does, which the game text's selection must offer -->
         <activity
             android:name="org.mudlet.android.ui.TextTakerActivity"
             android:exported="true"

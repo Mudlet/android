@@ -1,7 +1,11 @@
 package org.mudlet.android.ui
 
 import android.Manifest
+import android.app.Activity
+import android.app.Instrumentation
 import android.content.ClipboardManager
+import android.content.ComponentName
+import android.content.Intent
 import android.os.Build
 import android.os.SystemClock
 import androidx.annotation.StringRes
@@ -28,9 +32,7 @@ import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
-import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
-import androidx.test.uiautomator.Until
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -44,6 +46,7 @@ import org.mudlet.android.protocol.Profile
 import org.mudlet.android.ui.game.Announcer
 import org.mudlet.android.ui.game.GAME_TITLE_TAG
 import org.mudlet.android.ui.game.SELECTION_END_HANDLE_TAG
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Selecting lines of the game's text against a fake engine: a long press on a line selects it, with Android's own
@@ -203,14 +206,30 @@ class LineSelectTest {
 
     @Test
     fun anAppThatTakesTextIsInTheToolbarsOverflowAndGetsTheLinesReadOnly() {
-        compose.onNode(line(1)).performTouchInput { longClick(center) }
-        compose.waitUntil(WAIT_MS) { selected(1) }
-        FloatingToolbar.tap(TextTakerActivity.LABEL)
-        val taken = TextTakerActivity.TAKEN.format(true, LINES[1])
-        if (!device.wait(Until.hasObject(By.text(taken)), WAIT_MS)) throw AssertionError("the app got no \"$taken\"; ${FloatingToolbar.describe()}")
-        device.pressBack()
-        waitFor(line(1))
-        compose.waitUntil(WAIT_MS) { !selected(1) }
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val taken = AtomicReference<Intent>()
+        // Caught as the app starts it: the test APK's activity, started for real, left the emulators on the home screen
+        val monitor = object : Instrumentation.ActivityMonitor() {
+            override fun onStartActivity(intent: Intent): Instrumentation.ActivityResult? {
+                if (intent.action != Intent.ACTION_PROCESS_TEXT) return null
+                taken.set(intent)
+                return Instrumentation.ActivityResult(Activity.RESULT_CANCELED, null)
+            }
+        }
+        instrumentation.addMonitor(monitor)
+        try {
+            compose.onNode(line(1)).performTouchInput { longClick(center) }
+            compose.waitUntil(WAIT_MS) { selected(1) }
+            FloatingToolbar.tap(TextTakerActivity.LABEL)
+            compose.waitUntil(WAIT_MS) { taken.get() != null }
+            val intent = taken.get()
+            assertEquals(ComponentName(instrumentation.context.packageName, TextTakerActivity::class.java.name), intent.component)
+            assertEquals(LINES[1], intent.getStringExtra(Intent.EXTRA_PROCESS_TEXT))
+            assertTrue("the app may change the text", intent.getBooleanExtra(Intent.EXTRA_PROCESS_TEXT_READONLY, false))
+            compose.waitUntil(WAIT_MS) { !selected(1) }
+        } finally {
+            instrumentation.removeMonitor(monitor)
+        }
     }
 
     // The line's node, read with its time first

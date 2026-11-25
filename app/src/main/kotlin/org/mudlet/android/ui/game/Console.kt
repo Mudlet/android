@@ -459,7 +459,7 @@ fun Console(
     val selectionTaps = if (selecting) {
         Modifier.pointerInput(Unit) {
             detectTapGestures(
-                onTap = { selectionState.value = null },
+                onTap = { },
                 onLongPress = { at ->
                     val i = lineUnder(at.y.roundToInt(), latestDrawnLines()) ?: return@detectTapGestures
                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)

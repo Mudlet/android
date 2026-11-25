@@ -28,10 +28,10 @@ Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet 
 Upstream: not opened yet
 
 diff --git a/src/TLuaInterpreter.cpp b/src/TLuaInterpreter.cpp
-index bec4ca3..02eb9b5 100644
+index edcbe69..a14efec 100644
 --- a/src/TLuaInterpreter.cpp
 +++ b/src/TLuaInterpreter.cpp
-@@ -10166,6 +10166,91 @@ static QColor Host::*consoleColorMember(QStringView key)
+@@ -10234,6 +10234,91 @@ static QColor Host::*consoleColorMember(QStringView key)
      return nullptr;
  }
  
@@ -123,7 +123,7 @@ index bec4ca3..02eb9b5 100644
  // Documentation: https://wiki.mudlet.org/w/Manual:Lua_Functions#setConfig
  // Please use same options with same names in setConfig and getConfig and keep them in sync
  // The table argument case for setting multiple properties at once is handled
-@@ -10272,8 +10357,78 @@ int TLuaInterpreter::setConfig(lua_State* L)
+@@ -10340,8 +10425,78 @@ int TLuaInterpreter::setConfig(lua_State* L)
  #endif
          if (key == qsl("mapShowRoomBorders")) {
              host.mMapperShowRoomBorders = getVerifiedBool(L, __func__, 2, "value");
@@ -202,7 +202,7 @@ index bec4ca3..02eb9b5 100644
          if (key == qsl("mapShowGrid")) {
              host.mMapperShowGrid = getVerifiedBool(L, __func__, 2, "value");
              host.mpMap->announceMapperSettingChanged(TMap::MapperSetting::ShowGrid);
-@@ -10997,6 +11152,35 @@ int TLuaInterpreter::getConfig(lua_State* L)
+@@ -11084,6 +11239,35 @@ int TLuaInterpreter::getConfig(lua_State* L)
               [&]() {
                   lua_pushboolean(L, host.mMapperShowRoomBorders);
               }},
@@ -238,7 +238,7 @@ index bec4ca3..02eb9b5 100644
              {qsl("mapInfoColor"),
               [&]() {
                   lua_newtable(L);
-@@ -11395,6 +11579,10 @@ int TLuaInterpreter::getConfig(lua_State* L)
+@@ -11494,6 +11678,10 @@ int TLuaInterpreter::getConfig(lua_State* L)
          lua_pushstring(L, (host.*member).name().toUtf8().constData());
          return 1;
      }
@@ -250,10 +250,10 @@ index bec4ca3..02eb9b5 100644
      // Handle experiment keys
      if (key.startsWith(qsl("experiment."))) {
 diff --git a/src/mudlet-lua/lua/Other.lua b/src/mudlet-lua/lua/Other.lua
-index 72ebc2e..b28f0eb 100644
+index 6a08192..82079ce 100644
 --- a/src/mudlet-lua/lua/Other.lua
 +++ b/src/mudlet-lua/lua/Other.lua
-@@ -1704,10 +1704,39 @@ local configOptions = {
+@@ -1761,11 +1761,40 @@ local configOptions = {
    "logFileNameFormat",
    "logInHTML",
    "logTimestamps",
@@ -274,6 +274,7 @@ index 72ebc2e..b28f0eb 100644
 +  "mapAnsiWhite",
 +  "mapAnsiYellow",
 +  "mapBackgroundColor",
+   "mapDeletedRoomExitsAsStubs",
    "mapExitSize",
 +  "mapGridColor",
    "mapInfoColor",
@@ -293,7 +294,7 @@ index 72ebc2e..b28f0eb 100644
    "mapRoomSize",
    "mapRoundRooms",
    "mapShowGrid",
-@@ -1717,6 +1746,7 @@ local configOptions = {
+@@ -1775,6 +1804,7 @@ local configOptions = {
    "mapSymbolFont",
    "mapSymbolFontOnlyUseSelected",
    "mapSymbolFontScaling",
@@ -302,10 +303,10 @@ index 72ebc2e..b28f0eb 100644
    "muteMediaGame",
    "promptForMXPProcessorOn",
 diff --git a/src/mudlet-lua/tests/Other_spec.lua b/src/mudlet-lua/tests/Other_spec.lua
-index 23c726d..ba82449 100644
+index 90d3c88..7e32b14 100644
 --- a/src/mudlet-lua/tests/Other_spec.lua
 +++ b/src/mudlet-lua/tests/Other_spec.lua
-@@ -2297,6 +2297,54 @@ describe("Tests Other.lua functions", function()
+@@ -2410,6 +2410,54 @@ describe("Tests Other.lua functions", function()
        end
      end)
  

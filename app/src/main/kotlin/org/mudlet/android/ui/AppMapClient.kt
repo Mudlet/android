@@ -184,12 +184,14 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
         if (message.w == 0 || message.h == 0) {
             map = null
             mover.onFrame(null)
+            session.playerExits.onFrame(MapTarget.APP, null)
             return
         }
         if (frame.bitmap == null) Log.w(TAG, "the engine's app map, ${message.w} by ${message.h}, did not decode")
         map = ScriptWindowsClient.MapImage(frame.bitmap, message.w, message.h, message.viewOnly, message.info)
         mover.onFrame(message.view)
         rooms.onFrame(message.view)
+        session.playerExits.onFrame(MapTarget.APP, message.view)
         cutOut()
     }
 

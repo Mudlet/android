@@ -28,6 +28,7 @@ import org.mudlet.android.protocol.RefusedCertificate
 import org.mudlet.android.protocol.Requests
 import org.mudlet.android.protocol.applyLineUpdates
 import org.mudlet.android.ui.game.Announcer
+import org.mudlet.android.ui.game.MovementKey
 import org.mudlet.android.ui.packages.decodeIcon
 import org.mudlet.android.ui.packages.pickedPackage
 import org.mudlet.android.ui.packages.pickedPackagesDir
@@ -200,6 +201,12 @@ class ProfileSession internal constructor(
 
     /** The app's own map of this profile. */
     internal val appMap = AppMapClient(this)
+
+    /** The ways out of the player's room the map has, for the Room exits movement pad; null while not known. */
+    internal var roomExits by mutableStateOf<Set<MovementKey>?>(null)
+        private set
+
+    internal val playerExits = PlayerExits(::newRequestId, ::send) { roomExits = it }
 
     /** Its triggers, aliases, scripts, timers, keys and buttons, as the script library shows and edits them. */
     internal val scripts = ScriptItemsClient(::newRequestId, ::send)
@@ -689,6 +696,7 @@ class ProfileSession internal constructor(
                 }
                 linkState = "attached (${if (sameInstance) "same engine, delta replay" else "new engine instance"})"
                 windows.onAttached(sameInstance, connection)
+                playerExits.onAttached(sameInstance)
                 links.onAttached(sameInstance, linesAdded)
                 scripts.onAttached(sameInstance)
                 packages.onAttached(sameInstance)
@@ -813,7 +821,7 @@ class ProfileSession internal constructor(
                 is EngineMessage.SettingValues -> post { onSettings(message) }
 
                 // Each map asks with its own ids, so only the one that asked takes the answer
-                is EngineMessage.Room -> post { appMap.rooms.onRoom(message) || windows.mapRooms.onRoom(message) }
+                is EngineMessage.Room -> post { playerExits.onRoom(message) || appMap.rooms.onRoom(message) || windows.mapRooms.onRoom(message) }
 
                 is EngineMessage.Rooms -> post { appMap.onRooms(message) || windows.mapRooms.onRooms(message) }
 

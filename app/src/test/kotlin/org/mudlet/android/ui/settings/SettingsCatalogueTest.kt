@@ -45,7 +45,21 @@ class SettingsCatalogueTest {
         assertEquals(4, design.choiceLabels().distinct().size)
         assertEquals(4, design.choiceHints()?.distinct()?.size)
         assertEquals(Settings.ScriptEditorDesign.CURRENT, Settings.scriptEditorDesign.default)
-        assertEquals(listOf(design.key), shown(SettingsCategory.EXPERIMENTAL))
+        assertEquals(design.key, shown(SettingsCategory.EXPERIMENTAL).first())
+    }
+
+    @Test
+    fun theMovementPadsDesignIsAnExperimentalChoiceOfFour_SwipeByDefault_withTheSideStraightAfter() {
+        val design = settingsCatalogue.single { it.key == Settings.movementPadDesign.key } as SettingEntry.Choice<*>
+        assertEquals(SettingsCategory.EXPERIMENTAL, design.category)
+        assertEquals(4, design.choiceLabels().distinct().size)
+        assertEquals(4, design.choiceHints()?.distinct()?.size)
+        assertEquals(Settings.MovementPadDesign.SWIPE, Settings.movementPadDesign.default)
+        assertEquals(Settings.MovementPadSide.RIGHT, Settings.movementPadSide.default)
+        assertEquals(
+            listOf(Settings.scriptEditorDesign.key, design.key, Settings.movementPadSide.key),
+            shown(SettingsCategory.EXPERIMENTAL),
+        )
     }
 
     @Test

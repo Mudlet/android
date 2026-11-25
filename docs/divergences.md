@@ -643,7 +643,7 @@ as HTML" and "Copy as image" are not offered yet.
 
 ## The movement pad
 
-The game screen has a movement pad below its bottom row: a key for each of the eight compass directions and for up,
+The game screen has a movement pad below its bottom row, a strip to swipe across unless the player picks keys: a way for each of the eight compass directions and for up,
 down, in and out (`docs/architecture.md`, "The movement pad"). Desktop Mudlet has no such control. Its players walk
 with the keyboard's number pad, which a phone does not have, and typing a direction for every room with the on-screen
 keyboard up is the slowest part of playing on one. The pad adds nothing a script or a game can see: a compass key

@@ -260,11 +260,13 @@ class ScreenReaderTest {
     }
 
     @Test
-    fun eachKeyOfTheMovementPadIsAButtonNamedByWhereItGoes() {
-        // On, as it is from the start: the fake engine's rule turns it off for the tests that are not about it
+    fun eachKeyOfTheClassicMovementPadIsAButtonNamedByWhereItGoes() {
+        // On, as it is from the start: the fake engine's rule turns it off for the tests that are not about it. The
+        // Swipe pad a player has from the start is the next test's
         compose.runOnIdle {
             HardwareKeyboard.attachedOverride = false
             Settings.movementPad.reset()
+            Settings.movementPadDesign.set(Settings.MovementPadDesign.CURRENT)
         }
         // Each key's name, and the word it sends, which is what a player types and not a name to read out
         val keys = listOf(
@@ -281,6 +283,7 @@ class ScreenReaderTest {
             R.string.movement_in to "in",
             R.string.movement_out to "out",
             R.string.movement_pad_hide to "",
+            R.string.settings_movement_pad_design to "",
         )
         for ((id, word) in keys) {
             val name = string(id)
@@ -291,6 +294,58 @@ class ScreenReaderTest {
         }
         assertEquals("each has a name of its own", keys.size, keys.map { string(it.first) }.toSet().size)
         compose.onRoot().tryPerformAccessibilityChecks()
+    }
+
+    @Test
+    fun eachMovementPadDesignsControlsAreButtonsNamedByWhatTheyDo() {
+        compose.runOnIdle {
+            HardwareKeyboard.attachedOverride = false
+            Settings.movementPad.reset()
+        }
+        val ways = listOf(
+            R.string.movement_up,
+            R.string.movement_down,
+            R.string.movement_in,
+            R.string.movement_out,
+            R.string.movement_north,
+            R.string.movement_northeast,
+            R.string.movement_east,
+            R.string.movement_southeast,
+            R.string.movement_south,
+            R.string.movement_southwest,
+            R.string.movement_west,
+            R.string.movement_northwest,
+        )
+        // The pad a player has from the start, the Swipe pad: its strip is a button whose double tap lists the ways,
+        // and whose actions walk each, as TalkBack keeps swipes
+        val strip = hasText(string(R.string.movement_swipe)) and hasClickAction()
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(strip).fetchSemanticsNodes().size == 1 }
+        val config = compose.onNode(strip).fetchSemanticsNode().config
+        assertEquals(Role.Button, config[SemanticsProperties.Role])
+        assertEquals(string(R.string.movement_swipe_list), config[SemanticsActions.OnClick].label)
+        assertEquals(ways.map { string(it) }, config[SemanticsActions.CustomActions].map { it.label })
+        compose.onRoot().tryPerformAccessibilityChecks()
+
+        val designs = listOf(
+            Settings.MovementPadDesign.CURRENT to listOf(R.string.movement_pad_hide, R.string.settings_movement_pad_design) + ways,
+            Settings.MovementPadDesign.THUMB to listOf(R.string.movement_pad_fold, R.string.movement_pad_to_left, R.string.settings_movement_pad_design) + ways,
+            Settings.MovementPadDesign.SWIPE to listOf(R.string.movement_pad_hide, R.string.settings_movement_pad_design),
+            Settings.MovementPadDesign.EXITS to listOf(R.string.movement_pad_hide, R.string.settings_movement_pad_design) + ways,
+        )
+        for ((design, controls) in designs) {
+            compose.runOnIdle { Settings.movementPadDesign.set(design) }
+            for (id in controls) {
+                val control = hasContentDescription(string(id)) and hasClickAction()
+                compose.waitUntil(WAIT_MS) { compose.onAllNodes(control).fetchSemanticsNodes().size == 1 }
+                compose.onNode(control).assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
+            }
+            assertEquals("$design: each has a name of its own", controls.size, controls.map { string(it) }.toSet().size)
+            compose.onRoot().tryPerformAccessibilityChecks()
+        }
+        // Thumb's middle key before any walk, which says what it will do
+        compose.runOnIdle { Settings.movementPadDesign.set(Settings.MovementPadDesign.THUMB) }
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasContentDescription(string(R.string.movement_again_none))).fetchSemanticsNodes().size == 1 }
+        compose.onNode(hasContentDescription(string(R.string.movement_again_none))).assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
     }
 
     @Test

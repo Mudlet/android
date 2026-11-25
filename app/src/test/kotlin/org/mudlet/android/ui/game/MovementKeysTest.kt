@@ -82,6 +82,57 @@ class MovementKeysTest {
     }
 
     @Test
+    fun theThumbPadsAgainKeyTakesTheMiddleGapOfThePad() {
+        assertEquals(null, MovementPadLayout.rows[MovementPadLayout.MIDDLE_ROW][MovementPadLayout.MIDDLE_COLUMN])
+        val (northX, northY) = MovementPadLayout.rows.withIndex().first { MovementKey.NORTH in it.value }.let { it.value.indexOf(MovementKey.NORTH) to it.index }
+        assertEquals("under north, between west and east", northX to northY + 1, MovementPadLayout.MIDDLE_COLUMN to MovementPadLayout.MIDDLE_ROW)
+    }
+
+    @Test
+    fun aSwipeWalksTheCompassWayNearestItsAngleWithNorthUp() {
+        val least = 24f
+        val ways = mapOf(
+            (0f to -100f) to MovementKey.NORTH,
+            (100f to -100f) to MovementKey.NORTHEAST,
+            (100f to 0f) to MovementKey.EAST,
+            (100f to 100f) to MovementKey.SOUTHEAST,
+            (0f to 100f) to MovementKey.SOUTH,
+            (-100f to 100f) to MovementKey.SOUTHWEST,
+            (-100f to 0f) to MovementKey.WEST,
+            (-100f to -100f) to MovementKey.NORTHWEST,
+        )
+        for ((d, key) in ways) assertEquals("$d", key, MovementPadLayout.swipe(d.first, d.second, least))
+        // tan 22.5 degrees is about 0.414: a swipe a little under it from east is east, a little over north-east
+        assertEquals(MovementKey.EAST, MovementPadLayout.swipe(100f, -40f, least))
+        assertEquals(MovementKey.NORTHEAST, MovementPadLayout.swipe(100f, -43f, least))
+        assertEquals("just west of south", MovementKey.SOUTH, MovementPadLayout.swipe(-30f, 100f, least))
+        assertEquals("west the other side of the half turn", MovementKey.WEST, MovementPadLayout.swipe(-100f, 1f, least))
+    }
+
+    @Test
+    fun aSwipeShorterThanTheLeastIsATap() {
+        assertEquals(null, MovementPadLayout.swipe(0f, 0f, 24f))
+        assertEquals(null, MovementPadLayout.swipe(16f, -16f, 24f))
+        assertEquals(MovementKey.NORTHEAST, MovementPadLayout.swipe(17f, -17f, 24f))
+        assertEquals(MovementKey.NORTH, MovementPadLayout.swipe(0f, -24f, 24f))
+    }
+
+    @Test
+    fun theSwipePadsListHasEachWayOnceThoseNoSwipeGivesFirst() {
+        val listed = MovementPadLayout.listed
+        assertEquals(MovementKey.entries.size, listed.size)
+        assertEquals(MovementKey.entries.toSet(), listed.toSet())
+        assertEquals(listOf(MovementKey.UP, MovementKey.DOWN, MovementKey.IN, MovementKey.OUT), listed.take(4))
+    }
+
+    @Test
+    fun aRoomsExitIsTheKeyOfItsDirectionAndASpecialExitHasNone() {
+        val twelve = listOf("n", "ne", "e", "se", "s", "sw", "w", "nw", "up", "down", "in", "out")
+        assertEquals(MovementKey.entries, twelve.map { MovementKey.ofExit(it) })
+        for (special in listOf("u", "d", "climb rope", "N", "")) assertEquals(special, null, MovementKey.ofExit(special))
+    }
+
+    @Test
     fun thePadShowsOnAPhoneHeldUprightWithNoKeyboard() {
         fun shown(
             enabled: Boolean = true,

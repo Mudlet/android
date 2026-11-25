@@ -381,18 +381,51 @@ walking is used. Any other key, and up, down, in and out always, sends its short
 `sw`, `w`, `nw`, `u`, `d`, `in`, `out`: the ones Mudlet's generic mapper follows the player by) as if typed, so the
 profile's aliases see it and the history and the suggestions learn it.
 
-The pad is on from the first start (`Settings.movementPad`). `MovementPadLayout.shown()` keeps it away while the game
+The pad is on from the first start (`Settings.movementPad`), as the Swipe design below. `MovementPadLayout.shown()` keeps it away while the game
 hides input, when a tap would send a direction as the password; with a hardware keyboard that has letters attached,
 which walks as on the desktop; while the on-screen keyboard is up, which leaves the game's text too little room for
 both; and in a window less than 320 dp wide or 480 dp tall, a phone on its side for one. The button at the row's start
 puts it away for good: it turns the setting off and a snackbar says where it is turned on again, with Undo. "Movement
 pad" on the Appearance settings page is that switch.
 
-TalkBack reads the pad after the bottom row and before the script windows: "Hide the movement pad", then the keys row
+TalkBack reads the pad after the bottom row and before the script windows: "Hide the movement pad" and "Movement pad design", then the keys row
 by row, each a button named by where it goes ("Go north-east"). `MovementKeysTest` tries the keys' commands, the layout
 and when the pad shows on the JVM; `MovementPadTest`, `MovementPadPseudoLocaleTest` and the pad's tests in
 `TalkBackOrderTest` and `ScreenReaderTest` the pad on the game screen against the fake engine, whose rule
 (`FakeEngineRule`) turns the pad off for every other test.
+
+### The movement pad's designs
+Settings' Experimental section has "Movement pad design" (`Settings.movementPadDesign`): Swipe, the pad a player has
+from the start, Classic, the pad above, and two more designs to try beside them, each better on another count. The
+pad's own button lists the same four, marked experimental, as the script editor's library lists its designs
+(`DesignButton` in `MovementPad.kt`); the game screen reads the setting as it composes, so a pick shows at once.
+`CURRENT` (Classic, the pad before Swipe was the default), `THUMB`, `SWIPE` and `EXITS` are stored names. Every design
+fits the 320 dp window the pad shows in, with 48 dp targets and west on the left; all but Classic sit at the edge of
+the side "Movement pad side" (`Settings.movementPadSide`, right by default) names, left or right in a language written
+from the right too, with their buttons on the inner side. TalkBack reads a pad's buttons together, then its keys
+together, or the keys first on the left. Each sends what the Classic pad sends for a way.
+- Thumb pad: the Classic keys, with a key in their middle gap that walks the last way again ("Go east again"), and
+  beside them buttons that move the pad to the other side and fold it into a walking figure at the start of the row
+  below the input line, which gives its rows back to the game's text. The fold lasts while the game screen does, not
+  across starts.
+- Swipe, the default: one strip, as wide as the Classic keys and 96 dp tall, a row less than them: a swipe across
+  it of 24 dp or more walks the compass way nearest its angle (`MovementPadLayout.swipe()`), and a tap lists the
+  twelve ways, up, down, in and out first. TalkBack takes swipes for itself, so its double tap opens the list and the
+  strip's actions have the twelve ways; it reads "Hide the movement pad", "Movement pad design", then the strip.
+- Room exits: the Classic keys, but only the ways out of the player's room that the map has, each where it is on the
+  Classic pad, so that the thumb finds it where it always is. While this pad shows, `PlayerExits`
+  (`ui/PlayerExits.kt`) takes the player's room from the app's map's frames (`view`'s `player`), or the mapper
+  window's while the app's names none, and asks `roomInfo` for it with an id of its own; the answer's twelve
+  directions are the keys, its special exits left out. The last room's keys stay until the next room's answer, an
+  edit of the room on either map changes them, and no room for the player, a refusal (a room the map does not have)
+  or no map drawn bring back all twelve: the app's map is drawn only while it is up, in the corner (on by default),
+  behind the text or in front. A button shows all twelve anyway, for a way the map does not know yet. No other
+  design asks the engine anything.
+
+`MovementKeysTest` tries the swipe's ways, the list and the exits' names, and `PlayerExitsTest` what Room exits asks
+and keeps, on the JVM; `MovementPadDesignsTest`, `MovementPadDesignsPseudoLocaleTest` and the designs' tests in
+`TalkBackOrderTest` and `ScreenReaderTest` the designs on the game screen against the fake engine, Swipe as the pad a
+fresh install has; `ScreenshotTest` saves each design.
 
 ### How the app looks
 The app's own screens are Material 3 (`ui/theme/`), light or dark as the system is set, in Material's type and shape
@@ -2382,7 +2415,7 @@ alias of run-lua-code, one of desktop Mudlet's default packages, which a profile
       and closes the sheet; its Send button sends it. Pin one: it shows as a button below the line, which sends it
       at a tap, and it is still there after the app is closed from the recent apps and reopened. Unpin it from the
       sheet's Pinned section. With a hardware keyboard, Ctrl+R opens the sheet; Back closes it.
-    - The movement pad: it is below the input line from the first start, at the right, and covers neither the game's
+    - The movement pad, Classic (its wand button's first choice): it is below the input line from the first start, at the right, and covers neither the game's
       text nor the input line. Each key walks that way with one tap of the thumb of the hand that holds the
       phone; in a profile with key bindings on the number pad, a compass key runs the binding. It goes while the
       keyboard is up, at a password prompt, with a Bluetooth or USB keyboard and with the phone on its side, and comes
@@ -2391,6 +2424,11 @@ alias of run-lua-code, one of desktop Mudlet's default packages, which a profile
       on. In Arabic (or ar-XB) the pad is at the left and west still on the pad's left. With TalkBack on: after the
       input line's Send button it reads "Hide the movement pad", then "Go in", "Go north-west", "Go north" and so on
       row by row, each a button.
+    - The movement pad's designs: a fresh install has Swipe, and its wand button lists four. Thumb pad: the middle key
+      walks the last way again, the arrows button moves the pad to the left and back, the fold button leaves a walking
+      figure below the input line that brings it back. Swipe: a swipe up the strip walks north, a tap lists up, down, in
+      and out, and with TalkBack the strip's actions walk each way. Room exits, in a game with a map: only the room's
+      ways show, and change as you walk. Each with TalkBack alone, and in Arabic (or ar-XB).
     - Scroll up while the game sends text: the console stays put and "Jump to the bottom: N new lines" counts up; the
       button goes back to the newest line, which the console then follows again. Rotate the phone while scrolled up,
       and again with a half-typed line: both stay. The same in split screen.

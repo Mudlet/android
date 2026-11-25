@@ -53,7 +53,8 @@ import org.mudlet.android.ui.game.MOVEMENT_PAD_TAG
 import org.mudlet.android.ui.settings.SETTINGS_HUB_TAG
 
 /**
- * The game screen's movement pad against a fake engine: it is there from the start, below the input line, and covers
+ * The game screen's movement pad against a fake engine, as the classic pad of twelve keys (MovementPadDesignsTest has the
+ * Swipe pad, the design a player has from the start): it is there from the start, below the input line, and covers
  * neither the game's text nor the input line; a key sends its direction's word as typed, or presses the
  * profile's key binding on that direction's number pad key; it is away while the game hides input, with a hardware
  * keyboard and while the keyboard is up; and its own button and its switch in the settings put it away for good.
@@ -84,6 +85,7 @@ class MovementPadTest {
             HardwareKeyboard.attachedOverride = false
             // The fake engine's rule turns the pad off for the tests that are not about it
             Settings.movementPad.reset()
+            Settings.movementPadDesign.set(Settings.MovementPadDesign.CURRENT)
         }
         session = fake.engine.nextSession()
         // EngineClient lives as long as the process, so an earlier test's lines and key bindings would still be there
@@ -97,7 +99,7 @@ class MovementPadTest {
         waitFor(hasText(CONSOLE_LINE))
     }
 
-    // FakeEngineRule puts the setting back
+    // FakeEngineRule puts the settings back
     @After
     fun reset() = compose.runOnIdle { HardwareKeyboard.attachedOverride = null }
 
@@ -117,7 +119,7 @@ class MovementPadTest {
         compose.onNode(hasText(CONSOLE_LINE)).assertIsDisplayed()
 
         val target = with(compose.density) { 48.dp.toPx() }
-        val keys = (KEYS.map { it.first } + R.string.movement_pad_hide).map { name ->
+        val keys = (KEYS.map { it.first } + R.string.movement_pad_hide + R.string.settings_movement_pad_design).map { name ->
             val node = compose.onNode(key(name)).assertIsDisplayed().fetchSemanticsNode()
             val touch = node.touchBoundsInRoot
             assertTrue("${string(name)} is $touch to touch", touch.width >= target - 0.5f && touch.height >= target - 0.5f)

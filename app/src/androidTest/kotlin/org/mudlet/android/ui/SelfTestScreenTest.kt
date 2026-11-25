@@ -183,8 +183,8 @@ class SelfTestScreenTest {
 
 /**
  * A [FakeEngine] that EngineClient attaches to instead of the engine, which is never started, with the profiles [open]
- * open from the start. The movement pad is turned off: on, as it is from the start, it takes 144 dp of the game's text,
- * which the tests that are not about it were laid out without. One that is turns it on again (MovementPadTest).
+ * open from the start. The movement pad is turned off: on, as it is from the start, its Swipe strip takes 96 dp of the
+ * game's text, which the tests that are not about it were laid out without. One that is turns it on again (MovementPadTest).
  */
 class FakeEngineRule(private val open: List<String> = emptyList()) : ExternalResource() {
     lateinit var engine: FakeEngine
@@ -215,6 +215,9 @@ class FakeEngineRule(private val open: List<String> = emptyList()) : ExternalRes
             // Loaded first: MainActivity's own init would otherwise read the stored value over this one
             Settings.init(instrumentation.targetContext)
             Settings.movementPad.set(false)
+            // A design test that stopped short leaves its design stored, which the pad's other tests do not expect
+            Settings.movementPadDesign.reset()
+            Settings.movementPadSide.reset()
         }
     }
 
@@ -223,7 +226,11 @@ class FakeEngineRule(private val open: List<String> = emptyList()) : ExternalRes
         EngineClient.stoppedByAndroid = previousStoppedByAndroid
         EngineClient.lastEngineCrashMs = previousLastEngineCrashMs
         PackageRepositoryClient.fetch = previousFetch
-        InstrumentationRegistry.getInstrumentation().runOnMainSync { Settings.movementPad.reset() }
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            Settings.movementPad.reset()
+            Settings.movementPadDesign.reset()
+            Settings.movementPadSide.reset()
+        }
         engine.close()
     }
 }

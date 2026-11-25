@@ -1794,35 +1794,33 @@
     <string name="console_link_follow">Follow link: %1$s</string>
     <!-- TalkBack's action that opens the menu of a link in the game's text; %1$s is the link's tool tip or text -->
     <string name="console_link_menu">Menu of link: %1$s</string>
-    <!-- In the menu a long press on a line of the game's text opens, and TalkBack's action on such a line: opens a page that makes a trigger matching the line -->
+    <!-- TalkBack's action on a line of the game's text: opens a page that makes a trigger matching the line -->
     <string name="console_make_trigger">Make a trigger from this line</string>
-    <!-- In the menu a long press on a line of the game's text opens, and TalkBack's action on such a line: puts the line, as it reads, on the clipboard -->
+    <!-- TalkBack's action on a line of the game's text: puts the line, as it reads, on the clipboard -->
     <string name="console_copy_line">Copy line</string>
-    <!-- In the menu a long press on a line of the game's text opens: offers the line, as it reads, to Android's share sheet, which this also titles -->
-    <string name="console_share_line">Share line</string>
     <!-- A short message once a line of the game's text is on the clipboard (before Android 13, which says so itself) -->
     <string name="console_line_copied">Line copied</string>
-    <!-- A message when no app on the device can take a shared line of the game's text -->
-    <string name="console_line_no_share">No app here can take the line: copy it instead</string>
-    <!-- In the menu a long press on a line of the game's text opens, and TalkBack's action on such a line: starts a selection of whole lines at this line, which taps on other lines extend -->
+    <!-- TalkBack's action on a line of the game's text: starts a selection of whole lines at this line, as a long press on it does -->
     <string name="console_select_from_here">Select from here</string>
     <!-- TalkBack's action on a line of the game's text while some lines are selected: extends the selection from the line it began on to this line -->
     <string name="console_select_to_here">Select to here</string>
-    <!-- The bar shown over the game's text while lines are selected, and what TalkBack says each time the selection changes: how many whole lines are selected -->
+    <!-- What TalkBack says each time the selection of the game's text changes: how many whole lines are selected -->
     <plurals name="console_selection_count">
         <item quantity="one">%d line selected</item>
         <item quantity="other">%d lines selected</item>
     </plurals>
-    <!-- Under the count in the bar shown while lines of the game's text are selected: how to select more lines, and that
-         the bar's Copy and Share buttons (console_selection_copy, console_selection_share) then finish the selection -->
-    <string name="console_selection_how">Tap another line to select up to it, then Copy or Share</string>
-    <!-- Button in the bar shown while lines of the game's text are selected: puts the selected lines on the clipboard and ends the selection -->
+    <!-- In Android's floating text toolbar over selected lines of the game's text, and TalkBack's action on them: puts the selected lines on the clipboard and ends the selection. Keep it short: the toolbar shows about four items before its overflow -->
     <string name="console_selection_copy">Copy</string>
-    <!-- Button in the bar shown while lines of the game's text are selected: offers the selected lines to Android's share sheet and ends the selection -->
+    <!-- In Android's floating text toolbar over selected lines of the game's text, and TalkBack's action on them: offers the selected lines to Android's share sheet and ends the selection. Keep it short -->
     <string name="console_selection_share">Share</string>
-    <!-- Button in the bar shown while lines of the game's text are selected: ends the selection without copying or
-         sharing, as Android's own selection bars' Done does -->
-    <string name="console_selection_done">Done</string>
+    <!-- In Android's floating text toolbar over selected lines of the game's text, and TalkBack's action on them: selects every line the game's text keeps, as a text field's Select all does. Keep it short -->
+    <string name="console_selection_select_all">Select all</string>
+    <!-- In Android's floating text toolbar over selected lines of the game's text, and TalkBack's action on them: puts the selected lines, joined on one line, on the command line to edit and send, and ends the selection. Keep it short -->
+    <string name="console_selection_to_command_line">Put on command line</string>
+    <!-- In Android's floating text toolbar over one selected line of the game's text, and TalkBack's action on it: opens a page that makes a trigger matching the line. Keep it short -->
+    <string name="console_selection_trigger">Make a trigger</string>
+    <!-- TalkBack's action on a line of the game's text while some lines are selected: ends the selection without doing anything with it, as a tap on the text or Back does -->
+    <string name="console_selection_stop">Stop selecting</string>
     <!-- The title of Android's share sheet when sharing the selected lines of the game's text -->
     <string name="console_selection_share_title">Share lines</string>
     <!-- A short message once the selected lines of the game's text are on the clipboard (before Android 13, which says so itself) -->

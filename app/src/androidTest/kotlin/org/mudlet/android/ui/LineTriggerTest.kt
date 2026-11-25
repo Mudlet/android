@@ -43,7 +43,7 @@ import org.mudlet.android.ui.scripts.TRIGGER_FROM_LINE_TAG
 
 /**
  * A trigger made from a line of the game's text (docs/architecture.md, "The script library") against a fake engine: a
- * long press on a line of the console opens a menu that offers it, and TalkBack has it as the line's action, but not on
+ * long press on a line of the console selects it, with Android's floating text toolbar offering it, and TalkBack has it as the line's action, but not on
  * a blank line; the page that opens has the line's words, each of which a tap makes captured, then optional, then fixed
  * again, and shows the pattern that comes of them, what it captures from the line and how many of the game's lines it
  * matches; its button makes the trigger and saves it with the pattern, and the trigger's page then opens in the
@@ -88,11 +88,9 @@ class LineTriggerTest {
     }
 
     @Test
-    fun aLongPressOnALineOffersATriggerWhichIsMadeWithThePatternAndOpened() {
+    fun aLongPressOnALineOffersATriggerInAndroidsToolbarWhichIsMadeWithThePatternAndOpened() {
         compose.onNode(hasText(LINE)).performTouchInput { longClick(center) }
-        val offer = hasText(string(R.string.console_make_trigger)) and hasClickAction()
-        waitFor(offer)
-        activate(offer)
+        FloatingToolbar.tap(string(R.string.console_selection_trigger))
         waitFor(builder)
         // Every word fixed: the line as a substring
         compose.onNode(hasText(string(R.string.pattern_substring)) and hasAnyAncestor(builder)).assertExists()

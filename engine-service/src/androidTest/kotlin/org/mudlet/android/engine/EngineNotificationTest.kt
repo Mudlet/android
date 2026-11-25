@@ -88,10 +88,18 @@ class EngineNotificationTest {
     // The system hands the process a change of the app's language asynchronously on Android 13 and later
     private fun awaitLanguage(done: (String) -> Boolean) {
         val deadline = SystemClock.uptimeMillis() + 10_000
-        while (!done(context.resources.configuration.locales[0].language)) {
+        while (!done(language())) {
             check(SystemClock.uptimeMillis() < deadline) { "the language did not change: ${context.resources.configuration.locales}" }
             Thread.sleep(50)
         }
+    }
+
+    // Read on the main thread: it applies a change to the resources' configuration before their strings follow, so
+    // from another thread the configuration can name the new language while getString still gives the old one
+    private fun language(): String {
+        var language = ""
+        InstrumentationRegistry.getInstrumentation().runOnMainSync { language = context.resources.configuration.locales[0].language }
+        return language
     }
 
     // Not EngineService, so only the notification's games change

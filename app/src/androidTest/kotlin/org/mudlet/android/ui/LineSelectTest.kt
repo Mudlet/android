@@ -116,7 +116,8 @@ class LineSelectTest {
 
         FloatingToolbar.tap(copy)
         compose.waitUntil(WAIT_MS) { clipboard() == LINES.take(3).joinToString("\n") }
-        assertTrue("the toolbar goes once the lines are copied", FloatingToolbar.waitUntilGone(copy))
+        compose.waitForIdle()
+        FloatingToolbar.assertGone(copy, "the toolbar goes once the lines are copied")
         compose.waitUntil(WAIT_MS) { !selected(0) }
     }
 
@@ -156,7 +157,7 @@ class LineSelectTest {
         FloatingToolbar.waitFor(copy)
         device.pressBack()
         compose.waitUntil(WAIT_MS) { !selected(1) }
-        assertTrue(FloatingToolbar.waitUntilGone(copy))
+        FloatingToolbar.assertGone(copy, "the toolbar goes")
         // Still on the game screen: Back only ended the selection
         compose.onNode(hasTestTag(GAME_TITLE_TAG)).assertIsDisplayed()
 
@@ -164,14 +165,14 @@ class LineSelectTest {
         FloatingToolbar.waitFor(copy)
         compose.onNode(line(3)).performTouchInput { click(center) }
         compose.waitUntil(WAIT_MS) { !selected(0) }
-        assertTrue(FloatingToolbar.waitUntilGone(copy))
+        FloatingToolbar.assertGone(copy, "the toolbar goes")
         compose.onNode(line(3)).assert(notSelected)
 
         perform(line(2), string(R.string.console_select_from_here))
         FloatingToolbar.waitFor(copy)
         perform(line(2), string(R.string.console_selection_stop))
         compose.waitUntil(WAIT_MS) { !selected(2) }
-        assertTrue(FloatingToolbar.waitUntilGone(copy))
+        FloatingToolbar.assertGone(copy, "the toolbar goes")
         assertEquals("ending a selection copies nothing", clipped, clipboard())
     }
 
@@ -183,7 +184,7 @@ class LineSelectTest {
         FloatingToolbar.tap(string(R.string.console_selection_to_command_line))
         waitFor(input and editableText("${LINES[0]} ${LINES[1]}"))
         compose.waitUntil(WAIT_MS) { !selected(0) }
-        assertTrue(FloatingToolbar.waitUntilGone(copy))
+        FloatingToolbar.assertGone(copy, "the toolbar goes")
         assertTrue("nothing sent", session.received.none { it.optString("t") == "send" })
     }
 
@@ -194,6 +195,7 @@ class LineSelectTest {
         compose.waitUntil(WAIT_MS) { selected(2) }
         FloatingToolbar.tap(all)
         compose.waitUntil(WAIT_MS) { (0..3).all(::selected) }
+        compose.waitForIdle()
         FloatingToolbar.waitFor(copy)
         assertFalse("Select all with every line selected", FloatingToolbar.offers(all))
         assertFalse(actionsOf(line(0)).contains(all))
@@ -205,7 +207,7 @@ class LineSelectTest {
         compose.waitUntil(WAIT_MS) { selected(1) }
         FloatingToolbar.tap(TextTakerActivity.LABEL)
         val taken = TextTakerActivity.TAKEN.format(true, LINES[1])
-        assertTrue("the app got \"$taken\"", device.wait(Until.hasObject(By.text(taken)), WAIT_MS))
+        if (!device.wait(Until.hasObject(By.text(taken)), WAIT_MS)) throw AssertionError("the app got no \"$taken\"; ${FloatingToolbar.describe()}")
         device.pressBack()
         waitFor(line(1))
         compose.waitUntil(WAIT_MS) { !selected(1) }
@@ -231,6 +233,7 @@ class LineSelectTest {
         checkAccessibility()
         val action = compose.onNode(node).fetchSemanticsNode().config[SemanticsActions.CustomActions].single { it.label == label }
         compose.runOnIdle { action.action() }
+        compose.waitForIdle()
     }
 
     // Past the Announcer's merging of announcements close together, on the device's clock, and past any delay in an

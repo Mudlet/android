@@ -66,7 +66,7 @@ class SelectionToolbarPlaceTest(screen: AppMapCornerFixture.Screen) : AppMapCorn
 
         compose.onNode(hasText("line ${LINES - 1}")).performTouchInput { click(center) }
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasTestTag(SELECTION_END_HANDLE_TAG)).fetchSemanticsNodes().isEmpty() }
-        assertTrue("$screen: the toolbar is still there after the tap", FloatingToolbar.waitUntilGone(copy))
+        FloatingToolbar.assertGone(copy, "$screen: the toolbar is still there after the tap")
     }
 
     // The newest line's node, with the lines' actions

@@ -79,7 +79,8 @@ class LineCopyTest {
         assertTrue(FloatingToolbar.offers(string(R.string.console_selection_trigger)))
         FloatingToolbar.tap(copy)
         compose.waitUntil(WAIT_MS) { clipboard() == LINE }
-        assertTrue(FloatingToolbar.waitUntilGone(copy))
+        compose.waitForIdle()
+        FloatingToolbar.assertGone(copy, "the toolbar goes once the line is copied")
     }
 
     @Test

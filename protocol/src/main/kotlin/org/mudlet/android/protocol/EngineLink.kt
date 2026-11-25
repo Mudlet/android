@@ -31,6 +31,7 @@ class EngineLink(
     // On the control socket: the UI opens the web pages scripts ask for (docs/protocol.md, openUrl)
     private val opensUrls: Boolean = false,
 ) {
+    /** stop() waits for an [onDetached] or [onConnectFailed] under way, so neither may wait for stop()'s thread. */
     interface Listener {
         fun onAttached(hello: EngineMessage.Hello, sameInstance: Boolean)
         fun onMessage(message: EngineMessage)
@@ -55,6 +56,9 @@ class EngineLink(
     private val nextId = AtomicLong(1)
     private val wakeSignal = Semaphore(0)
 
+    // Held while the thread tells the listener of a failure; see stop()
+    private val telling = Any()
+
     // What this UI already has, so a reattach to the same engine only gets the rest
     @Volatile var instance: String? = null
         private set
@@ -75,15 +79,20 @@ class EngineLink(
         }
     }
 
-    @Synchronized
     fun stop() {
-        running = false
-        // Its thread need not clear it before a start() connects again, as closing an android.net.LocalSocket wakes no
-        // read: a send meanwhile would fail on the closed socket and close the next connection
-        writer = null
-        transport?.close()
-        thread?.interrupt()
-        thread = null
+        synchronized(this) {
+            running = false
+            // Its thread need not clear it before a start() connects again, as closing an android.net.LocalSocket wakes no
+            // read: a send meanwhile would fail on the closed socket and close the next connection
+            writer = null
+            transport?.close()
+            thread?.interrupt()
+            thread = null
+        }
+        // A failure the stopped thread is still telling is told before stop() returns, so a listener that posts it to
+        // the thread that restarts the link posts it ahead of the next thread's attach. Not under the lock above, which
+        // a listener that sends takes
+        synchronized(telling) {}
     }
 
     fun send(message: JSONObject): Boolean = sendOn(message) != 0
@@ -130,15 +139,17 @@ class EngineLink(
 
     private fun live(g: Int) = running && generation == g
 
+    // False, telling nothing, once thread [g] is not live
+    private inline fun tellWhileLive(g: Int, tell: () -> Unit): Boolean = synchronized(telling) { live(g).also { if (it) tell() } }
+
     private fun runLoop(g: Int) {
         var attempt = 0
         while (live(g)) {
             val t = try {
                 connector()
             } catch (e: IOException) {
-                if (!live(g)) break
                 attempt++
-                listener.onConnectFailed(attempt, e)
+                if (!tellWhileLive(g) { listener.onConnectFailed(attempt, e) }) break
                 if (waitForRetry(retryDelayMs(attempt))) attempt = 0
                 continue
             }
@@ -184,7 +195,7 @@ class EngineLink(
                     listener.onMessage(m)
                 }
             } catch (e: Exception) {
-                if (live(g)) listener.onDetached(e.message ?: e.javaClass.simpleName)
+                tellWhileLive(g) { listener.onDetached(e.message ?: e.javaClass.simpleName) }
             } finally {
                 synchronized(this) {
                     if (transport === t) {

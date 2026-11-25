@@ -14,9 +14,13 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
+import org.mudlet.android.protocol.EngineLink
+import org.mudlet.android.protocol.EngineMessage
+import java.io.IOException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
 
 /** What EngineClient holds for the UI from the engine's messages, read on the main thread as the UI reads it. */
@@ -140,6 +144,57 @@ class EngineClientTest {
     }
 
     @Test
+    fun aLinkMovedWhileItsOldThreadSaysAFailureEndsAttached() {
+        waitUntil("the profile's link attached") { EngineClient.front.linkState.startsWith("attached") }
+        val front = onMain { EngineClient.front }
+        val served = fake.engine.openProfilesMessage().getJSONArray("profiles").getJSONObject(0).getString("socket")
+        val link = ProfileSession::class.java.getDeclaredField("link").apply { isAccessible = true }.get(front) as EngineLink
+        val listenerField = EngineLink::class.java.getDeclaredField("listener").apply { isAccessible = true }
+        val listener = listenerField.get(link) as EngineLink.Listener
+        val failing = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val told = CountDownLatch(1)
+        val attached = CountDownLatch(1)
+        val hold = AtomicBoolean(true)
+        // The old thread's first failure waits before ProfileSession posts it, as a thread descheduled there would
+        listenerField.set(
+            link,
+            object : EngineLink.Listener by listener {
+                override fun onAttached(hello: EngineMessage.Hello, sameInstance: Boolean) {
+                    listener.onAttached(hello, sameInstance)
+                    attached.countDown()
+                }
+
+                override fun onConnectFailed(attempt: Int, error: IOException) {
+                    if (!hold.getAndSet(false)) return listener.onConnectFailed(attempt, error)
+                    failing.countDown()
+                    awaitThroughInterrupts(release)
+                    listener.onConnectFailed(attempt, error)
+                    told.countDown()
+                }
+            },
+        )
+        try {
+            onMain { front.moveTo(fake.engine.unservedPath, running = true) }
+            assertTrue("the link's thread failed on the socket it moved to", failing.await(WAIT_S, TimeUnit.SECONDS))
+            val main = Looper.getMainLooper()
+            Handler(main).post { front.moveTo(served, running = true) }
+            // Let go once the next thread has attached, or once moveTo() waits in stop() for the failure to be told
+            val deadline = System.currentTimeMillis() + WAIT_S * 1000
+            while (attached.count > 0 && !(main.thread.state == Thread.State.BLOCKED && main.thread.stackTrace.any { it.className == EngineLink::class.java.name && it.methodName == "stop" })) {
+                if (System.currentTimeMillis() > deadline) throw AssertionError("the next thread did not attach, nor did moveTo() wait")
+                Thread.sleep(1)
+            }
+            release.countDown()
+            assertTrue("the old thread told its failure", told.await(WAIT_S, TimeUnit.SECONDS))
+            waitUntil("the moved link attached") { front.linkState.startsWith("attached") }
+        } finally {
+            release.countDown()
+            listenerField.set(link, listener)
+        }
+    }
+
+    @Test
     fun theMapSearchsRefusalIsNoProfileRequestsAnswer() {
         // The fake has answered the hellos before the links have read them, and a request sent sooner is dropped
         waitUntil("the links attached") { EngineClient.linkState.startsWith("attached to pid") && EngineClient.front.linkState.startsWith("attached") }
@@ -206,6 +261,20 @@ class EngineClientTest {
         var result: Result<T>? = null
         InstrumentationRegistry.getInstrumentation().runOnMainSync { result = runCatching(block) }
         return result!!.getOrThrow()
+    }
+
+    // stop() interrupts the thread, which must still tell its failure once let go
+    private fun awaitThroughInterrupts(latch: CountDownLatch) {
+        var interrupted = false
+        while (true) {
+            try {
+                latch.await()
+                break
+            } catch (_: InterruptedException) {
+                interrupted = true
+            }
+        }
+        if (interrupted) Thread.currentThread().interrupt()
     }
 
     private fun waitUntil(what: String, condition: () -> Boolean) {

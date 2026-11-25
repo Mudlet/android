@@ -1,6 +1,6 @@
 # Mudlet for Android: privacy policy
 
-> For maintainers: this file is the privacy policy both the Mudlet and the Mudlet PTB listings give Google Play, at
+> For maintainers: this file is the privacy policy Mudlet's listing gives Google Play, at
 > <https://github.com/Mudlet/android/blob/main/docs/privacy-policy.md>. It must say the same as the Data safety answers
 > in [`store-listing.md`](store-listing.md#data-safety), which give the evidence in the code for each statement here;
 > change both together.

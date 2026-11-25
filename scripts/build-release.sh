@@ -9,6 +9,7 @@
 # MUDLET_KEY_ALIAS and MUDLET_KEY_PASSWORD), and unsigned without it. See docs/ptb.md.
 #
 # Usage: scripts/build-release.sh <staged-dir>... [-- <Gradle arguments, e.g. -PreleaseChannel=ptb>]
+# AAB_CHANNEL, when set, is the AAB's -PreleaseChannel in place of the one the arguments give.
 # Optional: QT_ROOT (~/Programs/Qt/6.12.0), ANDROID_SDK_ROOT (~/Android/Sdk), JAVA_HOME.
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -31,6 +32,14 @@ abis=$(cd "$deploy/libs" && find . -mindepth 1 -maxdepth 1 -type d -printf '%f\n
 cd "$root"
 gradle=(./gradlew -Dorg.gradle.workers.max=2 -PandroidAbi="$abis" -PqtRoot="$qt")
 # Two runs: AGP builds no AAB while the APKs are split by ABI (app/build.gradle.kts, "splits")
-"${gradle[@]}" :app:bundleRelease "$@"
+aab_args=("$@")
+if [ -n "${AAB_CHANNEL:-}" ]; then
+    aab_args=()
+    for arg in "$@"; do
+        [[ $arg == -PreleaseChannel=* ]] || aab_args+=("$arg")
+    done
+    aab_args+=(-PreleaseChannel="$AAB_CHANNEL")
+fi
+"${gradle[@]}" :app:bundleRelease "${aab_args[@]}"
 "${gradle[@]}" -PsplitApks=true :app:assembleRelease :app:assembleSmoke "$@"
 ls -l app/build/outputs/bundle/release/ app/build/outputs/apk/release/ app/build/outputs/apk/smoke/

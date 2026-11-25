@@ -1,8 +1,7 @@
 # Stable releases
 
-The stable app is **Mudlet** (`org.mudlet.mudlet`), with a Google Play listing of its own beside **Mudlet PTB**
-([`ptb.md`](ptb.md), "Identity"): it installs beside the PTB, keeps its own profiles, and its crashes count against its
-own Android vitals. `.github/workflows/release.yml` builds and publishes it. This page says how a release is made, how
+The stable app is **Mudlet** (`org.mudlet.mudlet`). On Google Play its closed testing track carries the nightly PTB
+([`ptb.md`](ptb.md), "Identity"); from GitHub it installs beside **Mudlet PTB** and keeps its own profiles. `.github/workflows/release.yml` builds and publishes it. This page says how a release is made, how
 to cut one, promote it and roll it back, and what the maintainer sets up once.
 
 ## How a release is made
@@ -69,6 +68,8 @@ the top of the GitHub release's notes: plain text, at most 500 characters. A dry
 The repository variable `PLAY_STABLE_TRACK` (Settings, Secrets and variables, Actions, Variables) sets it for tags;
 unset, it is `beta`, open testing. A manual run on a tag can give `track` instead. `production` rolls out to the share
 of users that `PLAY_STABLE_ROLLOUT` (or the run's `rollout`) gives, `0.1` unset; `1` sends it to everyone at once.
+The nightly PTB uploads to closed testing, or the track `PLAY_PTB_TRACK` names, where the next night's build would
+replace a stable version: tags go to another track.
 
 ## Cutting a release
 
@@ -113,39 +114,22 @@ The stable app's steps are the PTB's ([`ptb.md`](ptb.md), "One-time setup"), wit
 up, the account and the service account already exist.
 
 1. **The Play Console developer account**: the same as the PTB's. A personal account made after 13 November 2023 must
-   run a closed test with at least 12 testers for 14 days before open testing or production: set `PLAY_STABLE_TRACK`
-   to `alpha` until then.
-2. **The stable upload key**, a key of its own, so a leaked PTB key cannot sign the stable app; made and kept on your
-   own machine, never in this repository:
-
-   ```sh
-   keytool -genkeypair -v -keystore mudlet-upload.jks -storetype PKCS12 -keyalg RSA -keysize 4096 \
-       -validity 10000 -alias upload -dname "CN=Mudlet upload key, O=Mudlet"
-   keytool -list -v -keystore mudlet-upload.jks -alias upload | grep SHA256   # its certificate's fingerprint
-   ```
-
-3. **Its repository secrets** (Settings, Secrets and variables, Actions, "New repository secret"):
-   `STABLE_UPLOAD_KEYSTORE_BASE64` (`base64 -w0 mudlet-upload.jks`), `STABLE_UPLOAD_KEYSTORE_PASSWORD`,
+   run a closed test with at least 12 testers for 14 days before open testing or production. The PTB's closed test is
+   on Mudlet, so it is that test; until Play grants production access, tag nothing for Play.
+2. **The upload key** is the PTB's (`mudlet-ptb-upload.jks`, [`ptb.md`](ptb.md) step 2): Play App Signing fixes an
+   app's upload key at its first AAB, and Mudlet's first was the PTB's.
+3. **Its repository secrets for tags** (Settings, Secrets and variables, Actions, "New repository secret"):
+   `STABLE_UPLOAD_KEYSTORE_BASE64` (`base64 -w0 mudlet-ptb-upload.jks`), `STABLE_UPLOAD_KEYSTORE_PASSWORD`,
    `STABLE_UPLOAD_KEY_ALIAS` (`upload`), and `STABLE_UPLOAD_KEY_PASSWORD` only if the key's password differs from the
    keystore's. Only the package job's signing step reads them, and only on a release tag.
-4. **The first AAB**: add the first version's notes, then tag it as above. With the upload key but no Play credentials
-   the run builds, signs, runs the smoke test and makes only the GitHub release (delete it if it should wait for
-   Play). Download the run's `stable` artifact; the AAB is `dist/mudlet.aab`. Play's API cannot create an app or make
-   its first release, so this one goes up by hand.
-5. **The app in Play Console**: Home, "Create app": name "Mudlet", default language English (United States), App, Free.
-6. **The app's content**, as the PTB's step 6, with the stable listing's text from [`store-listing.md`](store-listing.md)
-   (not the PTB's "nightly test build" wording), the same privacy policy URL, and the category and contact email
-   decided for it.
-7. **The first release**, as the PTB's step 7, on the track decided for it (open testing unless decided otherwise),
-   choosing the Google-generated app signing key, with `dist/whatsnew/whatsnew-en-US` as its notes.
-8. **The service account's access**: Play Console, Users and permissions, the PTB's `mudlet-ptb-publisher` service
-   account (or a new one, made as in the PTB's step 8), App permissions, "Add app", Mudlet, with "Release apps to
-   testing tracks"; add "Release to production, exclude devices, and use Play App Signing" only if tags are to go to
+4. **The app, its content and its first release** are the PTB's ([`ptb.md`](ptb.md) steps 4 to 7).
+5. **The service account's access**: the PTB's `mudlet-ptb-publisher` already releases Mudlet to testing tracks
+   ([`ptb.md`](ptb.md) step 9); add "Release to production, exclude devices, and use Play App Signing" only if tags are to go to
    production by themselves.
-9. **The `play-stable` environment**: Settings, Environments, "New environment" `play-stable`; Deployment branches and
+6. **The `play-stable` environment**: Settings, Environments, "New environment" `play-stable`; Deployment branches and
    tags, "Selected branches and tags", add the tag rule `android-v*`; then the environment secret
    `PLAY_SERVICE_ACCOUNT_JSON`, the service account's JSON key. A tag ruleset (Settings, Rules, Rulesets, target tags
    `android-v*`, restrict creations to maintainers) keeps anyone else from starting a release.
-10. **Developer verification for the GitHub APKs**: register `org.mudlet.mudlet` with the stable upload key's
-    certificate, as the PTB's step 11.
-11. **The variables** if the defaults do not suit: `PLAY_STABLE_TRACK` and `PLAY_STABLE_ROLLOUT` (above).
+7. **Developer verification for the GitHub APKs**: register `org.mudlet.mudlet` with the upload key's certificate,
+   as the PTB's step 11.
+8. **The variables** if the defaults do not suit: `PLAY_STABLE_TRACK` and `PLAY_STABLE_ROLLOUT` (above).

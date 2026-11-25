@@ -1,9 +1,9 @@
 name: PTB
 
-# Public test builds (docs/ptb.md): every night, Mudlet's latest development as the app org.mudlet.mudlet.ptb, built
-# for arm64-v8a and x86_64, minified, signed, and run on an emulator; then, from main only, the AAB goes to Google
-# Play's open testing track and the APKs, with the source code they are built from, to the rolling `ptb` GitHub
-# pre-release. A night on which neither Mudlet's
+# Public test builds (docs/ptb.md): every night, Mudlet's latest development, built for arm64-v8a and x86_64,
+# minified, signed, and run on an emulator; then, from main only, the AAB, as Mudlet itself (org.mudlet.mudlet), goes
+# to Mudlet's Google Play testing track and the APKs, as the app org.mudlet.mudlet.ptb, with the source code they are
+# built from, to the rolling `ptb` GitHub pre-release. A night on which neither Mudlet's
 # development nor this repository changed since the last PTB (as the `ptb` pre-release's notes record it) builds
 # nothing. Without the signing secrets it signs with a throwaway key and publishes nothing; on any branch but main it
 # publishes nothing either (a dry run), as on a pull request that changes the app's code or how the release is built:
@@ -57,6 +57,8 @@ concurrency:
 env:
   MUDLET_REF: ${{ inputs.mudlet_ref || 'development' }}
   PACKAGE: org.mudlet.mudlet.ptb
+  # Play has the PTB as Mudlet's testing track (docs/ptb.md, "Identity")
+  PLAY_PACKAGE: org.mudlet.mudlet
 
 jobs:
   # What to build, whether it changed since the last PTB, its version, and whether to publish it
@@ -166,6 +168,7 @@ jobs:
     uses: ./.github/workflows/release-build.yml
     with:
       channel: ptb
+      aab-channel: stable
       title: PTB
       package: org.mudlet.mudlet.ptb
       file-base: mudlet-ptb
@@ -216,12 +219,11 @@ jobs:
             echo "- Mudlet \`$MUDLET_REF\`: [\`${MUDLET_SHA:0:7}\`]($mudlet/commit/$MUDLET_SHA) $MUDLET_SUBJECT$(compare "$mudlet" "$LAST_MUDLET_SHA" "$MUDLET_SHA")"
             echo "- Mudlet/android: [\`${android_sha:0:7}\`]($android/commit/$android_sha) $android_subject$(compare "$android" "$LAST_ANDROID_SHA" "$android_sha")"
             echo
-            echo "Get it from Google Play's test track, which keeps it up to date: <https://play.google.com/apps/testing/$PACKAGE>."
+            echo "Get it from Google Play as Mudlet's test, which keeps it up to date: <https://play.google.com/apps/testing/$PLAY_PACKAGE>."
             echo "Or install an APK: \`mudlet-ptb-arm64-v8a.apk\` for phones and tablets, \`mudlet-ptb-x86_64.apk\` for"
             echo "Chromebooks with Intel or AMD chips and emulators; \`SHA256SUMS.txt\` has their checksums. The APKs are"
-            echo "signed with the upload key (certificate SHA-256 \`$CERT_SHA256\`), Play's copy with Play's key, so one"
-            echo "cannot update the other: uninstall Mudlet PTB before switching. It installs beside Mudlet, and keeps its"
-            echo "own profiles. More in [docs/ptb.md]($android/blob/main/docs/ptb.md)."
+            echo "Mudlet PTB, which installs beside Mudlet and keeps its own profiles, signed with the upload key"
+            echo "(certificate SHA-256 \`$CERT_SHA256\`). More in [docs/ptb.md]($android/blob/main/docs/ptb.md)."
             echo
             echo "\`mudlet-ptb-source.tar\` is the source code this build is made from, Qt's and the dependencies' included;"
             echo "its \`SOURCES.txt\` says what is in it. The app is free software under the GNU GPL version 3."
@@ -242,8 +244,9 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  # Google Play's open testing track ("beta" in the API), from main, once the smoke test passed and the source bundle
-  # is built. The service account's key is best kept in the `play` environment, limited to main (docs/ptb.md)
+  # Google Play's closed testing track ("alpha" in the API), or the one the PLAY_PTB_TRACK variable names, from main,
+  # once the smoke test passed and the source bundle is built. The service account's key is best kept in the `play`
+  # environment, limited to main (docs/ptb.md)
   play:
     needs: [plan, build, notes]
     if: needs.plan.outputs.publish == 'true'
@@ -282,15 +285,15 @@ jobs:
           path: dist
 
       # The AAB carries R8's mapping and the native symbol tables, which Play reads from it
-      - name: Upload to the open testing track
+      - name: Upload to the testing track
         if: steps.creds.outputs.upload == 'true'
         uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
         with:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
-          packageName: ${{ env.PACKAGE }}
+          packageName: ${{ env.PLAY_PACKAGE }}
           releaseFiles: dist/mudlet-ptb.aab
           releaseName: ${{ needs.plan.outputs.version-name }}
-          tracks: beta
+          tracks: ${{ vars.PLAY_PTB_TRACK || 'alpha' }}
           status: completed
           whatsNewDirectory: dist/whatsnew
 

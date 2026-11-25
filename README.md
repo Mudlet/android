@@ -80,7 +80,7 @@ first, and `-PqtRoot=...` unless `qtRoot` in `gradle.properties` fits.
 The release is an AAB for Google Play with arm64-v8a and x86_64, and an APK for each, minified with R8:
 `STAGE_ONLY=1 scripts/build-apk.sh` stages each ABI's engine from its libmudlet build, and
 [`scripts/build-release.sh`](scripts/build-release.sh) merges them and builds it, signed with the upload key
-`MUDLET_KEYSTORE` names. Nightly public test builds of it go to Google Play's open testing track and a GitHub
+`MUDLET_KEYSTORE` names. Nightly public test builds of it go to a Google Play testing track and a GitHub
 pre-release: [`docs/ptb.md`](docs/ptb.md).
 
 ### Tests
@@ -216,7 +216,7 @@ side too. A manual run of CI (Actions, CI, "Run workflow") runs everything on an
 **PTB** (`.github/workflows/ptb.yml`), outside CI, runs every night and on pull requests that change the app's code
 or how the release is built, whose minified size it checks against its budget. It builds the release from Mudlet's
 `development` for arm64-v8a and x86_64, as the separate app Mudlet PTB (`org.mudlet.mudlet.ptb`), runs its minified
-x86_64 build through the emulator smoke test, and from `main` uploads it to Google Play's open testing track and
+x86_64 build through the emulator smoke test, and from `main` uploads it to a Google Play testing track and
 replaces the `ptb` GitHub pre-release, whose APKs come with the source code they are built from. It skips a night
 when neither Mudlet nor this repository changed, and publishes nothing without its secrets or off `main`. See
 [`docs/ptb.md`](docs/ptb.md).

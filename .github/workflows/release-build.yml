@@ -11,12 +11,16 @@ on:
         description: "-PreleaseChannel: ptb or stable; also names the artifacts and the size budgets"
         type: string
         required: true
+      aab-channel:
+        description: "-PreleaseChannel of the AAB alone, when it is not channel's"
+        type: string
+        default: ""
       title:
         description: The build's name in summaries and the throwaway key, "PTB" or "Stable"
         type: string
         required: true
       package:
-        description: The application id the build must carry
+        description: The application id the APKs must carry
         type: string
         required: true
       file-base:
@@ -286,6 +290,7 @@ jobs:
       - name: Build the AAB and the APKs
         env:
           CHANNEL: ${{ inputs.channel }}
+          AAB_CHANNEL: ${{ inputs.aab-channel }}
         run: |
           scripts/build-release.sh staged/engine-arm64-v8a staged/engine-x86_64 -- \
             -PreleaseChannel="$CHANNEL" -PversionCode="$VERSION_CODE" -PversionName="$VERSION_NAME"

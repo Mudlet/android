@@ -3,10 +3,12 @@
 A public test build (PTB) is the app built every night from Mudlet's latest `development` and this repository's
 `main`, as Mudlet's desktop PTBs are. Testers get it two ways:
 
-- **Google Play's open testing track** of the app **Mudlet PTB** (`org.mudlet.mudlet.ptb`): join with a link,
-  install from Play, and Play keeps it up to date;
-- the rolling **`ptb` GitHub pre-release**: an APK for each ABI, for people without Play, and the source code
-  they are built from.
+- **Google Play's closed testing track** of **Mudlet** itself (`org.mudlet.mudlet`): join the
+  [Mudlet Android Testers](https://groups.google.com/g/mudlet-ptb-testers) group and then the test with a link,
+  install Mudlet from Play, and Play keeps it on the nightly. It moves to open testing, which needs no group, once Play allows
+  (below);
+- the rolling **`ptb` GitHub pre-release**: an APK for each ABI of the app **Mudlet PTB**
+  (`org.mudlet.mudlet.ptb`), which installs beside Mudlet, and the source code they are built from.
 
 `.github/workflows/ptb.yml` builds and publishes them. This page says how it works, what the maintainer sets up once,
 how testers join, and how to roll a bad PTB back.
@@ -26,10 +28,10 @@ Every night at 05:23 UTC (after the libmudlet nightly, whose ccache it takes up)
 3. **source** (beside engine): `scripts/build-source-bundle.sh` builds `mudlet-ptb-source.tar`, the source code
    the release is built from ("The source bundle" below). Every run builds it, so a dry run shows it still builds;
    only a run that publishes keeps it.
-4. **package**: `scripts/build-release.sh` merges the two staged engines and builds the release AAB (both ABIs), an APK
-   for each ABI, and the smoke build (below), with R8 and resource shrinking. It checks each APK as CI checks every APK
-   (`scripts/check-apk.sh`: Qt, the engine, OpenSSL, 16 KB alignment, the launcher icon, the licences), and that the AAB
-   and the APKs carry the PTB's application id, version and signing certificate, libraries for exactly the two ABIs, the
+4. **package**: `scripts/build-release.sh` merges the two staged engines and builds the release AAB (both ABIs) as Mudlet
+   ("Identity" below), an APK for each ABI as Mudlet PTB, and the smoke build (below), with R8 and resource shrinking. It checks each APK as CI checks every APK
+   (`scripts/check-apk.sh`: Qt, the engine, OpenSSL, 16 KB alignment, the launcher icon, the licences), that the APKs carry
+   the PTB's application id and version, and that the AAB and the APKs carry the signing certificate, libraries for exactly the two ABIs, the
    Baseline Profiles Compose and AndroidX ship (`docs/plan.md`, lane 16, on one of the app's own), and in the AAB R8's mapping
    and the native symbol tables, which Play uses for its crash reports. It checks the APKs' and the AAB's sizes against
    their budgets (`scripts/check-apk-size.sh`, CONTRIBUTING.md's "APK size budget"): over budget fails a pull request,
@@ -38,7 +40,8 @@ Every night at 05:23 UTC (after the libmudlet nightly, whose ccache it takes up)
    (`native/tests/android_smoke.py`): the engine service and Qt come up, a profile connects and runs Mudlet's Lua, a
    trigger fires and notifies, and the UI reattaches to a restarted engine. This is what shows that R8 kept what Qt
    and the engine reach by name.
-6. **play**: uploads the AAB to the open testing track (`beta` in Play's API) with
+6. **play**: uploads the AAB to Mudlet's closed testing track (`alpha` in Play's API), or to the track the repository
+   variable `PLAY_PTB_TRACK` names (`beta` for open testing), with
    [r0adkll/upload-google-play](https://github.com/r0adkll/upload-google-play), pinned to a commit.
 7. **github-release**: replaces the `ptb` pre-release, its tag on this repository's commit, with the APKs, the
    source bundle, `SHA256SUMS.txt` and notes naming both commits. It does not wait for Play: when Play refuses the
@@ -80,25 +83,25 @@ listed in the About screen with their sources; none is in the bundle.
 scripts/build-source-bundle.sh ../mudlet mudlet-ptb-source.tar   # a Mudlet checkout at the commit built
 ```
 
-### Identity: an app of its own
+### Identity: Mudlet's test on Play, an app of its own on GitHub
 
-PTBs are the app `org.mudlet.mudlet.ptb`, named "Mudlet PTB", with a Play listing of their own, not the testing
-track of the stable `org.mudlet.mudlet`:
+On Google Play the PTB is a testing track of Mudlet itself, `org.mudlet.mudlet`, as Android apps' betas usually are:
+a tester joins the test and Play gives them the nightly in place of the stable version. Its AAB is built with
+`-PreleaseChannel=stable` (`AAB_CHANNEL`, `scripts/build-release.sh`), so it is named "Mudlet", has Mudlet's icon,
+and has no check for a newer build from GitHub, as Play updates it. A personal developer account's 14-day closed
+test (below) is per app, so running it on Mudlet earns the production access the stable releases
+([`release.md`](release.md)) need; a Play app of the PTB's own would need a test of its own too.
 
-- it installs beside Mudlet, as "Mudlet PTB.exe" and "Mudlet PTB.app" do on the desktop, so a tester keeps a working
-  Mudlet while trying the nightly, and leaving the test does not mean reinstalling;
-- a stable user can never get a nightly by joining a test by mistake, and a nightly's crashes and ANRs count against
-  the PTB's Android vitals, not the stable app's, whose vitals affect how Play shows it;
-- its versions need not fit around the stable app's.
+The cost: a tester has one Mudlet from Play, the nightly. To go back to the stable version they leave the test and
+uninstall, which deletes their profiles, as Android never installs an older versionCode over a newer one. A nightly's
+crashes and ANRs count in Mudlet's Android vitals.
 
-The cost: a second listing to fill in (below), and its own profiles: Android keeps each app's data apart. The stable
-app, made by `release.yml` ([`release.md`](release.md)), gets a listing of its own, whose open testing track can carry
-release candidates.
-
-The build takes `-PreleaseChannel=ptb` (`app/build.gradle.kts`), which adds `.ptb` to the application id, names
-the app "Mudlet PTB" and gives it its own launcher icon: Mudlet's arch at night, as on the desktop PTB's icon
-([`launcher-icon.md`](launcher-icon.md)). It is a Gradle property rather than a product flavour so that the variants and their tasks and
-outputs (`assembleDebug`, `app-debug.apk`), which the scripts and the other workflows use, stay as they are.
+The GitHub APKs are the app `org.mudlet.mudlet.ptb`, built with `-PreleaseChannel=ptb` (`app/build.gradle.kts`),
+which adds `.ptb` to the application id, names the app "Mudlet PTB" and gives it its own launcher icon: Mudlet's arch
+at night, as on the desktop PTB's icon ([`launcher-icon.md`](launcher-icon.md)). It installs beside Mudlet, as
+"Mudlet PTB.exe" and "Mudlet PTB.app" do on the desktop, with its own profiles. The channel is a Gradle property
+rather than a product flavour so that the variants and their tasks and outputs (`assembleDebug`, `app-debug.apk`),
+which the scripts and the other workflows use, stay as they are.
 
 ### Versions
 
@@ -116,9 +119,10 @@ outputs (`assembleDebug`, `app-debug.apk`), which the scripts and the other work
 
 Play App Signing: Google holds the key the app is signed with on devices, and the workflow signs what it uploads
 with an *upload key*, which Play checks. A lost or leaked upload key can be replaced (Play Console, Setup, App
-signing, "Request upload key reset"); the app signing key never leaves Google. The GitHub APKs are signed with the
-upload key, so an install from Play and an install from GitHub cannot update each other; a tester switching uninstalls
-first. Keeping the app signing key out of GitHub is worth that.
+signing, "Request upload key reset"); the app signing key never leaves Google. Play fixes an app's upload key
+at its first upload, so this key is also the one Mudlet's stable AABs are signed with ([`release.md`](release.md)).
+The GitHub APKs are signed with the upload key too; they are Mudlet PTB, another app, so they install beside
+Play's Mudlet.
 
 Without the upload key's secrets, and on every branch but `main`, the job makes a throwaway key, so the signing path
 is exercised on every run, and publishes nothing: a key that changes every night would leave no installed PTB able to
@@ -138,7 +142,9 @@ like any app's, with no "install unknown apps" switch and no download to repeat 
   keep the last approved PTB.
 - **Developer account**: a *personal* account made after 13 November 2023 must run a closed test with at least 12
   testers for 14 days before it may use open testing or production. An *organization* account, which needs a D-U-N-S
-  number, has no such wait, and suits Mudlet.
+  number, has no such wait. Mudlet's account is personal, so the PTB starts on Mudlet's closed testing; after 14 days
+  with 12 testers opted in, apply for production access (Dashboard), then set up open testing as step 7 describes
+  for closed testing and set the repository variable `PLAY_PTB_TRACK` to `beta`.
 - **Open testing is public**: anyone may join, with no limit, and an app with no production release is found by
   searching Play; testers' feedback is private and gives no public rating. The listing should say it is a nightly.
 
@@ -177,9 +183,9 @@ advanced sideloading flow.
    Only the package job's signing step reads them, and only on `main`.
 4. **The first AAB**: Actions, PTB, "Run workflow" on `main`, with `force` ticked. With the upload key but no Play
    credentials it builds, runs the smoke test and publishes only the GitHub pre-release. Download the run's `ptb`
-   artifact; the AAB is `dist/mudlet-ptb.aab`. Play's API cannot create an app or make its first release, so this
+   artifact; the AAB is `dist/mudlet-ptb.aab`, which is Mudlet (`org.mudlet.mudlet`). Play's API cannot create an app or make its first release, so this
    one goes up by hand.
-5. **The app in Play Console**: Home, "Create app": name "Mudlet PTB", default language English (United States), App,
+5. **The app in Play Console**: Home, "Create app": name "Mudlet", default language English (United States), App,
    Free, and accept the declarations.
 6. **The app's content** (Policy and programs, App content, and Grow, Store presence), which Play requires before
    any release, open testing included: a privacy policy URL,
@@ -188,21 +194,22 @@ advanced sideloading flow.
    data collected, no data shared: what a player sends goes only to the game server they chose); the category, Games,
    Role Playing; the **foreground service** declaration: `specialUse`, with the
    reason in `engine-service/src/main/AndroidManifest.xml` (keeping the player's game connection and scripts running
-   in the background), and a short video of it if Play asks; and the store listing: a short and a full description
-   saying this is a nightly test build, the 512×512 icon, the 1024×500 feature graphic and at least two screenshots.
+   in the background), and a short video of it if Play asks; and Mudlet's store listing: a short and a full
+   description, the 512×512 icon, the 1024×500 feature graphic and at least two screenshots.
    [`store-listing.md`](store-listing.md) has the text, the screenshots to take and how, and each of these answers
    with its evidence in the code.
-7. **Open testing, with Play App Signing**: Test and release, Testing, Open testing. Under Countries/regions, add
-   them all; under Testers, leave the tester limit unlimited. "Create new release": when asked how the app is signed,
-   choose the Google-generated app signing key; the AAB's own key then becomes the upload key. Upload
-   `mudlet-ptb.aab`, keep the release notes the workflow wrote (`dist/whatsnew/whatsnew-en-US`), then "Next", "Save",
-   and on the Publishing overview "Send for review". Play reviews it before testers can join.
+7. **Closed testing, with Play App Signing**: Test and release, Testing, Closed testing, the Alpha track. Under
+   Countries/regions, add them all; under Testers, add the Google Group `mudlet-ptb-testers@googlegroups.com`, which
+   anyone can join, and the feedback URL `https://github.com/Mudlet/android/issues`. "Create new release": when asked
+   how the app is signed, choose the Google-generated app signing key; the AAB's own key then becomes the upload key.
+   Upload `mudlet-ptb.aab`, keep the release notes the workflow wrote (`dist/whatsnew/whatsnew-en-US`), then "Next",
+   "Save", and on the Publishing overview "Send for review". Play reviews it before testers can join.
 8. **The service account Play's API uses**: in the Google Cloud console (<https://console.cloud.google.com>), pick
    or create a project, enable the "Google Play Android Developer API" (APIs and services, Library), then IAM and
    admin, Service accounts, "Create service account", named `mudlet-ptb-publisher`, with no project roles. On it,
    Keys, "Add key", "Create new key", JSON, and keep the file it downloads.
 9. **Its Play permissions, the fewest that publish**: Play Console, Users and permissions, "Invite new users", the
-   service account's email; no account permissions; App permissions, "Add app", Mudlet PTB, with only "Release apps
+   service account's email; no account permissions; App permissions, "Add app", Mudlet, with only "Release apps
    to testing tracks". It cannot touch any other app, or production. They can take up to a day to reach the API.
 10. **The `play` environment**: Settings, Environments, "New environment" named `play`; Deployment branches and tags,
     "Selected branches and tags", add `main`; then "Add environment secret" `PLAY_SERVICE_ACCOUNT_JSON`, the JSON
@@ -217,10 +224,11 @@ sent for review automatically; with Publishing overview's "Managed publishing" o
 
 ## Joining as a tester
 
-- **From Google Play**: open <https://play.google.com/apps/testing/org.mudlet.mudlet.ptb> signed in with your Google
-  account, "Become a tester", then follow its link to Play and install Mudlet PTB. Play updates it like any app. To
-  leave, open the same link and "Leave the program", then uninstall it. Feedback written in Play reaches the
-  developers privately.
+- **From Google Play**: join the [Mudlet Android Testers](https://groups.google.com/g/mudlet-ptb-testers) group, then
+  open <https://play.google.com/apps/testing/org.mudlet.mudlet> signed in with the same Google account, "Become a
+  tester", then follow its link to Play and install Mudlet. Play updates it to each nightly. To leave, open the same
+  link and "Leave the program", then uninstall Mudlet, which deletes its profiles, and install it again from Play.
+  Feedback written in Play reaches the developers privately.
 - **From GitHub**: on <https://github.com/Mudlet/android/releases/tag/ptb>, download `mudlet-ptb-arm64-v8a.apk` for
   a phone or tablet (`mudlet-ptb-x86_64.apk` for a Chromebook with an Intel or AMD chip, or an emulator), check it
   against `SHA256SUMS.txt`, open it and allow your browser to install apps (`mudlet-ptb-source.tar` beside it is
@@ -228,7 +236,7 @@ sent for review automatically; with Publishing overview's "Managed publishing" o
   (`.../releases/download/ptb/mudlet-ptb-arm64-v8a.apk`) always give the latest PTB; installing a newer one updates
   it. It cannot update an install from Play, or be updated by one: uninstall first.
 
-Either way it installs beside Mudlet, as "Mudlet PTB", with its own profiles. Report problems as issues here.
+From GitHub it installs beside Mudlet, as "Mudlet PTB", with its own profiles. Report problems as issues here.
 [`device-pass.md`](device-pass.md) is what to try on a real phone, and its report form.
 
 ## A newer build from GitHub
@@ -270,7 +278,7 @@ Android never installs an older versionCode over a newer one, so a bad PTB is re
    repository's change was the bad one, revert it on `main` first. The rebuild gets a new, higher versionCode, so Play
    and the pre-release's links offer it as an update.
 3. **While Play reviews it**, the bad build stays on the track. To stop new installs of it sooner, pause the track in
-   Play Console (Testing, Open testing, "Pause track"); testers who have it keep it.
+   Play Console (Testing, Closed testing, "Pause track"); testers who have it keep it.
 4. **Enable the workflow again** once Mudlet's `development` or `main` is fixed.
 
 To take the GitHub APKs down at once: `gh release delete ptb --cleanup-tag --yes`. The next run then builds whatever

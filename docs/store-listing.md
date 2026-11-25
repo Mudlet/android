@@ -2,13 +2,13 @@
 
 What the Play Console asks for before a release, and the answers for Mudlet, each checked against the code on `main`
 in November 2026: the listing's text and graphics, the screenshots and how to take them, the accessibility statement,
-the Data safety form and the other App content declarations, for both the Mudlet and the Mudlet PTB listings.
-[`release.md`](release.md) and [`ptb.md`](ptb.md) say where in Play Console each goes (step 6 of each one-time setup);
+the Data safety form and the other App content declarations, for Mudlet's listing, whose testing track carries the PTB.
+[`ptb.md`](ptb.md) says where in Play Console each goes (step 6 of its one-time setup);
 [`privacy-policy.md`](privacy-policy.md) is the privacy policy that Play links to, at
 <https://github.com/Mudlet/android/blob/main/docs/privacy-policy.md>.
 
 The listing describes the first usable client ([`roadmap.md`](roadmap.md), Phase E). Until a claim below is true on
-`main`, the Mudlet PTB listing leaves it out; "Claims to check" says which ones wait for what. Evidence for Mudlet's own
+`main`, the listing leaves it out; "Claims to check" says which ones wait for what. Evidence for Mudlet's own
 code is given at Mudlet/Mudlet `development`, commit
 [`bfc932d`](https://github.com/Mudlet/Mudlet/tree/bfc932d9e76004d9624b6925b5e0278c17fdae2a), and file:line references
 without a repository are to this one. Facts about Mudlet move with Mudlet: check them again when Mudlet's CMake options
@@ -52,10 +52,11 @@ or networking change.
   Mudlet is free software under the GNU GPL, made by volunteers. The Android app's source is at github.com/Mudlet/android and Mudlet's at github.com/Mudlet/Mudlet. Report problems and ideas there, or join us at mudlet.org.
   ```
 
-  The PTB's listing starts with this paragraph instead of the first one, as [`ptb.md`](ptb.md) asks:
+  While Mudlet's only release on Play is the nightly test ([`ptb.md`](ptb.md)), the listing starts with this
+  paragraph instead of the first one:
 
   ```text
-  Mudlet PTB is the nightly public test build of Mudlet for Android: built every night from the latest code, so it has the newest features and the newest bugs. It installs beside Mudlet with its own profiles. Please report what breaks at github.com/Mudlet/android/issues.
+  This is the nightly public test build of Mudlet for Android: built every night from the latest code, so it has the newest features and the newest bugs. Please report what breaks at github.com/Mudlet/android/issues.
   ```
 
 Each line in these blocks is a paragraph, so they paste into Play Console as they are. Count them again after an

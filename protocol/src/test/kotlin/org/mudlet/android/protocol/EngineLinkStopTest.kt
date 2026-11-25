@@ -2,6 +2,7 @@ package org.mudlet.android.protocol
 
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -9,6 +10,7 @@ import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
+import java.util.Collections
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
@@ -162,6 +164,109 @@ class EngineLinkStopTest {
         link.stop()
         running.end()
         stopped.end()
+    }
+
+    @Test
+    fun aFailureSeenBeforeStopIsSaidBeforeTheNextThreadAttaches() {
+        val wires = LinkedBlockingQueue<Wire>()
+        val tries = AtomicInteger()
+        val teller = Teller(hold = "failed")
+        val link = EngineLink({ if (tries.getAndIncrement() == 0) throw IOException("no engine yet") else Wire().also(wires::add) }, teller)
+        link.start()
+        assertTrue("the first thread's failure was said", teller.held.await(WAIT_S, TimeUnit.SECONDS))
+
+        val running = restartWhileHeld(link, teller, wires)
+        assertEquals("what the listener was told, in order", listOf("failed", "attached"), teller.said)
+        link.stop()
+        running.end()
+    }
+
+    @Test
+    fun aDropSeenBeforeStopIsSaidBeforeTheNextThreadAttaches() {
+        val wires = LinkedBlockingQueue<Wire>()
+        val teller = Teller(hold = "detached")
+        val link = EngineLink({ Wire().also(wires::add) }, teller)
+        link.start()
+        val dropped = next(wires)
+        assertTrue("the first thread said hello", dropped.helloSent.await(WAIT_S, TimeUnit.SECONDS))
+        dropped.answer(hello())
+        waitFor("the first thread attached") { "attached" in teller.said }
+        dropped.end()
+        assertTrue("the first thread's drop was said", teller.held.await(WAIT_S, TimeUnit.SECONDS))
+
+        val running = restartWhileHeld(link, teller, wires)
+        assertEquals("what the listener was told, in order", listOf("attached", "detached", "attached"), teller.said)
+        link.stop()
+        running.end()
+    }
+
+    // Stops and starts [link] while its old thread is held in a callback, as a thread descheduled between deciding it is
+    // live and posting what it says; lets it go once the next thread has attached, or once stop() waits for it
+    private fun restartWhileHeld(link: EngineLink, teller: Teller, wires: LinkedBlockingQueue<Wire>): Wire {
+        val restart = Thread {
+            link.stop()
+            link.start()
+        }.apply { start() }
+        fun attachNext(): Wire = next(wires).also {
+            assertTrue("the next thread said hello", it.helloSent.await(WAIT_S, TimeUnit.SECONDS))
+            it.answer(hello())
+            waitFor("the next thread attached") { teller.said.count { said -> said == "attached" } == teller.attachesBefore + 1 }
+        }
+        val running = if (restartedOrWaiting(restart)) attachNext() else null
+        teller.release.countDown()
+        assertTrue("the old thread said what it held", teller.told.await(WAIT_S, TimeUnit.SECONDS))
+        restart.join(TimeUnit.SECONDS.toMillis(WAIT_S))
+        assertFalse("stop() and start() returned", restart.isAlive)
+        return running ?: attachNext()
+    }
+
+    // True once [restart] has stopped and started the link, false once it waits in stop()
+    private fun restartedOrWaiting(restart: Thread): Boolean {
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(WAIT_S)
+        while (System.nanoTime() < deadline) {
+            if (!restart.isAlive) return true
+            if (restart.state == Thread.State.BLOCKED && restart.stackTrace.any { it.className == EngineLink::class.java.name && it.methodName == "stop" }) return false
+            Thread.sleep(1)
+        }
+        throw AssertionError("not within $WAIT_S s: stop() and start() returned or stop() waited")
+    }
+
+    // As ProfileSession's listener, which posts what each callback says to the main thread: [said] is that thread's
+    // queue. The first callback that says [hold] waits for [release] before it posts, and then counts [told] down.
+    private class Teller(@Volatile private var hold: String?) : EngineLink.Listener {
+        val said: MutableList<String> = Collections.synchronizedList(ArrayList())
+        val held = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val told = CountDownLatch(1)
+
+        @Volatile var attachesBefore = 0
+
+        override fun onAttached(hello: EngineMessage.Hello, sameInstance: Boolean) = say("attached")
+        override fun onMessage(message: EngineMessage) {}
+        override fun onDetached(reason: String) = say("detached")
+        override fun onConnectFailed(attempt: Int, error: IOException) = say("failed")
+
+        private fun say(what: String) {
+            val holding = what == hold
+            if (holding) {
+                hold = null
+                attachesBefore = said.count { it == "attached" }
+                held.countDown()
+                // stop() interrupts the thread, which must still post once let go
+                var interrupted = false
+                while (true) {
+                    try {
+                        release.await()
+                        break
+                    } catch (_: InterruptedException) {
+                        interrupted = true
+                    }
+                }
+                if (interrupted) Thread.currentThread().interrupt()
+            }
+            said.add(what)
+            if (holding) told.countDown()
+        }
     }
 
     private fun newLink(wires: LinkedBlockingQueue<Wire>, attaches: AtomicInteger) = EngineLink(

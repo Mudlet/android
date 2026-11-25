@@ -21,6 +21,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerIcon
@@ -31,6 +32,7 @@ import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
@@ -61,7 +63,6 @@ import org.mudlet.android.protocol.RightClick
 import org.mudlet.android.protocol.linkLabel
 import org.mudlet.android.protocol.rightClick
 import org.mudlet.android.ui.copyText
-import org.mudlet.android.ui.shareText
 import kotlin.math.roundToInt
 
 /**
@@ -91,14 +92,15 @@ internal class LineLinks(
  * A mouse works it as desktop's console does: a right click where it is let go reveals a spoiler, opens a link's menu,
  * or off a link the line's ([rightClick]); over a link the pointer is a hand and the link's tool tip shows by it.
  *
- * With [onMakeTrigger], which a line of the game's own text has, or [copyable], a long press on a line that is not
- * blank, anywhere but on a link with a menu, opens a menu that offers to make a trigger from it, or to copy or share it
- * as it reads, and TalkBack offers making the trigger and copying the line as actions.
+ * With [onMakeTrigger], which a line of the game's own text has, or [copyable], TalkBack offers making a trigger from
+ * a line that is not blank, or copying it as it reads, as actions.
  *
  * TalkBack reads [readingPrefix], drawn beside the line by its caller, before [plain]; a copy leaves it out.
  *
- * With [onSelectFrom], that menu also offers to start a selection of lines at this one, as TalkBack's action "Select from
- * here" does; [onSelectTo] is TalkBack's action that takes a selection to this line. A [selected] line says so.
+ * With [onSelectFrom], a long press on a line that is not blank, anywhere but on a link with a menu, or a right click
+ * there, starts a selection of lines at this one, as TalkBack's action "Select from here" does; [onSelectTo] is
+ * TalkBack's action that takes a selection to this line, and [selectionActions] are TalkBack's actions on the selection
+ * the line is in. A [selected] line says so.
  */
 @Composable
 internal fun ConsoleLine(
@@ -116,6 +118,7 @@ internal fun ConsoleLine(
     selected: Boolean = false,
     onSelectFrom: (() -> Unit)? = null,
     onSelectTo: (() -> Unit)? = null,
+    selectionActions: List<CustomAccessibilityAction> = emptyList(),
 ) {
     val space = stringResource(R.string.console_blank_line_space)
 
@@ -142,7 +145,6 @@ internal fun ConsoleLine(
     val offersCopy = copyable && plain.isNotBlank()
     val selectFrom by rememberUpdatedState(onSelectFrom?.takeIf { plain.isNotBlank() })
     val offersSelect = selectFrom != null
-    val offersLineMenu = offersTrigger || offersCopy || offersSelect
     val selectToLabel = stringResource(R.string.console_select_to_here)
     val selectToAction = onSelectTo?.takeIf { plain.isNotBlank() }?.let { selectTo ->
         CustomAccessibilityAction(selectToLabel) {
@@ -150,18 +152,17 @@ internal fun ConsoleLine(
             true
         }
     }
-    if (spans.isEmpty() && !offersLineMenu) {
-        LineText(text, modifier.then(read(listOfNotNull(selectToAction))), color, style, singleLine)
+    if (spans.isEmpty() && !offersTrigger && !offersCopy && !offersSelect) {
+        LineText(text, modifier.then(read(listOfNotNull(selectToAction) + selectionActions)), color, style, singleLine)
         return
     }
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
     var menu by remember { mutableStateOf<LinkMenu?>(null) }
-    // Where along the line the line's own menu is open, in pixels
-    var lineMenuAt by remember { mutableStateOf<Float?>(null) }
     var hovered by remember { mutableStateOf<LinkHover?>(null) }
     // The gestures read what the engine now says of a link, without starting again each time it answers
     val current by rememberUpdatedState(links)
     val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current
 
     fun follow(link: Int, item: Int?): Boolean = (current?.follow(link, item) == true).also { sent ->
         if (!sent) Toast.makeText(context, R.string.input_not_sent, Toast.LENGTH_SHORT).show()
@@ -174,17 +175,10 @@ internal fun ConsoleLine(
         true
     }.takeIf { offersTrigger }
     val copyLabel = stringResource(R.string.console_copy_line)
-    val shareLabel = stringResource(R.string.console_share_line)
     val clipLabel = stringResource(R.string.app_name)
     val copied = stringResource(R.string.console_line_copied)
-    val noShare = stringResource(R.string.console_line_no_share)
-
-    fun copyLine() = copyText(context, clipLabel, plain, copied)
-
-    fun shareLine() = shareText(context, plain, shareLabel, noShare)
-
     val copyAction = CustomAccessibilityAction(copyLabel) {
-        copyLine()
+        copyText(context, clipLabel, plain, copied)
         true
     }.takeIf { offersCopy }
     val selectFromLabel = stringResource(R.string.console_select_from_here)
@@ -203,14 +197,14 @@ internal fun ConsoleLine(
         when (rightClick(link != null, link?.let { current?.info(it) })) {
             RightClick.REVEAL -> link?.let { follow(it, null) }
             RightClick.LINK_MENU -> link?.let { menu = LinkMenu(it, position.x) }
-            RightClick.LINE_MENU -> if (offersLineMenu) lineMenuAt = position.x
+            RightClick.LINE_MENU -> selectFrom?.invoke()
             RightClick.NOTHING -> {}
         }
     }
 
-    val mouse = Modifier.pointerInput(spans, offersLineMenu) { mouseOnLine({ spanAt(it)?.link }, ::rightClickAt) { hovered = it } }
+    val mouse = Modifier.pointerInput(spans, offersSelect) { mouseOnLine({ spanAt(it)?.link }, ::rightClickAt) { hovered = it } }
         .pointerHoverIcon(if (hovered != null) PointerIcon.Hand else PointerIcon.Default)
-    val touches = mouse.pointerInput(spans, offersLineMenu) {
+    val touches = mouse.pointerInput(spans, offersSelect) {
         detectTapGestures(
             onTap = { position ->
                 spanAt(position)?.let { span -> if (current?.info(span.link)?.disabled != true) follow(span.link, null) }
@@ -219,7 +213,11 @@ internal fun ConsoleLine(
                 val link = spanAt(position)?.link
                 when {
                     link != null && current?.info(link)?.menu == true -> menu = LinkMenu(link, position.x)
-                    offersLineMenu -> lineMenuAt = position.x
+
+                    selectFrom != null -> {
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        selectFrom?.invoke()
+                    }
                 }
             },
         )
@@ -230,50 +228,12 @@ internal fun ConsoleLine(
     val openInfo = open?.let { links?.info(it.link) }?.takeIf { it.menu }
     if (open != null && (openSpan == null || openInfo == null)) SideEffect { menu = null }
     Box(modifier) {
-        LineText(text, Modifier.fillMaxWidth().then(touches).then(read(linkActions + listOfNotNull(triggerAction, copyAction, selectFromAction, selectToAction))), color, style, singleLine) { layout = it }
+        LineText(text, Modifier.fillMaxWidth().then(touches).then(read(linkActions + listOfNotNull(triggerAction, copyAction, selectFromAction, selectToAction) + selectionActions)), color, style, singleLine) { layout = it }
         if (open != null && openSpan != null && openInfo != null) {
             LinkMenuView(openInfo, open.x, linkLabel(openInfo, plain.substring(openSpan.start, openSpan.end)), ::follow) { menu = null }
         }
-        hovered?.takeIf { menu == null && lineMenuAt == null }?.let { hover ->
+        hovered?.takeIf { menu == null }?.let { hover ->
             links?.info(hover.link)?.tooltip?.takeIf { it.isNotBlank() }?.let { LinkTooltip(it, hover.at) }
-        }
-        lineMenuAt?.let { x ->
-            DropdownMenu(expanded = true, onDismissRequest = { lineMenuAt = null }, offset = DpOffset(with(LocalDensity.current) { x.toDp() }, 0.dp)) {
-                if (offersCopy) {
-                    DropdownMenuItem(
-                        text = { Text(copyLabel) },
-                        onClick = {
-                            lineMenuAt = null
-                            copyLine()
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(shareLabel) },
-                        onClick = {
-                            lineMenuAt = null
-                            shareLine()
-                        },
-                    )
-                }
-                if (offersSelect) {
-                    DropdownMenuItem(
-                        text = { Text(selectFromLabel) },
-                        onClick = {
-                            lineMenuAt = null
-                            selectFrom?.invoke()
-                        },
-                    )
-                }
-                if (offersTrigger) {
-                    DropdownMenuItem(
-                        text = { Text(triggerLabel) },
-                        onClick = {
-                            lineMenuAt = null
-                            makeTrigger?.invoke()
-                        },
-                    )
-                }
-            }
         }
     }
 }

@@ -2,6 +2,7 @@ package org.mudlet.android.ui
 
 import android.Manifest
 import android.os.Build
+import android.view.View
 import androidx.annotation.StringRes
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.getOrNull
@@ -15,10 +16,10 @@ import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
-import androidx.compose.ui.text.TextLayoutResult
 import androidx.test.filters.SdkSuppress
 import androidx.test.rule.GrantPermissionRule
-import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -30,8 +31,9 @@ import org.mudlet.android.protocol.Profile
 
 /**
  * Selecting lines of the game's text (LineSelectTest) in the debug build's pseudo-locales, as PseudoLocaleTest checks
- * the screens: the line menu's "Select from here" and the selection's bar, its count, hint, Copy, Share and Done, are
- * not cut short, and pass the accessibility checks.
+ * the screens: each of the app's items in Android's floating text toolbar there, in the toolbar or its overflow, in
+ * full and in the screen, Copy and Share in the locale's own order, from the right in ar-XB; TalkBack's actions on the
+ * selected line with the same labels; and the screen passing the accessibility checks.
  */
 @RunWith(Parameterized::class)
 @SdkSuppress(minSdkVersion = Build.VERSION_CODES.TIRAMISU)
@@ -65,36 +67,31 @@ class SelectLinesPseudoLocaleTest(private val locale: String) {
     }
 
     @Test
-    fun theMenuItemAndTheBarFit() {
+    fun theToolbarsItemsAreThereInFullInTheLocalesOrderAndTalkBacksActionsMatchThem() {
         compose.onNode(hasText(LINES.first())).performTouchInput { longClick(center) }
-        val selectFrom = string(R.string.console_select_from_here)
-        waitFor(hasText(selectFrom) and hasClickAction())
-        assertFits(selectFrom)
-        activate(hasText(selectFrom))
+        val copy = string(R.string.console_selection_copy)
+        val share = string(R.string.console_selection_share)
+        val rtl = compose.activity.resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_RTL
+        assertEquals("$locale: the toolbar's order", if (rtl) listOf(share, copy) else listOf(copy, share), FloatingToolbar.shown(copy, share))
+        checkAccessibility()
 
-        val selectTo = string(R.string.console_select_to_here)
-        compose.waitUntil(WAIT_MS) { actionsOf(LINES.last()).contains(selectTo) }
-        val action = compose.onNode(hasText(LINES.last())).fetchSemanticsNode().config[SemanticsActions.CustomActions].single { it.label == selectTo }
-        compose.runOnIdle { action.action() }
-        val count = compose.activity.resources.getQuantityString(R.plurals.console_selection_count, LINES.size, LINES.size)
-        val bar = listOf(R.string.console_selection_how, R.string.console_selection_copy, R.string.console_selection_share, R.string.console_selection_done).map(::string)
-        for (text in listOf(count) + bar) {
-            assertFits(text)
+        val width = compose.activity.resources.displayMetrics.widthPixels
+        val items = listOf(R.string.console_selection_select_all, R.string.console_selection_to_command_line, R.string.console_selection_trigger).map(::string)
+        for (item in listOf(copy, share) + items) {
+            assertTrue("$locale: no \"$item\" in the toolbar", FloatingToolbar.offers(item))
+        }
+        for (item in listOf(copy, share)) {
+            val at = FloatingToolbar.bounds(item)
+            assertTrue("$locale: \"$item\" at $at is out of the screen", at.left >= 0 && at.right <= width)
+        }
+
+        val actions = actionsOf(LINES.first())
+        for (item in listOf(copy, share) + items + string(R.string.console_selection_stop)) {
+            assertTrue("$locale: no TalkBack action \"$item\" in $actions", actions.contains(item))
         }
     }
 
     private fun actionsOf(line: String) = compose.onNode(hasText(line)).fetchSemanticsNode().config.getOrNull(SemanticsActions.CustomActions).orEmpty().map { it.label }
-
-    private fun assertFits(text: String) {
-        val node = hasText(text)
-        compose.waitUntil(WAIT_MS) { compose.onAllNodes(node, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
-        checkAccessibility()
-        val layouts = ArrayList<TextLayoutResult>()
-        compose.onNode(node, useUnmergedTree = true).fetchSemanticsNode().config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(layouts)
-        val layout = layouts.singleOrNull() ?: throw AssertionError("$locale: no layout for \"$text\"")
-        assertFalse("$locale: \"$text\" is cut short", (0 until layout.lineCount).any { layout.isLineEllipsized(it) })
-        assertFalse("$locale: \"$text\" has more lines than it may show", layout.multiParagraph.didExceedMaxLines)
-    }
 
     private fun string(@StringRes id: Int, vararg args: Any) = compose.activity.getString(id, *args)
 

@@ -46,3 +46,61 @@ fun copiedLines(selection: LineSelection, firstLine: Long, count: Int, most: Int
     }
     return text.toString()
 }
+
+/** The selection of all [count] lines numbered from [firstLine]; null when there are none. */
+fun allLines(firstLine: Long, count: Int): LineSelection? = if (count > 0) LineSelection(firstLine, firstLine + count - 1) else null
+
+/** What the floating toolbar of a selection of lines offers, before the apps that take text (ACTION_PROCESS_TEXT). */
+enum class SelectionItem { COPY, SHARE, SELECT_ALL, TO_COMMAND_LINE, MAKE_TRIGGER }
+
+/**
+ * The items of the toolbar of [selection] among [count] lines numbered from [firstLine], in their order: Select all
+ * unless every line is selected already, as Android's own text selection leaves it out, and Make a trigger only with
+ * [oneTriggerLine], one line of the game's own text selected, which a trigger can be made from.
+ */
+fun selectionItems(selection: LineSelection, firstLine: Long, count: Int, oneTriggerLine: Boolean): List<SelectionItem> = buildList {
+    add(SelectionItem.COPY)
+    add(SelectionItem.SHARE)
+    if (count > 0 && (selection.first > firstLine || selection.last < firstLine + count - 1)) add(SelectionItem.SELECT_ALL)
+    add(SelectionItem.TO_COMMAND_LINE)
+    if (oneTriggerLine) add(SelectionItem.MAKE_TRIGGER)
+}
+
+/** The text the selection's "Put on command line" gives the one-line command line: its lines joined by spaces. */
+fun commandLineText(copied: String): String = copied.replace('\n', ' ')
+
+/** A line of a list as drawn: its index in the list, and its top and bottom in pixels from the list's top. */
+data class DrawnLine(val index: Int, val top: Int, val bottom: Int)
+
+/**
+ * Where the lines at [selected] are among the lines [drawn], in index order, of a list [height] pixels high: from the top
+ * of the first to the bottom of the last, an end scrolled out of the list at that edge of it, so a selection scrolled
+ * out above is the list's top and one below its bottom. Null with nothing selected or drawn.
+ */
+fun selectedSpan(selected: IntRange, drawn: List<DrawnLine>, height: Int): IntRange? {
+    if (selected.isEmpty() || drawn.isEmpty()) return null
+    // A line in view is drawn on each side of a line scrolled out, so that one's edge is past the list's
+    val top = (drawn.firstOrNull { it.index >= selected.first }?.top ?: height).coerceIn(0, height)
+    val bottom = drawn.lastOrNull { it.index <= selected.last }?.bottom ?: 0
+    return top..bottom.coerceIn(top, height)
+}
+
+/**
+ * The index of the line drawn at [y] pixels from the top of a list of the lines [drawn], in index order, past either end
+ * the nearest one; a line drawn with no height, one a script deleted, is never it. Null with none drawn.
+ */
+fun lineUnder(y: Int, drawn: List<DrawnLine>): Int? {
+    val shown = drawn.filter { it.bottom > it.top }
+    return (shown.firstOrNull { y < it.bottom } ?: shown.lastOrNull())?.index
+}
+
+/**
+ * How far to scroll a list [height] high, this frame, while a selection's handle is dragged [y] from its top: within
+ * [edge] of the top up, within it of the bottom down, faster nearer the edge and at most [most]; else not at all.
+ */
+fun edgeScroll(y: Float, height: Float, edge: Float, most: Float): Float = when {
+    edge <= 0f -> 0f
+    y < edge -> -most * ((edge - y) / edge).coerceAtMost(1f)
+    y > height - edge -> most * ((y - (height - edge)) / edge).coerceAtMost(1f)
+    else -> 0f
+}

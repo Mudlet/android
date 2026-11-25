@@ -654,42 +654,47 @@ window's are, through the same `ConsoleLine`: a tap, a long press for the menu, 
 - A line is drawn with its links as the last answers say they look: their `fg`, `bg` and `styles`, as a visited link or
   one chosen in its selection group is painted, over the line's own runs, as desktop repaints them; TalkBack's actions
   add ", visited" and ", selected" to its name, as desktop's screen reader announcement does. A `concealed` link is
-  blanks: TalkBack reads spaces there, and neither a tap nor TalkBack's link actions reach it; a long press there offers
-  the line's trigger, as anywhere else on the line.
+  blanks: TalkBack reads spaces there, and neither a tap nor TalkBack's link actions reach it; a long press there selects
+  the line, as anywhere else on the line.
 - What a link runs is the engine's: an OSC 8 `send:` link sends its command, and a `prompt:` link runs
   `sendCmdLine()`, whose `commandLine` puts the text in the input line (dropped while the game hides input, as for any
   `commandLine`). An OSC 8 web link runs `openUrl()`, which the app opens, as any script's ("A script opens a web
   page" in [`divergences.md`](divergences.md)).
 
 ### Copying the game's text
-A long press on a line of the main console, anywhere but on a link with a menu, opens a menu with "Copy line", "Share
-line" and the trigger (`ConsoleLine`, `copyable`); TalkBack has "Copy line" as the line's action. The line is copied as
-it reads, a concealed link as blanks; a blank line offers neither. Copying goes through `copyText()` and sharing
-through `shareText()` (`ui/ShareText.kt`), as the problem report's buttons do. Script windows offer neither yet.
+TalkBack has "Copy line" and the trigger as actions on a line of the main console (`ConsoleLine`, `copyable`). The line
+is copied as it reads, a concealed link as blanks; a blank line offers neither. Copying goes through `copyText()` and
+sharing through `shareText()` (`ui/ShareText.kt`), as the problem report's buttons do. Script windows offer neither yet.
 
-The same menu's "Select from here", also TalkBack's action on each line with text, starts a selection of whole lines
-there; while it is open a tap on another line, or TalkBack's "Select to here" on it, takes the selection from the first
-line to that one; a tap on a link then does not follow it. The selected lines are drawn on a faint wash of the
-text's colour, and TalkBack reads each as selected. A bar counts them, which TalkBack says once each time the selection
-changes, says to tap another line and then Copy or Share, and has Copy, Share and Done, each of which ends the selection, as
-Back does. The lines are copied as desktop's `TTextEdit::getSelectedText()` joins them for its copy: as each reads, a
+A long press on a line with text, anywhere but on a link with a menu, and TalkBack's "Select from here" on it, start a
+selection of whole lines there, with Android's own floating text toolbar beside it, the one a text field shows
+(`SelectionToolbar` in `ui/game/ConsoleSelection.kt`: `View.startActionMode()` with `TYPE_FLOATING`, as Compose's
+`TextToolbar` and `TextView` start it, told the selected lines' place through `onGetContentRect()`). A handle under its
+first line and one under its last, drawn as Android's, take it to another line when dragged, scrolling the console near
+its top or bottom; TalkBack's "Select to here" on a line does the same. The selected lines are drawn on a faint wash of
+the text's colour, and TalkBack reads each as selected and says how many once each time the selection changes. The
+toolbar has Copy and Share, Select all while some lines are left out, "Put on command line", which puts the lines on
+the input line joined by spaces, as the history's rows put a command there, "Make a trigger" for one line of the
+game's own text, and in its overflow the apps that take text, a translator say (`ACTION_PROCESS_TEXT`, read-only, which
+the manifest's `<queries>` lets the app see), as a text field's toolbar has (`selectionItems()` in `:protocol`). Each
+but Select all ends the selection, as a tap on the text, Back, or Android ending the toolbar (another selection
+starting, say) does; TalkBack has each as an action on every line, and "Stop selecting". The lines are copied as desktop's `TTextEdit::getSelectedText()` joins them for its copy: as each reads, a
 line feed between two and none after the last, without timestamps, and a line a script deleted left out
 (`LineSelection` and `copiedLines()` in `:protocol`, tested on the JVM). Text over `MOST_COPIED_CHARS` is neither
 copied nor shared, and a message asks for fewer lines: Android hands it over in one binder transaction, which a longer
 text would overflow, crashing the app. The selection is kept by line number, so it
 stays on its lines as new ones come, and closes once the scrollback has dropped all of them. Each line reads whether it
 is selected through a `derivedStateOf` of its own, so a change composes again only the lines whose state it changes.
-The game screen draws the bar (`LineSelectionBarHost` in `ui/game/ConsoleSelection.kt`, which the console hands its bar
-through `LineSelectionBarSlot`) over the bottom of the game area, above the input line and so above the keyboard, and over
-the script windows: over the console's top, the map in the corner and a script's windows there would cover its buttons.
-The console leaves room under its last line for as much of the bar as is over it, and its jump to the bottom above it.
+The toolbar is a window of Android's own, so the map in the corner and a script's windows never cover it. The console
+leaves room under its last line for the handle's touch, so the newest line's handle can be dragged; under the map in
+front, neither the toolbar nor the handles show, and the selection waits for the console to come back.
 
 ### A mouse on the text
 A mouse or a touchpad, on a Chromebook, a tablet's keyboard cover or Android's desktop windowing, works the text as
 desktop's console does (`TTextEdit`), in every `ConsoleLine`, the main console's and the script windows':
 - A right click acts where it is let go (`rightClick()` in `:protocol`, tested on the JVM): on a spoiler not yet
   revealed it reveals it, even a disabled one; on a link with a menu that is not disabled it opens the menu; on another
-  link it does nothing; off a link it opens the line's menu, as a long press does.
+  link it does nothing; off a link it selects the line, as a long press does.
 - Over a link the pointer is a hand, and the link's tool tip shows below it until it leaves the link; it takes no
   focus. TalkBack names a link by its tool tip, so it misses nothing of it.
 - The wheel scrolls the main console and a script's console three rows a notch, one with Shift and half the rows shown
@@ -1192,8 +1197,8 @@ kept by `ScriptItemsClient`:
   not its Lua compiles, as the desktop editor's save does, and then does not run, which the top of the page says;
   what Lua finds wrong shows over the page's buttons, read out by TalkBack, with a button that goes to its line,
   until the code is changed. Nothing runs until Apply.
-- A trigger is also made from a line of the game's text: a long press on a line of the main console opens a menu with
-  "Make a trigger from this line", and TalkBack has the same as the line's action (`ConsoleLine`; not on a blank line,
+- A trigger is also made from a line of the game's text: a long press on a line of the main console selects it, whose
+  toolbar has "Make a trigger", and TalkBack has "Make a trigger from this line" as the line's action (`ConsoleLine`; not on a blank line,
   nor on one of the app's own). The page it opens (`TriggerFromLineScreen.kt`) has the line's words, each a chip that
   a tap makes captured, then optional, then fixed again, and two switches: only a whole line, and a capture of several
   words. From them `TriggerFromLine` makes the pattern, apart from the screen: a substring while every word is fixed,

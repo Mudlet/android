@@ -1,5 +1,6 @@
 package org.mudlet.android.ui.game
 
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -19,17 +20,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.selection.LocalTextSelectionColors
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -47,7 +47,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
@@ -63,10 +65,15 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
@@ -74,6 +81,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
@@ -83,19 +91,30 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import org.mudlet.android.R
 import org.mudlet.android.protocol.ConsoleWheel
+import org.mudlet.android.protocol.DrawnLine
 import org.mudlet.android.protocol.EngineMessage
 import org.mudlet.android.protocol.LineSelection
 import org.mudlet.android.protocol.LinkSpan
+import org.mudlet.android.protocol.SelectionItem
+import org.mudlet.android.protocol.allLines
+import org.mudlet.android.protocol.commandLineText
 import org.mudlet.android.protocol.concealLinks
 import org.mudlet.android.protocol.copiedLines
+import org.mudlet.android.protocol.edgeScroll
+import org.mudlet.android.protocol.lineUnder
 import org.mudlet.android.protocol.linkRuns
 import org.mudlet.android.protocol.linkSpans
 import org.mudlet.android.protocol.matchStarts
+import org.mudlet.android.protocol.selectedSpan
+import org.mudlet.android.protocol.selectionItems
 import org.mudlet.android.ui.ConsoleColors
 import org.mudlet.android.ui.ConsoleLinksClient
 import org.mudlet.android.ui.UiLine
 import org.mudlet.android.ui.ansiText
 import org.mudlet.android.ui.blinks
+import org.mudlet.android.ui.copyText
+import org.mudlet.android.ui.shareText
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 private const val TAIL_KEY = "tail"
@@ -113,6 +132,11 @@ private const val SCREEN_SIZE_SETTLE_MS = 200L
 // A run of characters, shaped as a line of game text is, rather than one on its own
 private const val CELLS_MEASURED = 100
 
+// A handle dragged this near the console's top or bottom scrolls it, up to this far a frame
+private val EDGE_SCROLL_ZONE = 32.dp
+private val EDGE_SCROLL_MOST = 12.dp
+private const val EDGE_SCROLL_FRAME_MS = 16L
+
 /**
  * The game's text: [lines], then [tail] (the prompt), in their colours and styles, at [textSizeSp] in [colors]. At the
  * bottom it follows new lines; scrolled up, it stays where it is and offers a button back to the bottom that counts the
@@ -126,13 +150,16 @@ private const val CELLS_MEASURED = 100
  * drawn as the engine last said it looks: visited or chosen in its colours, which TalkBack's actions also say, and a
  * concealed one as blanks.
  *
- * A long press on a line, but on a link with a menu, which opens that, offers to copy or share the line as it reads,
- * and to hand its text to [onMakeTrigger], to make a trigger from; TalkBack has actions to copy it and make the trigger.
+ * TalkBack has actions on a line to copy it as it reads and to hand its text to [onMakeTrigger], to make a trigger from.
  *
- * That menu, and TalkBack's action "Select from here", also start a selection of whole lines at the line; while one is
- * open a tap on a line, or TalkBack's action "Select to here", takes it to that line, and [LineSelectionBar], which
- * [selectionBar] has the game screen draw, copies or shares the lines, joined as desktop's copy joins them. Each line
- * reads whether it is selected for itself, so a change draws again only the lines it changes.
+ * A long press on a line, but on a link with a menu, which opens that, and TalkBack's action "Select from here", start a
+ * selection of whole lines at the line, with Android's own floating text toolbar ([SelectionToolbar]) beside it and a
+ * handle under its first and its last line, which a drag takes to another line, as TalkBack's action "Select to here"
+ * does. The toolbar copies or shares the lines, joined as desktop's copy joins them, selects them all, hands them to
+ * [onToCommandLine] on one line, one line of the game's text to [onMakeTrigger], or the lines to an app that takes text,
+ * a translator say; TalkBack has the same as actions on each line. Each ends the selection, as a tap on the text or Back
+ * does. While [obscured], under the map in front, neither the toolbar nor the handles show. Each line reads whether it is
+ * selected for itself, so a change draws again only the lines it changes.
  *
  * Each match of [searchQuery] is drawn as desktop's search draws it, and the list goes to [searchFound], the number of
  * the line a search found, each time a search finds one.
@@ -156,7 +183,7 @@ fun Console(
     colors: ConsoleColors,
     onTextSize: (Int) -> Unit,
     onScreenSize: (columns: Int, rows: Int) -> Unit,
-    selectionBar: LineSelectionBarSlot,
+    onToCommandLine: (String) -> Unit,
     modifier: Modifier = Modifier,
     links: ConsoleLinksClient? = null,
     onMakeTrigger: ((String) -> Unit)? = null,
@@ -167,6 +194,7 @@ fun Console(
     behindText: @Composable BoxScope.() -> Unit = {},
     caret: Boolean = false,
     onCaretLeft: (typed: String?) -> Unit = {},
+    obscured: Boolean = false,
 ) {
     val listState = rememberLazyListState()
     val measurer = rememberTextMeasurer()
@@ -302,36 +330,157 @@ fun Console(
             lineAt(i)?.takeUnless { it.deleted }?.let { it.readAs(linkSpans(it.runs, it.text.length), linksOf(i)) }
         }
     }
+    // The app's own markers are not the game's text, and a blank line matches nothing
+    val triggerLineOf = { s: LineSelection ->
+        s.indicesIn(firstLine, itemCount).filter { !notDrawn(it) }.singleOrNull()?.let(lineAt)?.takeIf { onMakeTrigger != null && !it.marker && it.text.isNotBlank() }
+    }
     val latestCountOf by rememberUpdatedState(countOf)
     val latestTextOf by rememberUpdatedState(textOf)
-    if (selecting) {
-        DisposableEffect(selectionBar) {
-            val bar = @Composable { m: Modifier ->
-                LineSelectionBar(selectionState, { latestCountOf(it) }, { latestTextOf(it) }, onClose = { selectionState.value = null }, m)
-            }
-            selectionBar.bar = bar
-            onDispose {
-                selectionBar.bar = null
-                selectionBar.top = null
+    val latestTriggerLineOf by rememberUpdatedState(triggerLineOf)
+    val latestItemCount by rememberUpdatedState(itemCount)
+    val latestOnMakeTrigger by rememberUpdatedState(onMakeTrigger)
+    val latestOnToCommandLine by rememberUpdatedState(onToCommandLine)
+    val context = LocalContext.current
+    val resources = LocalResources.current
+    val haptics = LocalHapticFeedback.current
+    val processors = remember(selecting) { if (selecting) textProcessors(context) else emptyList() }
+
+    // Ended before the text goes, as Android's own selection ends on Copy; too long, it stays, to be made shorter
+    fun handOver(to: (String) -> Unit) {
+        val text = latestTextOf(selectionState.value ?: return)
+        if (text == null) {
+            Toast.makeText(context, R.string.console_selection_too_long, Toast.LENGTH_LONG).show()
+            return
+        }
+        selectionState.value = null
+        to(text)
+    }
+    val selectionActions = remember(processors) {
+        derivedStateOf(SameSelectionActions) {
+            val s = selectionState.value ?: return@derivedStateOf emptyList()
+            selectionItems(s, latestFirstLine, latestItemCount, latestTriggerLineOf(s) != null).map { item ->
+                when (item) {
+                    SelectionItem.COPY -> SelectionAction(resources.getString(R.string.console_selection_copy)) {
+                        handOver { copyText(context, resources.getString(R.string.app_name), it, resources.getString(R.string.console_selection_copied)) }
+                    }
+
+                    SelectionItem.SHARE -> SelectionAction(resources.getString(R.string.console_selection_share)) {
+                        handOver { shareText(context, it, resources.getString(R.string.console_selection_share_title), resources.getString(R.string.console_selection_no_share)) }
+                    }
+
+                    SelectionItem.SELECT_ALL -> SelectionAction(resources.getString(R.string.console_selection_select_all)) {
+                        allLines(latestFirstLine, latestItemCount)?.let { selectionState.value = it }
+                    }
+
+                    SelectionItem.TO_COMMAND_LINE -> SelectionAction(resources.getString(R.string.console_selection_to_command_line)) {
+                        handOver { latestOnToCommandLine(commandLineText(it)) }
+                    }
+
+                    SelectionItem.MAKE_TRIGGER -> SelectionAction(resources.getString(R.string.console_selection_trigger)) make@{
+                        val line = latestTriggerLineOf(selectionState.value ?: return@make) ?: return@make
+                        selectionState.value = null
+                        latestOnMakeTrigger?.invoke(line.text)
+                    }
+                }
+            } + processors.map { app ->
+                SelectionAction(app.label, overflow = true) { handOver { processText(context, app, it, resources.getString(R.string.console_selection_no_share)) } }
             }
         }
     }
-    // Room under the lines for as much of the selection's bar as is over the console, so the last line can be scrolled
-    // out from under it; the list keeps its size, which the game is told
-    var consoleBottom by remember { mutableFloatStateOf(0f) }
-    val barTop = selectionBar.top
-    val selectionBarRoom = if (selecting && barTop != null) with(density) { (consoleBottom - barTop).coerceAtLeast(0f).toDp() } else 0.dp
+    val stopLabel = stringResource(R.string.console_selection_stop)
+    val lineSelectionActions by remember(stopLabel) {
+        derivedStateOf {
+            selectionActions.value.map { action ->
+                CustomAccessibilityAction(action.label) {
+                    action.perform()
+                    true
+                }
+            } + CustomAccessibilityAction(stopLabel) {
+                selectionState.value = null
+                true
+            }
+        }
+    }
+
+    var consoleBounds by remember { mutableStateOf(Rect.Zero) }
+    val drawnLines = { listState.layoutInfo.visibleItemsInfo.map { DrawnLine(it.index, it.offset, it.offset + it.size) } }
+    val selectionSpan = {
+        selectionState.value?.let { s -> selectedSpan(s.indicesIn(latestFirstLine, latestItemCount), drawnLines(), consoleSize.height) }?.let { span ->
+            Rect(consoleBounds.left, consoleBounds.top + span.first, consoleBounds.right, consoleBounds.top + span.last)
+        }
+    }
+    val handleSize = with(density) { HANDLE_SIZE.toPx() }
+    val handleTouch = with(density) { HANDLE_TOUCH_SIZE.toPx() }
+    val edgeZone = with(density) { EDGE_SCROLL_ZONE.toPx() }
+    val edgeMost = with(density) { EDGE_SCROLL_MOST.toPx() }
+    val ltr = LocalLayoutDirection.current == LayoutDirection.Ltr
+    val handlePlaces = {
+        val selected = selectionState.value?.indicesIn(latestFirstLine, latestItemCount) ?: IntRange.EMPTY
+        val left = sidePaddingPx / 2f
+        val right = consoleSize.width - sidePaddingPx / 2f - handleSize
+        val drawn = if (selected.isEmpty()) emptyList() else listState.layoutInfo.visibleItemsInfo
+        fun under(index: Int, start: Boolean) = drawn.firstOrNull { it.index == index }?.let {
+            HandlePlace(start, pointLeft = start != ltr, x = if (start == ltr) left else right, y = (it.offset + it.size).toFloat())
+        }
+        listOfNotNull(under(selected.first, start = true), under(selected.last, start = false)).filter { it.y >= 0f && it.y + handleSize <= consoleSize.height }
+    }
+    val latestHandlePlaces by rememberUpdatedState(handlePlaces)
+    val latestDrawnLines by rememberUpdatedState(drawnLines)
+    // Before the list and the lines, so a handle's drag neither scrolls the list nor reaches a line
+    val handleDrag = Modifier.pointerInput(selecting, handleSize, handleTouch) {
+        if (!selecting) return@pointerInput
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            val reach = handleTouch / 2
+            val grabbed = latestHandlePlaces().firstOrNull { abs(down.position.x - it.x - handleSize / 2) <= reach && abs(down.position.y - it.y - handleSize / 2) <= reach } ?: return@awaitEachGesture
+            val selection = selectionState.value ?: return@awaitEachGesture
+            down.consume()
+            val fixed = if (grabbed.start) selection.last else selection.first
+            // The line the handle's point is under, wherever on the handle the finger took it
+            val grip = down.position.y - grabbed.y + 1
+            var y = down.position.y
+            while (selectionState.value != null) {
+                val event = withTimeoutOrNull(EDGE_SCROLL_FRAME_MS) { awaitPointerEvent(PointerEventPass.Initial) }
+                if (event != null) {
+                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                    change.consume()
+                    if (!change.pressed) break
+                    y = change.position.y
+                }
+                val scroll = edgeScroll(y, consoleSize.height.toFloat(), edgeZone, edgeMost)
+                if (scroll != 0f) listState.dispatchRawDelta(scroll)
+                val at = lineUnder((y - grip).roundToInt(), latestDrawnLines()) ?: continue
+                selectionState.value = LineSelection(fixed, latestFirstLine + at)
+            }
+        }
+    }
+    // While selecting, a tap on the text ends the selection, as on Android's own, rather than following a link, and a
+    // long press starts another
+    val selectionTaps = if (selecting) {
+        Modifier.pointerInput(Unit) {
+            detectTapGestures(
+                onTap = { selectionState.value = null },
+                onLongPress = { at ->
+                    val i = lineUnder(at.y.roundToInt(), latestDrawnLines()) ?: return@detectTapGestures
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    selectionState.value = LineSelection(latestFirstLine + i, latestFirstLine + i)
+                },
+            )
+        }
+    } else {
+        Modifier
+    }
 
     val wheelScroll = Modifier.wheelScroll(cell, { cell.fit(consoleSize, sidePaddingPx)?.second }) { rows ->
         listState.dispatchRawDelta(rows * cell.height.toFloat())
     }
     Box(
-        modifier.background(colors.background).pinchToZoom({ latestTextSize }, { latestOnTextSize(it) }).then(wheelScroll)
-            .onGloballyPositioned { consoleBottom = it.boundsInWindow().bottom },
+        modifier.background(colors.background).pinchToZoom({ latestTextSize }, { latestOnTextSize(it) }).then(wheelScroll).then(handleDrag)
+            .onGloballyPositioned { consoleBounds = it.boundsInWindow() },
     ) {
         behindText()
         LazyColumn(
-            Modifier.fillMaxSize().onSizeChanged { consoleSize = it }.then(caretKeys).onFocusChanged {
+            Modifier.fillMaxSize().onSizeChanged { consoleSize = it }.then(caretKeys).then(selectionTaps).onFocusChanged {
                 linesFocused = it.hasFocus
                 if (caret && !it.hasFocus) {
                     caretScope.launch {
@@ -342,7 +491,8 @@ fun Console(
                 }
             },
             state = listState,
-            contentPadding = PaddingValues(start = CONSOLE_SIDE_PADDING, end = CONSOLE_SIDE_PADDING, bottom = selectionBarRoom),
+            // The list keeps its size, which the game is told
+            contentPadding = PaddingValues(start = CONSOLE_SIDE_PADDING, end = CONSOLE_SIDE_PADDING, bottom = if (selecting && !obscured) HANDLE_ROOM else 0.dp),
         ) {
             // Each line's key is its number, so the lines in view stay put as the oldest are dropped
             items(itemCount, key = { i -> if (i < lineCount) firstLine + i else TAIL_KEY }) { i ->
@@ -376,12 +526,7 @@ fun Console(
                 // The app's own markers are not the game's text: no trigger sees them
                 val makeTrigger = remember(line, onMakeTrigger) { onMakeTrigger?.takeUnless { line.marker }?.let { make -> { make(line.text) } } }
                 val stamp = if (timeStamps && line.time > 0) remember(line.time) { timeStamp(line.time) } else null
-                // While selecting, a tap on a line takes the selection there, rather than following a link or opening a menu
-                val selectionLook = if (selecting) {
-                    Modifier.background(if (selected) selectedBackground else Color.Transparent).pointerInput(number) { detectTapGestures(onTap = { selectTo() }) }
-                } else {
-                    Modifier
-                }
+                val selectionLook = if (selecting) Modifier.background(if (selected) selectedBackground else Color.Transparent) else Modifier
                 val caretHere = if (caret && i == caretIndex) {
                     // One node for TalkBack with the line's text and actions, which sit on a child of a line with a menu
                     Modifier.focusRequester(caretFocus).focusable().semantics(mergeDescendants = true) {}.border(1.dp, colors.foreground)
@@ -402,6 +547,7 @@ fun Console(
                         selected = selected,
                         onSelectFrom = selectFrom.takeUnless { selecting },
                         onSelectTo = selectTo.takeIf { selecting },
+                        selectionActions = if (selecting) lineSelectionActions else emptyList(),
                     )
                 }
                 if (stamp == null) {
@@ -415,9 +561,14 @@ fun Console(
                 }
             }
         }
+        if (selecting && !obscured) {
+            val handleColor = LocalTextSelectionColors.current.handleColor
+            SelectionHandles(handlePlaces, handleColor)
+        }
+        LineSelectionShown(selectionState, { latestCountOf(it) }, selectionActions, toolbar = !obscured, selectionSpan, onClose = { selectionState.value = null })
         if (!following) {
             val newLines = (linesAdded - seenUpTo).coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
-            ExtendedFloatingActionButton({ following = true }, Modifier.align(Alignment.BottomEnd).padding(bottom = selectionBarRoom).padding(12.dp)) {
+            ExtendedFloatingActionButton({ following = true }, Modifier.align(Alignment.BottomEnd).padding(12.dp)) {
                 Icon(painterResource(R.drawable.ic_arrow_downward), contentDescription = null)
                 Spacer(Modifier.width(8.dp))
                 Text(
@@ -446,6 +597,12 @@ private fun UiLine.readAs(spans: List<LinkSpan>, held: ConsoleLinksClient?): Str
 private fun UiLine.paintedAs(info: (Int) -> EngineMessage.Link?): UiLine {
     val painted = linkRuns(runs, info)
     return if (painted === runs) this else UiLine(text, painted, prompt, marker, time, seq, deleted)
+}
+
+// Its own scope, as it reads where the lines are, which changes as they scroll
+@Composable
+private fun SelectionHandles(places: () -> List<HandlePlace>, color: Color) {
+    for (place in places()) SelectionHandle(place, color)
 }
 
 /** The frame time in milliseconds, each frame, for as long as it is in the composition. */

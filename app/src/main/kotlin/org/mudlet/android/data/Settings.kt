@@ -256,7 +256,7 @@ object Settings {
      * or another of those tried beside it (docs/architecture.md, "The movement pad's designs"). Stored by the constant's
      * name, so those are stored names.
      */
-    val movementPadDesign = EnumSetting("movementPadDesign", MovementPadDesign.SWIPE, MovementPadDesign.entries) { it.name }
+    val movementPadDesign = EnumSetting("movementPadDesign", MovementPadDesign.CURRENT, MovementPadDesign.entries) { it.name }
 
     /** "Movement pad side": the edge the Thumb, Swipe and Room exits pads keep to. Stored by the constant's name, as above. */
     val movementPadSide = EnumSetting("movementPadSide", MovementPadSide.RIGHT, MovementPadSide.entries) { it.name }

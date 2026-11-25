@@ -47,9 +47,10 @@ easier than typing them.
 
 ## Part 1. Install and start
 
-1. Install **Mudlet PTB** (the test version). With Google Play: open
-   <https://play.google.com/apps/testing/org.mudlet.mudlet.ptb>, tap "Become a tester", then install it from Play.
-   Without Play (some Huawei phones, or if you prefer): download `mudlet-ptb-arm64-v8a.apk` from
+1. Install the test version. With Google Play: join the
+   [Mudlet Android Testers](https://groups.google.com/g/mudlet-ptb-testers) group, open
+   <https://play.google.com/apps/testing/org.mudlet.mudlet>, tap "Become a tester", then install Mudlet from Play.
+   Without Play (some Huawei phones, or if you prefer), install **Mudlet PTB**: download `mudlet-ptb-arm64-v8a.apk` from
    <https://github.com/Mudlet/android/releases/tag/ptb> and open it; your phone asks to allow installing apps from
    the browser. On a Chromebook with an Intel or AMD chip, take `mudlet-ptb-x86_64.apk` instead.
 2. Open it. On Android 13 and later it explains its notification and asks to allow notifications: allow them.

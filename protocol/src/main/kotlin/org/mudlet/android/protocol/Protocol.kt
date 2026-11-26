@@ -1604,6 +1604,7 @@ class FrameReader(input: InputStream) {
     companion object {
         /** A frame's payload, as [read] takes it off the socket. */
         fun parse(payload: ByteArray): EngineMessage {
+            LineFrames.parse(payload)?.let { return it }
             // A map's picture is most of its frame, and read as part of the JSON's text it is copied several times over
             // before it is decoded, which takes several times as long as the rest of the read
             val picture = pictureIn(payload) ?: return parse(JSONObject(String(payload, Charsets.UTF_8)))

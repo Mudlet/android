@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -59,6 +60,8 @@ class GhostTextFieldTest {
                 val joined = draw(direction, typed, word).gap
                 val spaced = draw(direction, typed, " $word").gap
                 assertTrue("'$typed' and its ghost ' $word' in a $direction layout: $spaced px apart, $joined px without the space", spaced - joined >= space)
+                // So a ghost drawn a space off would show a space the line does not have
+                assertTrue("'$typed' and its ghost '$word' in a $direction layout: $joined px apart, less than a space", joined < spaced - joined)
             }
         }
     }
@@ -108,14 +111,17 @@ class GhostTextFieldTest {
         compose.runOnUiThread {
             compose.activity.setContent {
                 MaterialTheme {
-                    CompositionLocalProvider(LocalLayoutDirection provides direction) {
-                        GhostTextField(
-                            state = remember(typed) { TextFieldState(typed) },
-                            ghost = ghost,
-                            errorMessage = "",
-                            modifier = Modifier.width(300.dp).testTag(FIELD),
-                            lineLimits = TextFieldLineLimits.SingleLine,
-                        )
+                    // Opaque: behind a bare field is the window, dark in the system's dark mode
+                    Surface {
+                        CompositionLocalProvider(LocalLayoutDirection provides direction) {
+                            GhostTextField(
+                                state = remember(typed) { TextFieldState(typed) },
+                                ghost = ghost,
+                                errorMessage = "",
+                                modifier = Modifier.width(300.dp).testTag(FIELD),
+                                lineLimits = TextFieldLineLimits.SingleLine,
+                            )
+                        }
                     }
                 }
             }

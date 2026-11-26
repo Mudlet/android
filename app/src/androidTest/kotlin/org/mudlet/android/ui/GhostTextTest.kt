@@ -64,8 +64,8 @@ import java.util.concurrent.TimeUnit
 
 /**
  * The input line's ghost text against a fake engine: the rest of the best suggestion greyed after what is typed, no
- * row of suggestions above the line, a tap on the ghost, the right arrow or TalkBack's action to take it, and no ghost
- * while the game hides input. Each test has a profile of its own, so it starts with nothing learned.
+ * row of suggestions above the line, a tap on the ghost, the arrow pointing at it or TalkBack's action to take it, and
+ * no ghost while the game hides input. Each test has a profile of its own, so it starts with nothing learned.
  */
 @RunWith(AndroidJUnit4::class)
 class GhostTextTest {

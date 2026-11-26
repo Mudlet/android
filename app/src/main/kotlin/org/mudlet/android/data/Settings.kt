@@ -32,7 +32,7 @@ object Settings {
     private var appContext: Context? = null
 
     /** The console's text size in sp, so the system font scale scales it too. */
-    val textSize = IntSetting("textSizeSp", default = 14, range = 6..32)
+    val textSize = IntSetting("textSizeSp", default = 14, range = 8..32)
 
     /** "Read new text aloud": new game lines are announced while TalkBack is on, as Mudlet's own setting has it. */
     val readNewText = BoolSetting("announceIncomingText", default = true, mudlet = true)

@@ -272,12 +272,17 @@ def run(dev, args):
                            "-e", "notClass", f"{PERMISSION_TEST},{BACKUP_TEST}")
     time.sleep(2)
     out = dev.log_text().splitlines()
-    marks = [i for i, line in enumerate(out) if "SelPseudo" in line]
-    out = out[marks[0]:marks[-1] + 1] if marks else []
-    keep = re.compile(r"SelPseudo|ActivityTaskManager|ANR|Not Responding|InputDispatcher|Floating|ActionMode|WindowManager|AndroidRuntime|Notification|HeadsUp|StatusBar|SystemUi|InputMethod|Ime|Toast|wm_|am_|input_focus|Choreographer")
-    lines = [line for line in out if keep.search(line) and not re.search(r"SelPseudo: \s+at ", line)]
+    lines = []
+    inside = False
+    for line in out:
+        if "SelPseudo" in line and "long click" in line:
+            inside = True
+        if inside and not re.search(r"SelPseudo: \s+at |WindowManagerShell|Checking filter|Finish Transition|startWCT", line):
+            lines.append(line)
+        if "SelPseudo" in line and " paused " in line:
+            inside = False
     print("=== diag logcat", len(lines), flush=True)
-    for line in lines[-6000:]:
+    for line in lines[-25000:]:
         print(line[:400])
     print("=== end diag logcat", flush=True)
     return failures

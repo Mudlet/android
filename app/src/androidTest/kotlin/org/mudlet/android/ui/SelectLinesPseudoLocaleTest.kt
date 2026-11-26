@@ -94,15 +94,16 @@ class SelectLinesPseudoLocaleTest(private val locale: String) {
     @Test
     fun theToolbarsItemsAreThereInFullInTheLocalesOrderAndTalkBacksActionsMatchThem() {
         FloatingToolbar.trace = ::trace
+        tracer = ::trace
         val app = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as android.app.Application
-        app.registerActivityLifecycleCallbacks(object : android.app.Application.ActivityLifecycleCallbacks {
-            override fun onActivityCreated(a: android.app.Activity, b: android.os.Bundle?) = trace("created ${System.identityHashCode(a)} ${a.javaClass.simpleName}")
-            override fun onActivityStarted(a: android.app.Activity) = trace("started ${System.identityHashCode(a)}")
-            override fun onActivityResumed(a: android.app.Activity) = trace("resumed ${System.identityHashCode(a)}")
-            override fun onActivityPaused(a: android.app.Activity) = trace("paused ${System.identityHashCode(a)}")
-            override fun onActivityStopped(a: android.app.Activity) = trace("stopped ${System.identityHashCode(a)}")
+        if (registered++ == 0) app.registerActivityLifecycleCallbacks(object : android.app.Application.ActivityLifecycleCallbacks {
+            override fun onActivityCreated(a: android.app.Activity, b: android.os.Bundle?) = tracer("created ${System.identityHashCode(a)} ${a.javaClass.simpleName}")
+            override fun onActivityStarted(a: android.app.Activity) = tracer("started ${System.identityHashCode(a)}")
+            override fun onActivityResumed(a: android.app.Activity) = tracer("resumed ${System.identityHashCode(a)}")
+            override fun onActivityPaused(a: android.app.Activity) = tracer("paused ${System.identityHashCode(a)}")
+            override fun onActivityStopped(a: android.app.Activity) = tracer("stopped ${System.identityHashCode(a)}")
             override fun onActivitySaveInstanceState(a: android.app.Activity, b: android.os.Bundle) = Unit
-            override fun onActivityDestroyed(a: android.app.Activity) = trace("destroyed ${System.identityHashCode(a)}")
+            override fun onActivityDestroyed(a: android.app.Activity) = tracer("destroyed ${System.identityHashCode(a)}")
         })
         androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().runOnMainSync {
             val decor = compose.activity.window.decorView
@@ -161,6 +162,8 @@ class SelectLinesPseudoLocaleTest(private val locale: String) {
     }
 
     companion object {
+        private var registered = 0
+        private var tracer: (String) -> Unit = {}
         private const val INSTANCE = "fake-select-pseudo"
         private val LINES = listOf("You hit the rat.", "A bat bites you.", "The rat bites you.")
         private const val WAIT_MS = 10_000L

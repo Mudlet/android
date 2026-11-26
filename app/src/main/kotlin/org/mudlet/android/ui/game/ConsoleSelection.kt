@@ -155,6 +155,8 @@ internal fun SelectionToolbar(actions: List<SelectionAction>, span: () -> Rect?,
             }
         }
         holder[0] = view.startActionMode(callback, ActionMode.TYPE_FLOATING)
+        // Bite: Android hides the toolbar for a while, as it does when the selection moves or the window loses focus
+        holder[0]?.let { mode -> view.postDelayed({ mode.hide(3000) }, 2000) }
         onDispose {
             ending = true
             holder[0]?.finish()

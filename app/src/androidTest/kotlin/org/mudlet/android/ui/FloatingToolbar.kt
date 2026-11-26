@@ -70,6 +70,18 @@ internal object FloatingToolbar {
     // not one without the item, so this waits for the toolbar to be back and at rest
     private fun overflowButton(): UiObject2? = device.wait(Until.findObject(overflow.enabled(true)), WAIT_MS)
 
+    /** Bite: offers() as it is on main, which looks for the overflow button once. */
+    fun offersBefore(label: String): Boolean {
+        if (device.wait(Until.hasObject(item(label)), WAIT_MS / 5)) return true
+        val more = device.findObject(overflow) ?: return false
+        more.click()
+        val found = device.wait(Until.hasObject(item(label)), WAIT_MS / 2)
+        settle()
+        device.findObject(overflow)?.click()
+        settle()
+        return found
+    }
+
     /** Taps the item [label], in the overflow if it is not in the toolbar. */
     fun tap(label: String) {
         if (!device.wait(Until.hasObject(item(label)), WAIT_MS / 2)) {

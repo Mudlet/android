@@ -269,7 +269,8 @@ def run(dev, args):
     failures += instrument(dev, "app-permission", APP_TESTS, APP, "the app, freshly installed: the notification permission",
                            480, "-e", "class", PERMISSION_TEST)
     failures += instrument(dev, "app", APP_TESTS, APP, "the app's other tests", 2400,
-                           "-e", "notClass", f"{PERMISSION_TEST},{BACKUP_TEST}")
+                           "-e", "class", "org.mudlet.android.ui.SelectLinesPseudoLocaleTest")
+    return failures
     pull_screenshots(dev)
     failures += backup_rounds(dev)
     install(args.engine_tests, "-g")

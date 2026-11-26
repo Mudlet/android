@@ -37,7 +37,7 @@ import org.mudlet.android.protocol.Profile
  */
 @RunWith(Parameterized::class)
 @SdkSuppress(minSdkVersion = Build.VERSION_CODES.TIRAMISU)
-class SelectLinesPseudoLocaleTest(private val locale: String) {
+class SelectLinesPseudoLocaleTest(private val locale: String, private val helper: String) {
     private val fake = FakeEngineRule()
     private val compose = createAndroidComposeRule<MainActivity>()
 
@@ -78,7 +78,7 @@ class SelectLinesPseudoLocaleTest(private val locale: String) {
         val width = compose.activity.resources.displayMetrics.widthPixels
         val items = listOf(R.string.console_selection_select_all, R.string.console_selection_to_command_line, R.string.console_selection_trigger).map(::string)
         for (item in listOf(copy, share) + items) {
-            if (!FloatingToolbar.offers(item)) throw AssertionError("$locale: no \"$item\" in the toolbar; ${FloatingToolbar.describe()}")
+            if (!(if (helper == "before") FloatingToolbar.offersBefore(item) else FloatingToolbar.offers(item))) throw AssertionError("$locale: no \"$item\" in the toolbar; ${FloatingToolbar.describe()}")
         }
         for (item in listOf(copy, share)) {
             val at = FloatingToolbar.bounds(item)
@@ -117,7 +117,7 @@ class SelectLinesPseudoLocaleTest(private val locale: String) {
         private const val TIMEOUT_MS = 240_000L
 
         @JvmStatic
-        @Parameterized.Parameters(name = "{0}")
-        fun locales() = listOf("en-XA", "ar-XB")
+        @Parameterized.Parameters(name = "{0}-{1}")
+        fun locales() = listOf("before", "after").flatMap { helper -> listOf("en-XA", "ar-XB").map { arrayOf(it, helper) } }
     }
 }

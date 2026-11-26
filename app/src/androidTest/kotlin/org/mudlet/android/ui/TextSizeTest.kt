@@ -14,6 +14,7 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToIndexAction
@@ -50,8 +51,8 @@ import org.mudlet.android.ui.theme.MudletTheme
 
 /**
  * The console's text size against a fake engine: the setting, reached from the game screen's title bar, and a pinch
- * both change it, and the columns and rows that then fit go to the engine with setScreenSize. At twice the system font
- * size, nothing on the game or settings screen is cut off.
+ * both change it, down to 6 and no further, and the columns and rows that then fit go to the engine with setScreenSize.
+ * At twice the system font size, nothing on the game or settings screen is cut off.
  */
 @RunWith(AndroidJUnit4::class)
 class TextSizeTest {
@@ -91,11 +92,10 @@ class TextSizeTest {
 
         compose.pickFromGameMenu(string(R.string.settings_title))
         activate(hasText(string(R.string.settings_appearance)))
-        val slider = hasContentDescription(string(R.string.settings_text_size)) and SemanticsMatcher.keyIsDefined(SemanticsActions.SetProgress)
-        compose.onNode(slider).performSemanticsAction(SemanticsActions.SetProgress) { it(28f) }
+        compose.onNode(slider()).performSemanticsAction(SemanticsActions.SetProgress) { it(28f) }
         activate(hasContentDescription(string(R.string.settings_text_smaller)))
         compose.runOnIdle { assertEquals(27, Settings.textSize.value) }
-        compose.onNode(slider).assert(stateDescription(compose.activity.resources.getQuantityString(R.plurals.settings_text_size_value, 27, 27)))
+        compose.onNode(slider()).assert(stateDescription(compose.activity.resources.getQuantityString(R.plurals.settings_text_size_value, 27, 27)))
         // The page, then the settings
         activate(hasContentDescription(string(R.string.navigate_back)))
         activate(hasContentDescription(string(R.string.navigate_back)))
@@ -122,6 +122,40 @@ class TextSizeTest {
         val after = settledScreenSize()
         assertTrue("larger text, fewer columns: $before, then $after", after.first < before.first)
         assertConsoleFits(after)
+    }
+
+    @Test
+    fun theSettingGoesDownToSixAndNoFurther() {
+        openTheGameScreen()
+        val before = settledScreenSize()
+
+        compose.pickFromGameMenu(string(R.string.settings_title))
+        activate(hasText(string(R.string.settings_appearance)))
+        compose.onNode(slider()).performSemanticsAction(SemanticsActions.SetProgress) { it(SMALLEST_SIZE - 1f) }
+        compose.runOnIdle { assertEquals(SMALLEST_SIZE, Settings.textSize.value) }
+        compose.onNode(slider()).assert(stateDescription(compose.activity.resources.getQuantityString(R.plurals.settings_text_size_value, SMALLEST_SIZE, SMALLEST_SIZE)))
+        compose.onNode(hasContentDescription(string(R.string.settings_text_smaller)) and hasClickAction()).assertIsNotEnabled()
+        activate(hasContentDescription(string(R.string.navigate_back)))
+        activate(hasContentDescription(string(R.string.navigate_back)))
+
+        compose.onNodeWithTag(GAME_TITLE_TAG).assertIsDisplayed()
+        assertEquals(SMALLEST_SIZE.sp, consoleFontSize())
+        val after = settledScreenSize()
+        assertTrue("smaller text, more columns and rows: $before, then $after", after.first > before.first && after.second > before.second)
+        assertConsoleFits(after)
+    }
+
+    @Test
+    fun aPinchInwardStopsAtSix() {
+        openTheGameScreen()
+
+        // Fingers 240 px apart closing to 20: a twelfth of the size, far under the smallest
+        compose.onNode(console).performTouchInput {
+            pinch(center - Offset(120f, 0f), center - Offset(10f, 0f), center + Offset(120f, 0f), center + Offset(10f, 0f))
+        }
+        compose.runOnIdle { assertEquals(SMALLEST_SIZE, Settings.textSize.value) }
+        assertEquals(SMALLEST_SIZE.sp, consoleFontSize())
+        assertConsoleFits(settledScreenSize())
     }
 
     @Test
@@ -227,6 +261,8 @@ class TextSizeTest {
         }
     }
 
+    private fun slider() = hasContentDescription(string(R.string.settings_text_size)) and SemanticsMatcher.keyIsDefined(SemanticsActions.SetProgress)
+
     private fun stateDescription(text: String) = SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, text)
 
     private fun string(@StringRes id: Int) = compose.activity.getString(id)
@@ -241,6 +277,7 @@ class TextSizeTest {
         val GAME = Profile("Game", "127.0.0.1", 4000, false, "", false)
 
         const val DEFAULT_SIZE = 14
+        const val SMALLEST_SIZE = 6
         const val WAIT_MS = 10_000L
 
         // Well past the console's own wait before it sends a size

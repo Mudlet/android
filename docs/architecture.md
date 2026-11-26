@@ -2529,6 +2529,8 @@ alias of run-lua-code, one of desktop Mudlet's default packages, which a profile
       Settings item in the game screen's title bar menu opens "Settings", whose Appearance page's text size slider, "Smaller text" and
       "Larger text" buttons change it too; TalkBack reads the slider as "Text size", with its size, and swiping up or
       down on it changes the size.
+    - The text goes down to 6 and up to 32: a pinch, the slider and "Smaller text" go no further, and at 6 a line of
+      as many characters as the game is told still fits the console's width.
     - On a game that shows the width it was told (many have a screen-width option), a line of that many characters
       fills the console's width. Open and close the keyboard, and rotate the phone: the game is told the new size
       once, after the change, not at every step.

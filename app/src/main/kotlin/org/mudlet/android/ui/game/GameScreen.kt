@@ -79,6 +79,9 @@ import org.mudlet.android.protocol.RefusedCertificate
 import org.mudlet.android.ui.CertificateFacts
 import org.mudlet.android.ui.ConsoleColors
 import org.mudlet.android.ui.EngineClient
+import org.mudlet.android.ui.Feature
+import org.mudlet.android.ui.FeatureCallout
+import org.mudlet.android.ui.FeatureCallouts
 import org.mudlet.android.ui.MudletTopBar
 import org.mudlet.android.ui.ProfileSession
 import org.mudlet.android.ui.ScriptWindowsClient
@@ -111,6 +114,8 @@ import kotlin.reflect.KClass
  * console offers to make a trigger from it ([onMakeTrigger], with the line's text). The first time it shows, and after
  * Help's "Take a UI tour", a short tour points out the console, the input line, the scripts and the menu with the
  * settings ([GameTourHost]), once no dialog over the screen asks something more urgent ([tourHeld]).
+ * Once two games are open, a callout under the title tells how to switch between them ([Feature.GAME_SWITCHING]), until
+ * the player has switched or tapped the title, never over the tour or a dialog.
  *
  * All of it is the front profile's ([EngineClient.front]), and what the screen keeps of a profile, such as the typed
  * line and where the console is scrolled to, waits for it while another is in front. When another game comes to the
@@ -288,6 +293,9 @@ private fun ProfileGameScreen(
         }
     }
     val onReconnect = if (canReconnect) ::reconnect else null
+
+    // Every way to another game, so the callout about switching goes for good once the player has switched
+    fun switchTo(game: String): Boolean = EngineClient.setFront(game).also { if (it) FeatureCallouts.dismiss(context, Feature.GAME_SWITCHING) }
     val connectWanted = state == ConnectionState.Disconnected && canReconnect
     val commandsShown = scriptCommandsShown()
     val onDisconnect = if (canDisconnect) ::disconnect else null
@@ -339,6 +347,12 @@ private fun ProfileGameScreen(
         }
     }
 
+    val secureOfferShown = c.secureOffer && !c.secureOfferPutOff
+    val refusedShown = c.refusedCertificate != null && !c.refusedCertificatePutOff
+    // AppNavigation's question to a TalkBack player shows over every screen, this one included
+    val dialogShown = gamesOpen || (historyOpen && !hidden) || secureOfferShown || refusedShown ||
+        (Announcer.touchExploration && !Settings.screenReaderOffered.value)
+
     Scaffold(
         topBar = {
             BoxWithConstraints {
@@ -347,23 +361,34 @@ private fun ProfileGameScreen(
                 val buttons = 4 + (if (commandsShown) 1 else 0)
                 val connectShown = connectWanted && maxWidth >= 4.dp + 48.dp * (2 + buttons) + 4.dp
                 MudletTopBar(name, onBack, titleContent = {
-                    GameTitle(
-                        name,
-                        state,
-                        index,
-                        games.size,
-                        othersUnread = games.sumOf { if (it === c) 0L else it.unread },
-                        othersAttention = games.any { it !== c && it.attention },
-                        onShowGames = { gamesOpen = true },
-                        onReconnect = onReconnect,
-                        onDisconnect = onDisconnect,
-                        previous = previous,
-                        next = next,
-                        onSwitch = EngineClient::setFront,
-                        swipe = swipe,
-                        scriptsStopped = c.scriptsStopped,
-                        stateShown = !connectShown,
-                    )
+                    FeatureCallout(
+                        Feature.GAME_SWITCHING,
+                        wanted = games.size > 1 && !dialogShown,
+                        title = stringResource(R.string.callout_switch_games_title),
+                        // TalkBack takes the swipe for itself: its players switch with the title's actions
+                        body = stringResource(if (Announcer.touchExploration) R.string.callout_switch_games_talkback else R.string.callout_switch_games),
+                    ) {
+                        GameTitle(
+                            name,
+                            state,
+                            index,
+                            games.size,
+                            othersUnread = games.sumOf { if (it === c) 0L else it.unread },
+                            othersAttention = games.any { it !== c && it.attention },
+                            onShowGames = {
+                                FeatureCallouts.dismiss(context, Feature.GAME_SWITCHING)
+                                gamesOpen = true
+                            },
+                            onReconnect = onReconnect,
+                            onDisconnect = onDisconnect,
+                            previous = previous,
+                            next = next,
+                            onSwitch = ::switchTo,
+                            swipe = swipe,
+                            scriptsStopped = c.scriptsStopped,
+                            stateShown = !connectShown,
+                        )
+                    }
                 }) {
                     if (connectShown) {
                         FilledTonalIconButton(::reconnect) { Icon(painterResource(R.drawable.ic_link), stringResource(R.string.connection_connect_to, reconnectName)) }
@@ -426,7 +451,7 @@ private fun ProfileGameScreen(
                 if (ctrlTab && event.type == KeyEventType.KeyDown) {
                     val forward = !event.isShiftPressed
                     val target = if (forward) next else previous
-                    if (target != null && EngineClient.setFront(target)) swipe.arrive(left = forward != rtl)
+                    if (target != null && switchTo(target)) swipe.arrive(left = forward != rtl)
                 }
                 ctrlR || ctrlTab || ctrlF
             },
@@ -572,7 +597,7 @@ private fun ProfileGameScreen(
             onSwitch = {
                 // First: this game's screen is saved as it leaves the front, and an open sheet would show again on its return
                 gamesOpen = false
-                EngineClient.setFront(it)
+                switchTo(it)
             },
             onClose = ::close,
             onOpenAnother = onBack,
@@ -591,7 +616,7 @@ private fun ProfileGameScreen(
         // Launched apart, as secureOfferRefusalShown ends this effect
         scope.launch { snackbars.showSnackbar(resources.getString(R.string.secure_offer_refused, reason), withDismissAction = true) }
     }
-    if (c.secureOffer && !c.secureOfferPutOff) {
+    if (secureOfferShown) {
         fun answer(accept: Boolean) {
             if (!c.answerSecureOffer(accept)) {
                 scope.launch { snackbars.showSnackbar(resources.getString(R.string.secure_offer_refused, resources.getString(R.string.profiles_error_not_attached)), withDismissAction = true) }
@@ -607,7 +632,7 @@ private fun ProfileGameScreen(
         )
     }
     val refused = c.refusedCertificate
-    if (refused != null && !c.refusedCertificatePutOff) {
+    if (refused != null && refusedShown) {
         RefusedCertificateDialog(
             refused,
             onAccept = {

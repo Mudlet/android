@@ -43,6 +43,8 @@ import org.mudlet.android.R
 import org.mudlet.android.data.PasswordStore
 import org.mudlet.android.protocol.Profile
 import org.mudlet.android.ui.EngineClient
+import org.mudlet.android.ui.Feature
+import org.mudlet.android.ui.FeatureCallouts
 import org.mudlet.android.ui.ListSegment
 import org.mudlet.android.ui.MudletScaffold
 import org.mudlet.android.ui.ProfileSession
@@ -156,7 +158,8 @@ fun ProfileListScreen(
                     item { SectionHeader(stringResource(R.string.games_title)) }
                     itemsIndexed(games, key = { _, game -> "game:" + game.name }) { i, game ->
                         OpenGameItem(game, i, games.size) {
-                            EngineClient.setFront(game.name)
+                            val other = game.name != EngineClient.front.name
+                            if (EngineClient.setFront(game.name) && other) FeatureCallouts.dismiss(context, Feature.GAME_SWITCHING)
                             onOpenGame()
                         }
                     }

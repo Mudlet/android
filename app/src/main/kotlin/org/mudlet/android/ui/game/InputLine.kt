@@ -10,9 +10,7 @@ import androidx.compose.foundation.text.input.clearText
 import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedSecureTextField
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -46,13 +44,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.customActions
-import androidx.compose.ui.semantics.editableText
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.textSelectionRange
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -348,12 +344,12 @@ fun InputLine(
                 Icon(painterResource(R.drawable.ic_send), stringResource(R.string.input_send))
             }
         } else {
-            OutlinedTextField(
+            GhostTextField(
                 state = text,
+                ghost = ghost,
+                errorMessage = stringResource(R.string.input_not_sent),
                 modifier = Modifier.weight(1f).focusRequester(focus).then(trackFocus).keptCommand(selectedWhole(kept) || selectedWhole(recalled), line.length, if (selectedWhole(kept)) keptState else recalledState).semantics {
                     if (acceptLabel == null || suggestionState == null) return@semantics
-                    // The typed text, not the ghost the transformation adds: what TalkBack reads and tests see
-                    editableText = AnnotatedString(line)
                     stateDescription = suggestionState
                     customActions = listOf(
                         CustomAccessibilityAction(acceptLabel) {
@@ -390,7 +386,6 @@ fun InputLine(
                 supportingText = supportingText,
                 isError = notice == Notice.NOT_SENT,
                 inputTransformation = clearsNotice,
-                outputTransformation = ghost?.let { GhostTransformation(it, MaterialTheme.colorScheme.onSurfaceVariant) },
                 // Game commands are not prose: corrections, suggestions and capitals would change them ("n" to "In")
                 keyboardOptions = KeyboardOptions(
                     capitalization = KeyboardCapitalization.None,

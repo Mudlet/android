@@ -5,6 +5,8 @@ import android.os.Build
 import android.view.Choreographer
 import android.view.View
 import android.view.ViewGroup
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.ExtractedTextRequest
 import androidx.annotation.StringRes
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.key.Key
@@ -127,11 +129,29 @@ class GhostTextTest {
     }
 
     @Test
+    fun theKeyboardReadsOnlyWhatWasTyped() {
+        send("open door")
+        compose.onNode(input).performTextInput("op")
+        waitFor(ghost("open door"))
+        compose.onNode(input).assertIsFocused()
+        // A keyboard that finds text after its cursor takes the cursor to be inside a word, as Samsung Keyboard does
+        val read = compose.runOnUiThread<List<String?>> {
+            val connection = checkNotNull(compose.activity.window.decorView.findFocus().onCreateInputConnection(EditorInfo())) { "an input connection" }
+            listOf(
+                connection.getExtractedText(ExtractedTextRequest(), 0)?.text?.toString(),
+                connection.getTextBeforeCursor(TEXT_READ, 0)?.toString(),
+                connection.getTextAfterCursor(TEXT_READ, 0)?.toString(),
+            )
+        }
+        assertEquals(listOf("op", "op", ""), read)
+    }
+
+    @Test
     fun aTapOnTheGhostTakesItAndATapOnTheTypedTextDoesNot() {
         send("open door")
         compose.onNode(input).performTextInput("op")
         waitFor(ghost("open door"))
-        compose.onNode(input).performTouchInput { click(Offset(textX(ghostMiddle()), center.y)) }
+        compose.onNode(input).performTouchInput { click(Offset(textX(intoTheGhost()), center.y)) }
         compose.onNode(input).assertIsFocused().assert(editableText("open door"))
         assertEquals("nothing sent but the command", 1, sends())
 
@@ -166,7 +186,7 @@ class GhostTextTest {
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(input and SemanticsMatcher.expectValue(SemanticsProperties.Focused, true)).fetchSemanticsNodes().isEmpty() }
         waitForTheKeyboardToGo()
         waitFor(ghost("open door"))
-        compose.onNode(input).performTouchInput { click(Offset(textX(ghostMiddle()), center.y)) }
+        compose.onNode(input).performTouchInput { click(Offset(textX(intoTheGhost()), center.y)) }
         compose.onNode(input).assertIsFocused().assert(editableText("op"))
     }
 
@@ -282,8 +302,9 @@ class GhostTextTest {
         return results.single()
     }
 
-    // The middle of the ghost, and of the typed "op", in the text's own coordinates: the field lays out "op" + ghost
-    private fun ghostMiddle(): Float = layout().let { (it.getHorizontalPosition(2, true) + it.getLineRight(0)) / 2 }
+    // A character's width into the ghost, which starts where the typed "op" ends, and the middle of "op", in the text's
+    // own coordinates: the field lays out only what was typed
+    private fun intoTheGhost(): Float = layout().let { it.getHorizontalPosition(2, true) + it.getBoundingBox(1).width }
 
     private fun typedMiddle(): Float = layout().getBoundingBox(0).center.x
 
@@ -340,6 +361,9 @@ class GhostTextTest {
 
     private companion object {
         const val WAIT_MS = 10_000L
+
+        // More than the line and its ghost
+        const val TEXT_READ = 100
 
         // Below the per-test timeout native/tests/android_instrumented.py gives the runner, so this one reports first
         const val TIMEOUT_MS = 240_000L

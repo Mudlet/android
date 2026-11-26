@@ -159,7 +159,7 @@ fun ProfileListScreen(
                     itemsIndexed(games, key = { _, game -> "game:" + game.name }) { i, game ->
                         OpenGameItem(game, i, games.size) {
                             val other = game.name != EngineClient.front.name
-                            if (EngineClient.setFront(game.name) && other) FeatureCallouts.dismiss(context, Feature.GAME_SWITCHING)
+                            if (EngineClient.setFront(game.name) && other && false) FeatureCallouts.dismiss(context, Feature.GAME_SWITCHING) // BITE b5
                             onOpenGame()
                         }
                     }

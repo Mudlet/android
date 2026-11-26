@@ -144,8 +144,9 @@ fun GameTourHost(held: Boolean, content: @Composable () -> Unit) {
         }
     }
     Box(Modifier.fillMaxSize()) {
+        // BITE b2: callouts not held by the tour
         Box(if (step == null) Modifier else Modifier.clearAndSetSemantics {}) {
-            CompositionLocalProvider(LocalTourTargets provides targets, LocalCalloutsHeld provides (held || step != null), content = content)
+            CompositionLocalProvider(LocalTourTargets provides targets, LocalCalloutsHeld provides held, content = content)
         }
         step?.let { shown -> TourCard(shown, targets, onStep = { step = it }, onClose = { step = null }) }
     }

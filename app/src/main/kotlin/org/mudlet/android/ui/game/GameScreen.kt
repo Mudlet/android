@@ -81,7 +81,6 @@ import org.mudlet.android.ui.ConsoleColors
 import org.mudlet.android.ui.EngineClient
 import org.mudlet.android.ui.Feature
 import org.mudlet.android.ui.FeatureCallout
-import org.mudlet.android.ui.FeatureCallouts
 import org.mudlet.android.ui.MudletTopBar
 import org.mudlet.android.ui.ProfileSession
 import org.mudlet.android.ui.ScriptWindowsClient
@@ -295,7 +294,7 @@ private fun ProfileGameScreen(
     val onReconnect = if (canReconnect) ::reconnect else null
 
     // Every way to another game, so the callout about switching goes for good once the player has switched
-    fun switchTo(game: String): Boolean = EngineClient.setFront(game).also { if (it) FeatureCallouts.dismiss(context, Feature.GAME_SWITCHING) }
+    fun switchTo(game: String): Boolean = EngineClient.setFront(game) // BITE b1: a switch does not end the callout
     val connectWanted = state == ConnectionState.Disconnected && canReconnect
     val commandsShown = scriptCommandsShown()
     val onDisconnect = if (canDisconnect) ::disconnect else null
@@ -350,8 +349,7 @@ private fun ProfileGameScreen(
     val secureOfferShown = c.secureOffer && !c.secureOfferPutOff
     val refusedShown = c.refusedCertificate != null && !c.refusedCertificatePutOff
     // AppNavigation's question to a TalkBack player shows over every screen, this one included
-    val dialogShown = gamesOpen || (historyOpen && !hidden) || secureOfferShown || refusedShown ||
-        (Announcer.touchExploration && !Settings.screenReaderOffered.value)
+    val dialogShown = gamesOpen || (historyOpen && !hidden) || secureOfferShown || refusedShown // BITE b7
 
     Scaffold(
         topBar = {
@@ -363,7 +361,7 @@ private fun ProfileGameScreen(
                 MudletTopBar(name, onBack, titleContent = {
                     FeatureCallout(
                         Feature.GAME_SWITCHING,
-                        wanted = games.size > 1 && !dialogShown,
+                        wanted = games.isNotEmpty() && !dialogShown, // BITE b3: with one game
                         title = stringResource(R.string.callout_switch_games_title),
                         // TalkBack takes the swipe for itself: its players switch with the title's actions
                         body = stringResource(if (Announcer.touchExploration) R.string.callout_switch_games_talkback else R.string.callout_switch_games),
@@ -376,7 +374,7 @@ private fun ProfileGameScreen(
                             othersUnread = games.sumOf { if (it === c) 0L else it.unread },
                             othersAttention = games.any { it !== c && it.attention },
                             onShowGames = {
-                                FeatureCallouts.dismiss(context, Feature.GAME_SWITCHING)
+                                // BITE b6: a tap on the title does not end the callout
                                 gamesOpen = true
                             },
                             onReconnect = onReconnect,

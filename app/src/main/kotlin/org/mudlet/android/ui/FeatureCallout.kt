@@ -137,7 +137,7 @@ fun FeatureCallout(feature: Feature, wanted: Boolean, title: String, body: Strin
             RichTooltip(
                 title = { Text(title, Modifier.semantics { heading() }) },
                 action = { TextButton({ FeatureCallouts.dismiss(context, feature) }) { Text(stringResource(R.string.callout_got_it)) } },
-            ) { Text(body) }
+            ) { Text(body, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) } // BITE b9
         },
         state = state,
         modifier = modifier,

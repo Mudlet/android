@@ -302,7 +302,6 @@ class CommandSuggester(
         const val FIRST_WORD_PENALTY = 20.0
         val LN2 = ln(2.0)
         private val SPACES = Regex("\\s+")
-        private val DIGITS = Regex("\\d+")
 
         /** Trimmed, lower case, runs of white space as one space: "Kill  Rat" and "kill rat" are one command. */
         fun normalizeCommand(text: String) = text.trim().replace(SPACES, " ").lowercase()
@@ -315,11 +314,46 @@ class CommandSuggester(
          * line with too few letters to mean much (a bare prompt like "<120 45>").
          */
         fun normalizeLine(line: String): String? {
-            val words = line.trim().split(SPACES).filter { it.isNotEmpty() }.take(MAX_LINE_WORDS)
-            val key = words.mapIndexed { i, word ->
-                if (i > 0 && word[0].isUpperCase()) "*" + word.dropWhile(Char::isLetter) else DIGITS.replace(word.lowercase(), "#")
-            }.joinToString(" ")
-            return key.takeIf { it.count(Char::isLetter) >= MIN_LINE_LETTERS }
+            // Scanned rather than split and replaced with regular expressions: on ART each Matcher holds an ICU
+            // matcher that a daemon thread frees, and this runs for every line of a flood
+            val text = line.trim()
+            val key = StringBuilder(text.length)
+            var words = 0
+            var i = 0
+            while (i < text.length && words < MAX_LINE_WORDS) {
+                val start = i
+                i = text.codePointRunEnd(i) { !isWhiteSpaceCodePoint(it) }
+                if (i == start) {
+                    i += Character.charCount(text.codePointAt(i))
+                    continue
+                }
+                if (words > 0) key.append(' ')
+                if (words > 0 && text[start].isUpperCase()) {
+                    var letters = start
+                    while (letters < i && text[letters].isLetter()) letters++
+                    key.append('*').append(text, letters, i)
+                } else {
+                    appendDigitRunsAsHash(key, text.substring(start, i).lowercase())
+                }
+                words++
+            }
+            return if (key.count(Char::isLetter) >= MIN_LINE_LETTERS) key.toString() else null
+        }
+
+        private fun appendDigitRunsAsHash(out: StringBuilder, word: String) {
+            var inDigits = false
+            var i = 0
+            while (i < word.length) {
+                val cp = word.codePointAt(i)
+                val digit = isDigitCodePoint(cp)
+                if (!digit) {
+                    out.appendCodePoint(cp)
+                } else if (!inDigits) {
+                    out.append('#')
+                }
+                inDigits = digit
+                i += Character.charCount(cp)
+            }
         }
 
         private const val MAX_LINE_WORDS = 16

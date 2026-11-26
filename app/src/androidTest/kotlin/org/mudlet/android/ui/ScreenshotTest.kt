@@ -290,12 +290,18 @@ class ScreenshotTest {
 
         activate(hasContentDescription(string(R.string.app_map_show)))
 
+        // The callout a second game brings to a player who has not seen it
+        compose.runOnIdle { FeatureCallouts.reset(compose.activity, dismissed = false) }
         fake.engine.openAlongside(PROFILES[1].name)
         session.openProfiles()
         val second = session.forProfile(PROFILES[1].name)
         second.synced(0)
         second.status("connection", "connected")
         compose.waitUntil(WAIT_MS) { EngineClient.sessions.size == 2 && EngineClient.sessions.all { it.status["connection"] == "connected" } }
+        waitFor(hasText(string(R.string.callout_switch_games_title)))
+        save("game-callout-$mode")
+        activate(hasText(string(R.string.callout_got_it)))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(string(R.string.callout_switch_games_title))).fetchSemanticsNodes().isEmpty() }
         compose.runOnIdle { EngineClient.setFront(PROFILES[0].name) }
         activate(hasTestTag(GAME_TITLE_TAG))
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasTestTag(GAME_SHEET_TAG)).fetchSemanticsNodes().isNotEmpty() }

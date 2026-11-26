@@ -118,6 +118,9 @@ there gets `error`, as a control request sent on a profile socket does.
   or on a fling, it commits with a haptic tick; at either end it rubber-bands, with no wrap-around. It mirrors in
   right-to-left layouts; a drag from the system's back-gesture inset belongs to the system. A hardware keyboard gets
   Ctrl+Tab and Ctrl+Shift+Tab.
+- **The callout.** The first time two games are open, a feature callout under the title says the swipe and Ctrl+Tab
+  switch games, and with TalkBack on, the title's actions and its double tap. It goes for good on Got it or the first
+  switch any way, the sheet included ([`architecture.md`](architecture.md), "How the app looks").
 - **TalkBack.** The title is read first on the screen: "Aardwolf, connected, game 2 of 3, 5 new lines in other games",
   with the custom actions "Reconnect to Aardwolf", "Disconnect from Aardwolf", "Next game: Achaea" and "Previous game:
   Aardwolf", so neither the sheet nor the swipe is ever the only way. After a switch a

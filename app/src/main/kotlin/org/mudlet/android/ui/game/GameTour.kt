@@ -60,6 +60,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.core.content.edit
 import org.mudlet.android.R
+import org.mudlet.android.ui.LocalCalloutsHeld
 import org.mudlet.android.ui.MainActivity.Companion.PREFS_UI
 
 /** What on the game screen the tour points at, marked with [tourTarget] wherever the control is */
@@ -128,7 +129,7 @@ private class TourTargetNode(var target: TourTarget) :
  * desktop's tour has, at the other end of the screen from the control the step is about, which is lit through the
  * dimmed screen. It waits while [held], for a more urgent dialog over the screen to be answered or hidden. It is
  * marked shown as it starts, as desktop's is, so leaving it partway does not bring it back. While it shows, TalkBack
- * reads the card alone, and each step once as it comes.
+ * reads the card alone, and each step once as it comes. Feature callouts wait while it shows or is [held].
  */
 @Composable
 fun GameTourHost(held: Boolean, content: @Composable () -> Unit) {
@@ -144,7 +145,7 @@ fun GameTourHost(held: Boolean, content: @Composable () -> Unit) {
     }
     Box(Modifier.fillMaxSize()) {
         Box(if (step == null) Modifier else Modifier.clearAndSetSemantics {}) {
-            CompositionLocalProvider(LocalTourTargets provides targets, content = content)
+            CompositionLocalProvider(LocalTourTargets provides targets, LocalCalloutsHeld provides (held || step != null), content = content)
         }
         step?.let { shown -> TourCard(shown, targets, onStep = { step = it }, onClose = { step = null }) }
     }

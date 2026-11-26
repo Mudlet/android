@@ -63,7 +63,8 @@ Procedures too long for this file are in `.agents/skills/<name>/SKILL.md` (Claud
   - the application id `org.mudlet.mudlet` (`.ptb` for the PTB);
   - the SharedPreferences `settings` (the keys in `data/Settings.kt`), `engine` (`qpaPlatform`, `lastProfile`,
     `startSizes`, `lastHost:`, `lastPort:` and `lastTls:` before a profile's name, and `mapAutoDownload:` before its
-    lowercased name) and `ui`;
+    lowercased name) and `ui` (with `callout:<id>:dismissed` and `callout:<id>:shown` for each feature callout);
+  - the feature callouts' ids, `Feature`'s `id`s in `ui/FeatureCallout.kt`, such as `gameSwitching`;
   - the values the enum settings in `settings` store, their constants' names, such as `scriptEditorDesign`'s `CURRENT`,
     `WORKBENCH`, `ONE_PAGE` and `RECIPES`;
   - `PasswordStore`'s file `passwords/profiles.json`, its keys (the lowercased profile name, and `proxy:` before it

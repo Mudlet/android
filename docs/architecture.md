@@ -452,6 +452,16 @@ scales; text sizes are in sp, so the system font size scales them.
 - Material 3 Expressive's own components (`MaterialExpressiveTheme`, the shape morphs, button groups, the flexible top
   bars, `LoadingIndicator`) are experimental in the material3 the Compose BOM brings, so the app has none of them, only
   Expressive's springs and segmented lists, built with stable components.
+- A feature callout (`ui/FeatureCallout.kt`) points out a control the player may not have found, as desktop's
+  `TFeatureCallout` does: Material's rich tooltip under the control, with a title, a line and Got it, which TalkBack
+  says once as it appears. Desktop's rules keep it (`CalloutRules`, tested on the JVM): it goes for good on Got it or
+  once the player reaches the feature another way, and shows at most 5 times, once a session, at most 2 different ones
+  a session, one at a time, and never over the game screen's tour or a dialog (`LocalCalloutsHeld`). The `ui`
+  preferences keep `callout:<id>:dismissed` and `callout:<id>:shown`. Unlike desktop's, a new install shows them: the
+  first, `gameSwitching`, is for a new player's second game. To add one: a `Feature` with an id never renamed, its
+  strings with translators' comments, a `FeatureCallout` around the control with `wanted` false while the screen has
+  a dialog up, `FeatureCallouts.dismiss` wherever the feature is reached, and tests as `FeatureCalloutTest` and
+  `FeatureCalloutPseudoLocaleTest` have.
 
 ### Profiles in the app
 The profile list (`ui/profiles/ProfileListScreen.kt`) shows the engine's `profiles`, which `EngineClient` asks for
@@ -574,7 +584,7 @@ added later travels only once it is named there:
 | `profiles/<name>/password`, `irc_password` | no | no | desktop's plain secret files; the engine does not write them here, and import and export drop them |
 | `files/engine-session.json`, `files/engine-stopped` | no | no | this device's engine runs: restored, a new phone would reopen and reconnect games at its first start, or keep the engine stopped |
 | SharedPreferences `engine` | no | no | `qpaPlatform` is the self-test's choice of platform for this device; `lastProfile` and `lastHost:` and the rest are where this device last went, and the profile list's own address stands in for them |
-| SharedPreferences `ui` | no | no | what this device asked and showed once: the notification permission (carried over, a new phone where it is not granted would never ask), the UI tour, an engine Android stopped, a crash report, the test build's update check |
+| SharedPreferences `ui` | no | no | what this device asked and showed once: the notification permission (carried over, a new phone where it is not granted would never ask), the UI tour, an engine Android stopped, a crash report, the test build's update check, the feature callouts dismissed and how often each showed |
 | the `root`, `database` and `external` domains, and the rest of `files/` | no | no | nothing of the player's is there |
 
 A cloud backup is made only when the transport encrypts it with the screen lock (`FLAG_CLIENT_SIDE_ENCRYPTION_ENABLED`);
@@ -2408,6 +2418,10 @@ alias of run-lua-code, one of desktop Mudlet's default packages, which a profile
       Back closes it. With TalkBack, each step is read once as it comes and swiping reaches the card alone. Close the
       app partway through and reopen a game: the tour does not come back. While the explanation of the notification
       permission or of an engine Android stopped is up, the tour waits until it is answered or hidden.
+    - The callout, on a fresh install: with one game open, none; open a second game, and under the title, after the
+      tour, "Switch between your games" with Got it. Got it, or a switch by a swipe, Ctrl+Tab, the sheet or the
+      profile list's open games, ends it for good. With TalkBack it is read once as it comes and names the title's
+      actions, not the swipe; in an Arabic layout it mirrors.
     - The keyboard: tapping the input line opens it, and the console shrinks above it with its newest line still in
       view. Send on the keyboard sends the line and leaves the keyboard open, ready for the next. Note the keyboard's
       action key: it should read Send, and suggestions, corrections or a capital first letter should not change what is

@@ -218,6 +218,8 @@ class FakeEngineRule(private val open: List<String> = emptyList()) : ExternalRes
             // A design test that stopped short leaves its design stored, which the pad's other tests do not expect
             Settings.movementPadDesign.reset()
             Settings.movementPadSide.reset()
+            // As a player who has seen every callout; FeatureCalloutTest shows them itself
+            FeatureCallouts.reset(instrumentation.targetContext, dismissed = true)
         }
     }
 

@@ -171,12 +171,13 @@ order the UI asked for it:
   the cursor (ghost text, `ui/game/GhostText.kt`), drawn over the field, and only for the line as it is now; the
   field's text keeps just what was typed, for TalkBack and for the keyboard. It is not an `OutputTransformation`,
   whose text the keyboard reads: Samsung Keyboard then takes the cursor to be inside a word and replaces the letter
-  being typed with the next one. There is no row of suggestions: the keyboard shows its own. An empty line has no
-  ghost (`Suggestions.ghost`), so what usually comes next only ranks what is typed. A tap on the ghost while the line
-  has the focus, a hardware right arrow at the end of the line, or the line's TalkBack action ("Accept the suggestion:
-  ...") puts it on the line; TalkBack reads it as the line's state ("Suggestion: ..."). A tap on the ghost is told
-  apart from one on the typed text by where the field then puts the cursor, which it handles first: still at the end
-  means the ghost.
+  being typed with the next one. The line runs the way its typed text does, not the layout's way, so in a
+  right-to-left language an English command ends where its ghost has room to follow. There is no row of suggestions:
+  the keyboard shows its own. An empty line has no ghost (`Suggestions.ghost`), so what usually comes next only ranks
+  what is typed. A tap on the ghost while the line has the focus, a hardware right arrow at the end of the line, or
+  the line's TalkBack action ("Accept the suggestion: ...") puts it on the line; TalkBack reads it as the line's state
+  ("Suggestion: ..."). A tap on the ghost is told apart from one on the typed text by where the field then puts the
+  cursor, which it handles first: still at the end means the ghost.
 - It saves 5 s after a send and when the app leaves the front (`MainActivity.onStop`), to a temporary file that
   then replaces the old one. An I/O error is logged (tag `MudletSuggest`) without any command and the suggestions
   carry on in memory; after a failed load nothing is saved, so the file is not replaced with less.

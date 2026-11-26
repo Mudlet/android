@@ -42,6 +42,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.ResolvedTextDirection
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.LayoutDirection
 
 /**
@@ -77,7 +78,8 @@ fun GhostTextField(
             else -> colors.unfocusedTextColor
         }
     }
-    val textStyle = style.merge(TextStyle(color = textColor))
+    // In the layout's direction, a command typed the other way would end at the field's edge with no room for its ghost
+    val textStyle = style.merge(TextStyle(color = textColor, textDirection = TextDirection.Content))
     val ghostStyle = style.merge(TextStyle(color = MaterialTheme.colorScheme.onSurfaceVariant))
     val labelHalfHeight = with(LocalDensity.current) { MaterialTheme.typography.bodySmall.lineHeight.toDp() / 2 }
     val scroll = rememberScrollState()
@@ -116,7 +118,12 @@ fun GhostTextField(
                     Box(
                         Modifier.fillMaxWidth().drawWithContent {
                             drawContent()
-                            if (ghost != null) drawGhost(measurer.measure(ghost, ghostStyle), layout?.invoke() ?: return@drawWithContent, scroll.value)
+                            val typed = layout?.invoke()
+                            if (ghost != null && typed != null) {
+                                val rtl = typed.getParagraphDirection(0) == ResolvedTextDirection.Rtl
+                                val direction = if (rtl) TextDirection.Rtl else TextDirection.Ltr
+                                drawGhost(measurer.measure(ghost, ghostStyle.copy(textDirection = direction)), typed, scroll.value)
+                            }
                         },
                         propagateMinConstraints = true,
                     ) { innerTextField() }

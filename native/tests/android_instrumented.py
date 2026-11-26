@@ -269,11 +269,13 @@ def run(dev, args):
     failures += instrument(dev, "app-permission", APP_TESTS, APP, "the app, freshly installed: the notification permission",
                            480, "-e", "class", PERMISSION_TEST)
     failures += instrument(dev, "app", APP_TESTS, APP, "the app's other tests", 2400,
-                           "-e", "class", "org.mudlet.android.ui.SearchPseudoLocaleTest,org.mudlet.android.ui.SelectLinesPseudoLocaleTest")
+                           "-e", "notClass", f"{PERMISSION_TEST},{BACKUP_TEST}")
     time.sleep(2)
-    out = dev.log_text()
-    keep = re.compile(r"SelPseudo|ActivityTaskManager|ANR|Not Responding|InputDispatcher|FloatingToolbar|ActionMode|WindowManager: (Focus|Changing focus)|AndroidRuntime")
-    lines = [line for line in out.splitlines() if keep.search(line)]
+    out = dev.log_text().splitlines()
+    marks = [i for i, line in enumerate(out) if "SelPseudo" in line]
+    out = out[marks[0]:marks[-1] + 1] if marks else []
+    keep = re.compile(r"SelPseudo|ActivityTaskManager|ANR|Not Responding|InputDispatcher|Floating|ActionMode|WindowManager|AndroidRuntime|Notification|HeadsUp|StatusBar|SystemUi|InputMethod|Ime|Toast|wm_|am_|input_focus|Choreographer")
+    lines = [line for line in out if keep.search(line) and not re.search(r"SelPseudo: \s+at ", line)]
     print("=== diag logcat", len(lines), flush=True)
     for line in lines[-6000:]:
         print(line[:400])

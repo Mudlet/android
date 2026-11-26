@@ -283,7 +283,8 @@ def cold_starts(mode, rounds=6):
     for process in (APP, APP + ":engine"):
         mem = shell(f"dumpsys meminfo {process}", check=False)
         pss = re.search(r"TOTAL(?: PSS)?:?\s+(\d+)", mem)
-        log(f"METRIC MEM mode={mode} process={process} pssKb={pss.group(1) if pss else -1}")
+        log(f"METRIC MEM mode={mode} process={process} pssKb={pss.group(1) if pss else -1}"
+            + ("" if pss else f" ({' '.join(mem.split())[:160]})"))
     shell(f"am force-stop {APP}", check=False)
 
 

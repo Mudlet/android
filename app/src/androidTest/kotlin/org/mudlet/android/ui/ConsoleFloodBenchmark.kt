@@ -6,6 +6,7 @@ import android.os.Debug
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Process
+import android.os.SystemClock
 import android.util.Log
 import android.view.Choreographer
 import android.view.FrameMetrics
@@ -24,6 +25,7 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
+import org.json.JSONObject
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -38,6 +40,7 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.concurrent.thread
 import kotlin.random.Random
@@ -107,6 +110,13 @@ class ConsoleFloodBenchmark {
         val frames = Array(n) { fightPayload(it + 1L, rng) }
         val lines = ArrayList<UiLine>(n)
         repeat(5) { round ->
+            // Through JSONObject, as main reads every line, beside FrameReader.parse, in one process
+            val j0 = allocated()
+            val tj = System.nanoTime()
+            var viaJson = 0L
+            for (f in frames) viaJson += (FrameReader.parse(JSONObject(String(f, Charsets.UTF_8))) as EngineMessage.Line).seq
+            val dtj = System.nanoTime() - tj
+            val daj = allocated() - j0
             val a0 = allocated()
             val t0 = System.nanoTime()
             lines.clear()
@@ -116,13 +126,14 @@ class ConsoleFloodBenchmark {
             }
             val dt = System.nanoTime() - t0
             val da = allocated() - a0
+            check(viaJson == lines.sumOf { it.seq })
             val c0 = allocated()
             val t1 = System.nanoTime()
             var spans = 0
             for (l in lines) spans += ansiText(l, ConsoleColors()).spanStyles.size
             val dt1 = System.nanoTime() - t1
             val dc = allocated() - c0
-            report("decode", "round=$round parseNs=${dt / n} parseB=${da / n} ansiTextNs=${dt1 / n} ansiTextB=${dc / n} spans=$spans")
+            report("decode", "round=$round jsonObjectNs=${dtj / n} jsonObjectB=${daj / n} parseNs=${dt / n} parseB=${da / n} ansiTextNs=${dt1 / n} ansiTextB=${dc / n} spans=$spans")
         }
     }
 
@@ -150,14 +161,26 @@ class ConsoleFloodBenchmark {
             synchronized(frames) { frames.add(row) }
         }
         compose.runOnUiThread { compose.activity.window.addOnFrameMetricsAvailableListener(listener, Handler(metricsThread.looper)) }
+        val vsyncs = AtomicLong(0)
+        val counting = AtomicBoolean(true)
+        val tick = object : Choreographer.FrameCallback {
+            override fun doFrame(frameTimeNanos: Long) {
+                vsyncs.incrementAndGet()
+                if (counting.get()) Choreographer.getInstance().postFrameCallback(this)
+            }
+        }
+        var state = ""
+        compose.runOnUiThread {
+            Choreographer.getInstance().postFrameCallback(tick)
+            state = "hwAccel=${compose.activity.window.decorView.isHardwareAccelerated} lifecycle=${compose.activity.lifecycle.currentState}"
+        }
 
         val cpu0 = threadCpu()
         val gc0 = gcStats()
         val sent = AtomicLong(0)
-        val senderTid = AtomicLong(0)
+        val senderMs = AtomicLong(0)
         val t0 = System.nanoTime()
         val sender = thread(name = "flood-sender") {
-            senderTid.set(Process.myTid().toLong())
             var done = 0
             var at = 0
             while (done < count) {
@@ -177,6 +200,7 @@ class ConsoleFloodBenchmark {
                 done = upTo
                 sent.set(done.toLong())
             }
+            senderMs.set(SystemClock.currentThreadTimeMillis())
         }
         var maxBacklog = 0L
         while (sender.isAlive) {
@@ -199,6 +223,7 @@ class ConsoleFloodBenchmark {
         val shownAt = System.nanoTime()
         val cpu1 = threadCpu()
         val gc1 = gcStats()
+        counting.set(false)
         compose.runOnUiThread { compose.activity.window.removeOnFrameMetricsAvailableListener(listener) }
         metricsThread.quitSafely()
         if (!reported) return
@@ -211,22 +236,26 @@ class ConsoleFloodBenchmark {
         val missed = totals.sumOf { (it / FRAME_MS).toInt() }
         fun pct(list: List<Double>, p: Double) = if (list.isEmpty()) -1.0 else list[((list.size - 1) * p).toInt()]
         fun cpuMs(names: (String) -> Boolean) = cpu1.filter { (k, _) -> names(k.second) }.entries.sumOf { (k, v) -> v - (cpu0[k] ?: 0L) } * 1000L / TICKS
-        val sender0 = cpu1.entries.filter { it.key.first == senderTid.get() }.sumOf { it.value - (cpu0[it.key] ?: 0L) } * 1000L / TICKS
+        // The sender has ended by now, and with it its /proc entry: it counts its own time
+        val sender0 = senderMs.get()
+        val top = cpu1.map { (k, v) -> k.second.replace(' ', '_') to v - (cpu0[k] ?: 0L) }.groupBy({ it.first }, { it.second })
+            .mapValues { it.value.sum() * 1000L / TICKS }.entries.sortedByDescending { it.value }.take(10)
+            .joinToString(",") { "${it.key}:${it.value}" }
         val main = cpuMs { it == MAIN }
         val reader = cpuMs { it == "engine-link" }
         val render = cpuMs { it == "RenderThread" }
-        val all = cpuMs { true } - sender0
+        val all = cpuMs { true }
         val perK = { ms: Long -> "%.1f".format(ms * 1000.0 / count) }
         report(
             name,
             "lines=$count first=$first rateAsked=$rate sendS=${"%.2f".format((sentAt - t0) / 1e9)} inMs=${(inAt - sentAt) / 1_000_000} " +
                 "shownMs=${(shownAt - sentAt) / 1_000_000} linesPerSec=${(count / ((inAt - t0) / 1e9)).toInt()} maxBacklog=$maxBacklog " +
-                "frames=${rows.size} fps=${"%.1f".format(rows.size / wall)} jank=$jank missedVsyncs=$missed " +
+                "$state vsyncs=${vsyncs.get()} frames=${rows.size} fps=${"%.1f".format(rows.size / wall)} jank=$jank missedVsyncs=$missed " +
                 "totalMs50/90/99/max=${"%.1f/%.1f/%.1f/%.1f".format(pct(totals, .5), pct(totals, .9), pct(totals, .99), totals.lastOrNull() ?: -1.0)} " +
                 "mainMs50/90/99/max=${"%.1f/%.1f/%.1f/%.1f".format(pct(mains, .5), pct(mains, .9), pct(mains, .99), mains.lastOrNull() ?: -1.0)} " +
                 "animMsSum=${rows.sumOf { it[2] } / 1_000_000} layoutMsSum=${rows.sumOf { it[3] } / 1_000_000} drawMsSum=${rows.sumOf { it[4] } / 1_000_000} " +
                 "cpuMs main=$main reader=$reader render=$render process=$all sender=$sender0 " +
-                "usPerLine main=${perK(main)} reader=${perK(reader)} process=${perK(all)} " +
+                "usPerLine main=${perK(main)} reader=${perK(reader)} process=${perK(all)} topThreadsMs=$top " +
                 "gc=${gc1[0] - gc0[0]} gcMs=${gc1[1] - gc0[1]} blockingGc=${gc1[2] - gc0[2]} blockingGcMs=${gc1[3] - gc0[3]} " +
                 "allocKbPerLine=${"%.2f".format((gc1[4] - gc0[4]) / 1024.0 / count)}",
         )

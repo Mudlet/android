@@ -35,6 +35,7 @@ import org.mudlet.android.R
 import org.mudlet.android.protocol.EngineMessage
 import org.mudlet.android.protocol.FrameReader
 import org.mudlet.android.protocol.Profile
+import org.mudlet.android.suggest.CommandSuggester
 import org.mudlet.android.ui.game.GAME_TITLE_TAG
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -87,6 +88,7 @@ class ConsoleFloodBenchmark {
     @Test
     fun flood() {
         decodeOnArt()
+        learnOnArt()
         // Warm-up, not reported: the first lines JIT the path
         stage("warmup", 2000, 2.0, reported = false)
         stage("r1000", 1000, 4.0)
@@ -134,6 +136,63 @@ class ConsoleFloodBenchmark {
             val dt1 = System.nanoTime() - t1
             val dc = allocated() - c0
             report("decode", "round=$round jsonObjectNs=${dtj / n} jsonObjectB=${daj / n} parseNs=${dt / n} parseB=${da / n} ansiTextNs=${dt1 / n} ansiTextB=${dc / n} spans=$spans")
+        }
+    }
+
+    // CommandSuggester.observeLine beside a copy of the regular expressions it used, in one process; the daemons'
+    // CPU is ReferenceQueueDaemon's and HeapTaskDaemon's while each ran
+    private fun learnOnArt() {
+        val rng = Random(9011)
+        val n = 20_000
+        val texts = Array(n) { (FrameReader.parse(fightPayload(it + 1L, rng)) as EngineMessage.Line).text }
+        fun daemonsMs(c0: Map<Pair<Long, String>, Long>, c1: Map<Pair<Long, String>, Long>) = c1.filter { (k, _) -> k.second == "ReferenceQueueD" || k.second == "HeapTaskDaemon" }.entries.sumOf { (k, v) -> v - (c0[k] ?: 0L) } * 1000L / TICKS
+        repeat(5) { round ->
+            val old = RegexLearner()
+            val c0 = threadCpu()
+            val a0 = allocated()
+            val t0 = System.nanoTime()
+            for (t in texts) old.observe(t)
+            val dt0 = System.nanoTime() - t0
+            val da0 = allocated() - a0
+            Thread.sleep(300)
+            val c1 = threadCpu()
+            val suggester = CommandSuggester()
+            val a1 = allocated()
+            val t1 = System.nanoTime()
+            for (t in texts) suggester.observeLine(t)
+            val dt1 = System.nanoTime() - t1
+            val da1 = allocated() - a1
+            Thread.sleep(300)
+            val c2 = threadCpu()
+            report("learn", "round=$round regexNs=${dt0 / n} regexB=${da0 / n} regexDaemonsMs=${daemonsMs(c0, c1)} scanNs=${dt1 / n} scanB=${da1 / n} scanDaemonsMs=${daemonsMs(c1, c2)} words=${old.words.size}")
+        }
+    }
+
+    private class RegexLearner {
+        val words = HashMap<String, IntArray>()
+        val order = ArrayDeque<String>()
+        val recent = ArrayDeque<String>()
+
+        fun observe(line: String) {
+            for (m in LEARN_WORD.findAll(line)) {
+                val d = m.value.trim('\'', '-')
+                if (d.length < 3 || d.all(Char::isDigit)) continue
+                val k = d.lowercase()
+                words.getOrPut(k) { IntArray(1) }[0]++
+                order.addLast(k)
+                if (order.size > 2000) {
+                    val o = order.removeFirst()
+                    if (--words.getValue(o)[0] == 0) words.remove(o)
+                }
+            }
+            val ws = line.trim().split(LEARN_SPACES).filter { it.isNotEmpty() }.take(16)
+            val key = ws.mapIndexed { i, w ->
+                if (i > 0 && w[0].isUpperCase()) "*" + w.dropWhile(Char::isLetter) else LEARN_DIGITS.replace(w.lowercase(), "#")
+            }.joinToString(" ")
+            if (key.count(Char::isLetter) < 3) return
+            recent.remove(key)
+            recent.addLast(key)
+            while (recent.size > 3) recent.removeFirst()
         }
     }
 
@@ -317,6 +376,10 @@ class ConsoleFloodBenchmark {
             }
             return "{\"prompt\":false,\"runs\":$runs,\"seq\":$seq,\"t\":\"line\",\"text\":\"$text\",\"time\":1764000000000}".toByteArray()
         }
+
+        val LEARN_WORD = Regex("[\\p{L}\\p{N}_'-]+")
+        val LEARN_SPACES = Regex("\\s+")
+        val LEARN_DIGITS = Regex("\\d+")
 
         fun allocated(): Long = Debug.getRuntimeStat("art.gc.bytes-allocated")?.toLongOrNull() ?: 0L
 

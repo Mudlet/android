@@ -1,5 +1,6 @@
 package org.mudlet.android.ui.game
 
+import android.text.TextDirectionHeuristics
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.InputTransformation
@@ -10,9 +11,7 @@ import androidx.compose.foundation.text.input.clearText
 import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedSecureTextField
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -40,23 +39,23 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.customActions
-import androidx.compose.ui.semantics.editableText
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.textSelectionRange
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.LayoutDirection
 import org.mudlet.android.R
 import org.mudlet.android.suggest.SuggestionSession
 
@@ -240,6 +239,9 @@ fun InputLine(
     val cursor = text.selection
     // Only for the line as it is now: an answer for an older one would put the wrong text after the cursor
     val ghost = suggestions?.takeIf { !hiddenInput && it.input == line && cursor.collapsed && it.cursor == cursor.end }?.suggestions?.ghost
+    // The way GhostTextField runs the line: by its first strong character, else the layout's way
+    val heuristic = if (LocalLayoutDirection.current == LayoutDirection.Rtl) TextDirectionHeuristics.FIRSTSTRONG_RTL else TextDirectionHeuristics.FIRSTSTRONG_LTR
+    val towardsGhost = if (heuristic.isRtl(line, 0, line.length)) Key.DirectionLeft else Key.DirectionRight
 
     fun accept() {
         if (ghost == null) return
@@ -348,12 +350,12 @@ fun InputLine(
                 Icon(painterResource(R.drawable.ic_send), stringResource(R.string.input_send))
             }
         } else {
-            OutlinedTextField(
+            GhostTextField(
                 state = text,
+                ghost = ghost,
+                errorMessage = stringResource(R.string.input_not_sent),
                 modifier = Modifier.weight(1f).focusRequester(focus).then(trackFocus).keptCommand(selectedWhole(kept) || selectedWhole(recalled), line.length, if (selectedWhole(kept)) keptState else recalledState).semantics {
                     if (acceptLabel == null || suggestionState == null) return@semantics
-                    // The typed text, not the ghost the transformation adds: what TalkBack reads and tests see
-                    editableText = AnnotatedString(line)
                     stateDescription = suggestionState
                     customActions = listOf(
                         CustomAccessibilityAction(acceptLabel) {
@@ -371,12 +373,13 @@ fun InputLine(
                     // Both halves of Tab's press, so neither the field nor the focus acts on it
                     if (tab && event.type == KeyEventType.KeyUp) return@onPreviewKeyEvent true
                     if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                    // Right takes the ghost, which is only there with the cursor at the end, where it does nothing else
+                    // The arrow pointing at the ghost takes it: the ghost is only there with the cursor at the end, where that
+                    // arrow does nothing else
                     when {
                         tab -> complete()
                         event.key == Key.DirectionUp && at.canGoBack(history) -> back()
                         event.key == Key.DirectionDown && at.canGoForward -> move(at.forward())
-                        event.key == Key.DirectionRight && ghost != null -> accept()
+                        event.key == towardsGhost && ghost != null -> accept()
                         else -> return@onPreviewKeyEvent false
                     }
                     true
@@ -390,7 +393,6 @@ fun InputLine(
                 supportingText = supportingText,
                 isError = notice == Notice.NOT_SENT,
                 inputTransformation = clearsNotice,
-                outputTransformation = ghost?.let { GhostTransformation(it, MaterialTheme.colorScheme.onSurfaceVariant) },
                 // Game commands are not prose: corrections, suggestions and capitals would change them ("n" to "In")
                 keyboardOptions = KeyboardOptions(
                     capitalization = KeyboardCapitalization.None,

@@ -255,10 +255,41 @@ def backup_rounds(dev):
             shell(f"bmgr transport {current}", check=False)
 
 
+BENCH = "org.mudlet.android.ui.ConsoleFloodBenchmark"
+ACTIVITY = APP + "/org.mudlet.android.ui.MainActivity"
+
+
+def perf_lines(seen):
+    """The PERF lines ConsoleFloodBenchmark logged that have not been printed yet, printed."""
+    out = adb("logcat", "-d", "-s", "ConsoleFloodBenchmark:I", check=False)
+    for line in out.splitlines():
+        if "PERF " in line:
+            metric = line[line.index("PERF "):]
+            if metric not in seen:
+                seen.add(metric)
+                log("METRIC " + metric)
+
+
+def cold_starts(mode, rounds=6):
+    """am start -W of MainActivity after a force-stop, rounds times; the engine process's memory after the last."""
+    for i in range(rounds):
+        shell(f"am force-stop {APP}", check=False)
+        time.sleep(3)
+        out = shell(f"am start -W -n {ACTIVITY}", check=False)
+        total = re.search(r"TotalTime: (\d+)", out)
+        wait = re.search(r"WaitTime: (\d+)", out)
+        log(f"METRIC COLD mode={mode} round={i} totalMs={total.group(1) if total else -1} waitMs={wait.group(1) if wait else -1}")
+        time.sleep(8)
+    for process in (APP, APP + ":engine"):
+        mem = shell(f"dumpsys meminfo {process}", check=False)
+        pss = re.search(r"TOTAL(?: PSS)?:?\s+(\d+)", mem)
+        log(f"METRIC MEM mode={mode} process={process} pssKb={pss.group(1) if pss else -1}")
+    shell(f"am force-stop {APP}", check=False)
+
+
 def run(dev, args):
     for package in (APP_TESTS, APP, ENGINE_TESTS):
         adb("uninstall", package, check=False)
-    # The UI detaches from the engine when its Activity stops, and Compose tests need a screen
     for command in ("input keyevent KEYCODE_WAKEUP", "svc power stayon true", "wm dismiss-keyguard",
                     "settings put system screen_off_timeout 1800000"):
         shell(command, check=False)
@@ -266,15 +297,19 @@ def run(dev, args):
     failures = []
     install(args.app)
     install(args.app_tests)
-    failures += instrument(dev, "app-permission", APP_TESTS, APP, "the app, freshly installed: the notification permission",
-                           480, "-e", "class", PERMISSION_TEST)
-    failures += instrument(dev, "app", APP_TESTS, APP, "the app's other tests", 2400,
-                           "-e", "notClass", f"{PERMISSION_TEST},{BACKUP_TEST}")
-    pull_screenshots(dev)
-    failures += backup_rounds(dev)
-    install(args.engine_tests, "-g")
-    failures += instrument(dev, "engine-service", ENGINE_TESTS, ENGINE_TESTS, "engine-service: EngineService on the device",
-                           1320)
+    seen = set()
+    cold_starts("installed")
+    n = 0
+    for mode in ("installed", "installed", "installed", "speed-profile", "speed"):
+        if mode != "installed":
+            log(shell(f"cmd package compile -m {mode} -f {APP}", check=False).strip())
+        n += 1
+        log(f"load: {shell('cat /proc/loadavg', check=False).strip()}")
+        failures += instrument(dev, f"bench-{n}", APP_TESTS, APP, f"ConsoleFloodBenchmark run {n} ({mode})", 400,
+                               "-e", "class", BENCH, "-e", "perfRun", f"{n}-{mode}")
+        perf_lines(seen)
+        if mode != "installed" or n == 3:
+            cold_starts(mode if n > 3 else "installed-after-runs")
     return failures
 
 

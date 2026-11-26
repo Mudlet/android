@@ -259,6 +259,9 @@ class FakeEngine(open: List<String> = emptyList()) : AutoCloseable {
 
         private fun game(): Connection = game ?: throw AssertionError("no profile is open on the fake engine")
 
+        /** As [Connection.sendRaw], to the profile's socket. */
+        fun raw(bytes: ByteArray, from: Int, length: Int) = game().sendRaw(bytes, from, length)
+
         private fun connectionFor(type: String) = if (type in CONTROL_REQUESTS) control else game()
 
         /** The next request of type [type] the UI sent on the socket that carries it, skipping the others; fails after [timeoutMs]. */
@@ -470,6 +473,10 @@ class FakeEngine(open: List<String> = emptyList()) : AutoCloseable {
 
         @Synchronized
         fun send(message: JSONObject) = writer.write(message)
+
+        /** Frames already framed, each its 4-byte length then its payload, written as they are. */
+        @Synchronized
+        fun sendRaw(bytes: ByteArray, from: Int, length: Int) = socket.outputStream.write(bytes, from, length)
 
         /** The next request of type [type] the UI sent, skipping the others; fails after [timeoutMs]. */
         fun receive(type: String, timeoutMs: Long = 10_000): JSONObject {

@@ -37,6 +37,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.unit.dp
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -209,6 +210,20 @@ class GhostTextTest {
         waitFor(ghost("open door"))
         compose.onNode(input).performKeyInput { pressKey(Key.DirectionRight) }
         compose.onNode(input).assert(editableText("open door"))
+    }
+
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun inARightToLeftCommandTheLeftArrowTakesTheGhostAndTheRightMovesTheCursor() {
+        send("اذهب")
+        compose.onNode(input).performTextInput("اذ")
+        waitFor(ghost("اذهب"))
+        compose.onNode(input).performKeyInput { pressKey(Key.DirectionRight) }
+        compose.onNode(input).assert(editableText("اذ")).assert(SemanticsMatcher.expectValue(SemanticsProperties.TextSelectionRange, TextRange(1)))
+        compose.onNode(input).performKeyInput { pressKey(Key.DirectionLeft) }
+        waitFor(ghost("اذهب"))
+        compose.onNode(input).performKeyInput { pressKey(Key.DirectionLeft) }
+        compose.onNode(input).assert(editableText("اذهب"))
     }
 
     @Test

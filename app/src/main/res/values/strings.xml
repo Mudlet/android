@@ -469,6 +469,19 @@
     <string name="tour_done_title">That\'s it - have fun!</string>
     <!-- The text of the tour's last step. "About and licences", "Help" and "Take a UI tour" are about_title, help_heading and help_tour: keep them the same -->
     <string name="tour_done">If you ever want to see this tour again, it is in About and licences, under Help: Take a UI tour.</string>
+    <!-- The button on a callout (a small balloon pointing at a part of the screen that is new to the player) that
+         closes it for good; desktop Mudlet's callouts say the same -->
+    <string name="callout_got_it">Got it</string>
+    <!-- What TalkBack says as a callout appears: %1$s is its title (such as callout_switch_games_title), %2$s its text -->
+    <string name="callout_announcement">%1$s. %2$s</string>
+    <!-- The title of the callout under the game's name in the title bar, shown once two games are open -->
+    <string name="callout_switch_games_title">Switch between your games</string>
+    <!-- The text of that callout. Do not name a direction: the next game is on the other side in right-to-left
+         languages. Ctrl+Tab is a key combination of a hardware keyboard, as desktop Mudlet names it -->
+    <string name="callout_switch_games">Swipe the game\'s name sideways to bring another open game to the front. With a keyboard, Ctrl+Tab does it too.</string>
+    <!-- The text of that callout while TalkBack is on, which takes the swipe for itself. The game's name has TalkBack
+         actions game_next and game_previous, and its double tap is game_title_show -->
+    <string name="callout_switch_games_talkback">The game\'s name has actions for the next and the previous game, and a double tap on it shows all your open games.</string>
     <!-- Title of the problem report screen -->
     <string name="report_title">Report a problem</string>
     <!-- Problem report screen: what it is, above the report itself -->

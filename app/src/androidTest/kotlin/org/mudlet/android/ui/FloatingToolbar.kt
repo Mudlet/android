@@ -55,11 +55,19 @@ internal object FloatingToolbar {
     }
 
     /** Whether the item [label] is in the toolbar or its overflow, opening the overflow to look. */
+    var trace: (String) -> Unit = {}
+
     fun offers(label: String): Boolean {
-        if (device.wait(Until.hasObject(item(label)), WAIT_MS / 5)) return true
-        val more = device.findObject(overflow) ?: return false
+        trace("offers($label): waiting")
+        if (device.wait(Until.hasObject(item(label)), WAIT_MS / 5)) return true.also { trace("offers($label): shown") }
+        trace("offers($label): not shown; ${describe()}")
+        val more = device.findObject(overflow)
+        trace("offers($label): overflow ${more?.visibleBounds}")
+        if (more == null) return false
         more.click()
+        trace("offers($label): clicked")
         val found = device.wait(Until.hasObject(item(label)), WAIT_MS / 2)
+        trace("offers($label): found=$found; ${describe()}")
         settle()
         device.findObject(overflow)?.click()
         settle()

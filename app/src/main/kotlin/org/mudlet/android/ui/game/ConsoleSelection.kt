@@ -128,11 +128,13 @@ internal fun SelectionToolbar(actions: List<SelectionAction>, span: () -> Rect?,
             }
 
             override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
+                android.util.Log.i("SelPseudo", "onCreateActionMode ${latestActions.map { it.label }}")
                 fill(menu)
                 return true
             }
 
             override fun onPrepareActionMode(mode: ActionMode, menu: Menu): Boolean {
+                android.util.Log.i("SelPseudo", "onPrepareActionMode ${latestActions.map { it.label }}")
                 fill(menu)
                 return true
             }
@@ -143,6 +145,7 @@ internal fun SelectionToolbar(actions: List<SelectionAction>, span: () -> Rect?,
             }
 
             override fun onDestroyActionMode(mode: ActionMode) {
+                android.util.Log.i("SelPseudo", "onDestroyActionMode ending=$ending", Throwable())
                 holder[0] = null
                 if (!ending) latestOnEnded()
             }
@@ -152,17 +155,28 @@ internal fun SelectionToolbar(actions: List<SelectionAction>, span: () -> Rect?,
                 val at = IntArray(2)
                 view.getLocationInWindow(at)
                 outRect.set(rect.left.roundToInt() - at[0], rect.top.roundToInt() - at[1], rect.right.roundToInt() - at[0], rect.bottom.roundToInt() - at[1])
+                android.util.Log.i("SelPseudo", "onGetContentRect $outRect at ${at.toList()}")
             }
         }
         holder[0] = view.startActionMode(callback, ActionMode.TYPE_FLOATING)
+        android.util.Log.i("SelPseudo", "startActionMode -> ${holder[0]} focus=${view.hasWindowFocus()}")
         onDispose {
+            android.util.Log.i("SelPseudo", "SelectionToolbar disposed")
             ending = true
             holder[0]?.finish()
         }
     }
     val labels = actions.map { it.label }
-    LaunchedEffect(labels) { holder[0]?.invalidate() }
-    LaunchedEffect(Unit) { snapshotFlow { latestSpan() }.distinctUntilChanged().collect { holder[0]?.invalidateContentRect() } }
+    LaunchedEffect(labels) {
+        android.util.Log.i("SelPseudo", "invalidate $labels")
+        holder[0]?.invalidate()
+    }
+    LaunchedEffect(Unit) {
+        snapshotFlow { latestSpan() }.distinctUntilChanged().collect {
+            android.util.Log.i("SelPseudo", "invalidateContentRect $it")
+            holder[0]?.invalidateContentRect()
+        }
+    }
 }
 
 /**
@@ -204,6 +218,15 @@ internal fun LineSelectionShown(
     val count = countOf(current)
     val countText = pluralStringResource(R.plurals.console_selection_count, count, count)
     LaunchedEffect(current) { Announcer.announce(countText, assertive = false) }
-    LaunchedEffect(count == 0) { if (count == 0) onClose() }
+    LaunchedEffect(count == 0) {
+        if (count == 0) {
+            android.util.Log.i("SelPseudo", "count 0: close")
+            onClose()
+        }
+    }
+    DisposableEffect(Unit) {
+        android.util.Log.i("SelPseudo", "selection shown")
+        onDispose { android.util.Log.i("SelPseudo", "selection gone") }
+    }
     if (toolbar && count > 0) SelectionToolbar(actions.value, span, onEnded = onClose)
 }

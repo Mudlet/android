@@ -459,7 +459,10 @@ fun Console(
     val selectionTaps = if (selecting) {
         Modifier.pointerInput(Unit) {
             detectTapGestures(
-                onTap = { selectionState.value = null },
+                onTap = {
+                    android.util.Log.i("SelPseudo", "console tap at $it ends the selection")
+                    selectionState.value = null
+                },
                 onLongPress = { at ->
                     val i = lineUnder(at.y.roundToInt(), latestDrawnLines()) ?: return@detectTapGestures
                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -565,7 +568,10 @@ fun Console(
             val handleColor = LocalTextSelectionColors.current.handleColor
             SelectionHandles(handlePlaces, handleColor)
         }
-        LineSelectionShown(selectionState, { latestCountOf(it) }, selectionActions, toolbar = !obscured, selectionSpan, onClose = { selectionState.value = null })
+        LineSelectionShown(selectionState, { latestCountOf(it) }, selectionActions, toolbar = !obscured, selectionSpan, onClose = {
+            android.util.Log.i("SelPseudo", "onClose")
+            selectionState.value = null
+        })
         if (!following) {
             val newLines = (linesAdded - seenUpTo).coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
             ExtendedFloatingActionButton({ following = true }, Modifier.align(Alignment.BottomEnd).padding(12.dp)) {

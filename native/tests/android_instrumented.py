@@ -269,12 +269,15 @@ def run(dev, args):
     failures += instrument(dev, "app-permission", APP_TESTS, APP, "the app, freshly installed: the notification permission",
                            480, "-e", "class", PERMISSION_TEST)
     failures += instrument(dev, "app", APP_TESTS, APP, "the app's other tests", 2400,
-                           "-e", "notClass", f"{PERMISSION_TEST},{BACKUP_TEST}")
-    pull_screenshots(dev)
-    failures += backup_rounds(dev)
-    install(args.engine_tests, "-g")
-    failures += instrument(dev, "engine-service", ENGINE_TESTS, ENGINE_TESTS, "engine-service: EngineService on the device",
-                           1320)
+                           "-e", "class", "org.mudlet.android.ui.SearchPseudoLocaleTest,org.mudlet.android.ui.SelectLinesPseudoLocaleTest")
+    time.sleep(2)
+    out = dev.log_text()
+    keep = re.compile(r"SelPseudo|ActivityTaskManager|ANR|Not Responding|InputDispatcher|FloatingToolbar|ActionMode|WindowManager: (Focus|Changing focus)|AndroidRuntime")
+    lines = [line for line in out.splitlines() if keep.search(line)]
+    print("=== diag logcat", len(lines), flush=True)
+    for line in lines[-6000:]:
+        print(line[:400])
+    print("=== end diag logcat", flush=True)
     return failures
 
 

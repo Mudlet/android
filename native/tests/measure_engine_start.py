@@ -77,7 +77,8 @@ def stop_all(dev):
 
 def one_round(dev, kind, port, index):
     offset = os.path.getsize(dev.logcat_path)
-    if kind == "new":
+    s.shell(f"setprop debug.mudlet.base {1 if kind.endswith('-base') else 0}", check=False)
+    if kind.startswith("new"):
         s.shell(f"pm clear {s.PKG}", check=False)
         s.shell(f"pm grant {s.PKG} android.permission.POST_NOTIFICATIONS", check=False)
     time.sleep(2)
@@ -85,7 +86,7 @@ def one_round(dev, kind, port, index):
     am = s.shell(f"am start -W -n {s.ACTIVITY}")
     total = re.search(r"TotalTime: (\d+)", am)
     state = dev.wait("the UI attached", lambda st: st["link"].startswith("attached to pid"), 60)
-    if kind == "late":
+    if kind.startswith("late"):
         time.sleep(5)
     dev.command("connect", host=s.HOST_FROM_EMULATOR, port=port, profile=PROFILE, login=s.LOGIN, password=s.PASSWORD)
     dev.wait("the banner", lambda st: st["profileAnswer"] not in ("waiting", "ok")
@@ -152,12 +153,13 @@ def main():
     rounds = []
     try:
         for i in range(3):
-            rounds.append(("new", one_round(dev, "new", port, i)))
-            s.shell(f"am send-trim-memory {s.ENGINE_PROCESS} RUNNING_LOW", check=False)
-            dev.wait("the save", lambda st: st["status"].get("save", "").startswith(("saved", "not saved")), 60)
-            stop_all(dev)
+            for kind in ("new", "new-base"):
+                rounds.append((kind, one_round(dev, kind, port, i)))
+                s.shell(f"am send-trim-memory {s.ENGINE_PROCESS} RUNNING_LOW", check=False)
+                dev.wait("the save", lambda st: st["status"].get("save", "").startswith(("saved", "not saved")), 60)
+                stop_all(dev)
         for i in range(args.rounds):
-            for kind in ("saved", "late"):
+            for kind in ("saved", "saved-base", "late", "late-base"):
                 rounds.append((kind, one_round(dev, kind, port, i)))
                 stop_all(dev)
     except s.SmokeFailure as e:

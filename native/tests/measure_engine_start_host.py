@@ -27,13 +27,16 @@ def boot_ms():
     return time.clock_gettime(time.CLOCK_BOOTTIME) * 1000
 
 
-def one_round(tmp, port, kind, index):
+def one_round(tmp, port, kind, index, base):
     home = os.path.join(tmp, "home")
     log = os.path.join(tmp, f"engine-{kind}{index}.log")
     sock = os.path.join(tmp, "engine.sock")
     env = dict(os.environ, QT_QPA_PLATFORM="offscreen", MUDLET_CONFIG_DIR=os.path.join(tmp, "config"),
                MUDLET_PROFILE="Bench", HOME=home, XDG_CONFIG_HOME=os.path.join(home, ".config"),
                XDG_DATA_HOME=os.path.join(home, ".local/share"), XDG_CACHE_HOME=os.path.join(home, ".cache"))
+    if base:
+        env["MUDLET_MEASURE_BASE"] = "1"
+    kind += "-base" if base else ""
     t0 = boot_ms()
     proc = subprocess.Popen([ENGINE, "--socket", sock, "--heartbeat-ms", "1000"], env=env, stdout=subprocess.DEVNULL,
                             stderr=open(log, "wb"))
@@ -72,11 +75,13 @@ def one_round(tmp, port, kind, index):
 
 def main():
     port = fake_telnet.start_in_thread()
-    rounds = {"new": [], "saved": []}
+    rounds = {}
     for i in range(ROUNDS):
-        tmp = tempfile.mkdtemp(prefix="mudlet-measure-")
-        rounds["new"].append(one_round(tmp, port, "new", i))
-        rounds["saved"].append(one_round(tmp, port, "saved", i))
+        for base in (False, True):
+            tmp = tempfile.mkdtemp(prefix="mudlet-measure-")
+            suffix = "-base" if base else ""
+            rounds.setdefault("new" + suffix, []).append(one_round(tmp, port, "new", i, base))
+            rounds.setdefault("saved" + suffix, []).append(one_round(tmp, port, "saved", i, base))
     for kind, all_marks in rounds.items():
         keys = sorted({k for m in all_marks for k in m}, key=lambda k: statistics.median([m[k] for m in all_marks if k in m]))
         print(f"HOSTSUMMARY {kind} ({len(all_marks)} rounds): ms after spawn, median [min-max]")

@@ -185,27 +185,39 @@ class SuggestionSessionTest {
     fun theEchoOfASendIsNotLearnedFrom() {
         val session = session()
         session.sent("look")
-        session.lineShown("HP:100> look")
-        session.lineShown("You see a door.")
+        session.linesShown(listOf("HP:100> look", "You see a door."))
         session.sent("north")
-        session.lineShown("A dark room.")
-        session.lineShown("north")
+        session.linesShown(listOf("A dark room."))
+        session.linesShown(listOf("north"))
         worker.advance()
         assertEquals(listOf("You see a door.", "A dark room."), suggester.observed)
 
         // An echo that does not come within three lines is not looked for any more
         session.sent("east")
-        for (n in 1..3) session.lineShown("line $n")
-        session.lineShown("> east")
+        session.linesShown(listOf("line 1", "line 2", "line 3", "> east"))
         worker.advance()
         assertEquals(listOf("line 1", "line 2", "line 3", "> east"), suggester.observed.drop(2))
 
         // Only the whole command at the end of a line is its echo
         session.sent("n")
-        session.lineShown("An open plain")
-        session.lineShown("HP:9>n")
+        session.linesShown(listOf("An open plain", "HP:9>n"))
         worker.advance()
         assertEquals(listOf("An open plain"), suggester.observed.drop(6))
+    }
+
+    @Test
+    fun linesShownTogetherAreLearnedFromInOneTask() {
+        val session = session()
+        session.sent("look")
+        worker.advance()
+        val before = worker.pending
+        session.linesShown(listOf("HP:100> look", "You see a door.", "A dark room."))
+        assertEquals("one task for the lines of one call", before + 1, worker.pending)
+        worker.advance()
+        assertEquals(listOf("You see a door.", "A dark room."), suggester.observed)
+
+        session.linesShown(emptyList())
+        assertEquals("no task for no lines", before, worker.pending)
     }
 
     @Test

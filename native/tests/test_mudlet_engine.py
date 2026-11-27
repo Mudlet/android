@@ -63,7 +63,8 @@ def start_engine(profile="Engine Test", extra_env=None):
     home = os.path.join(TMP, "home")
     env = dict(os.environ, QT_QPA_PLATFORM="offscreen", MUDLET_CONFIG_DIR=CONFIG, MUDLET_PROFILE=profile,
                HOME=home, XDG_CONFIG_HOME=os.path.join(home, ".config"), XDG_DATA_HOME=os.path.join(home, ".local/share"),
-               XDG_CACHE_HOME=os.path.join(home, ".cache"), **(extra_env or {}))
+               XDG_CACHE_HOME=os.path.join(home, ".cache"))
+    env.update(extra_env or {})
     proc = subprocess.Popen([ENGINE, "--socket", SOCK, "--heartbeat-ms", "1000"], env=env,
                             stdout=subprocess.DEVNULL, stderr=open(LOG, "ab"))
     engines.append(proc)
@@ -120,7 +121,7 @@ def main():
     try:
         for checks in (engine_basics, tls_checks, profile_requests):
             checks(port)
-        for checks in (bridge_refusals, input_line, console, screen_and_main_window, start_sizes, main_window_info, starter_ui_welcome,
+        for checks in (bridge_refusals, builtin_lua_ready, input_line, console, screen_and_main_window, start_sizes, main_window_info, starter_ui_welcome,
                        links, app_state, script_windows, window_links,
                        script_labels, label_links, script_text_boxes, frame_tabs, button_bars, map_view, app_map,
                        map_layout, map_info, map_moves, map_rooms, map_edits, map_download, map_files, profile_settings, script_items, variables, sounds,
@@ -571,6 +572,39 @@ def mudlet_item(profile, item):
         data = f.read()
     (size,) = struct.unpack(">I", data[:4])
     return "" if size == 0xFFFFFFFF else data[4:4 + size].decode("utf-16-be")
+
+
+def builtin_lua_ready():
+    """Mudlet's Lua files unpacked from the library while no profile is open (main.cpp), and a profile opened at once,
+    as they may still be unpacking, loading them from that one copy."""
+    profile = "Lua Ready Test"
+    for opened_at_once in (False, True):
+        cache = tempfile.mkdtemp(prefix="cache-", dir=TMP)
+        proc, c = start_engine(profile, {"XDG_CACHE_HOME": cache})
+
+        def copies(pattern="mudlet-lua-*/LuaGlobal.lua"):
+            return glob.glob(os.path.join(cache, "**", pattern), recursive=True)
+
+        seen = []
+        c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+        if opened_at_once:
+            c.ask({"t": "saveProfile", "name": profile, "host": "127.0.0.1", "port": 23, "tls": False, "login": "",
+                   "autoReconnect": False}, collect=seen)
+            c.send({"t": "openProfile", "name": profile, "connect": False})
+            wait_status(c, "profile", lambda v: v == f"{profile} loaded", seen)
+            c.send({"t": "runLua", "code": 'echo("loaded from " .. luaGlobalPath:match("[^/]+$") .. "\\n")'})
+            loaded = c.wait_for(lambda m: m["t"] in ("line", "tail") and m["text"].startswith("loaded from "), collect=seen)
+            found = [os.path.basename(os.path.dirname(path)) for path in copies()]
+            check(loaded["text"] == f"loaded from {found[0] if found else '?'}" and len(found) == 1
+                  and not copies("unpacking-mudlet-lua-*"),
+                  f"a profile opened at once loads the one copy: {loaded['text']}, {copies('*mudlet-lua-*')}")
+        else:
+            deadline = time.monotonic() + 10
+            while not copies() and time.monotonic() < deadline:
+                time.sleep(0.05)
+            check(len(copies()) == 1, f"Mudlet's Lua files are unpacked while no profile is open: {copies()}")
+        code = stop_engine(proc)
+        check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 
 
 def profile_requests(port):

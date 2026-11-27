@@ -84,6 +84,7 @@ Threads:
 - In the UI, one daemon reader thread per link decodes frames. Lines and
   statuses are batched and flushed to Compose state on the main thread every
   16 ms.
+  The first line after an attach is flushed at once, ahead of the state that follows it.
 - Writes from the UI go out on the caller's thread through a synchronized
   `FrameWriter`. Each one is a small frame.
 

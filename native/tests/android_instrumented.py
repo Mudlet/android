@@ -292,8 +292,8 @@ RULE = re.compile(r"^[HSP]*L[^ ;]+;(->\S+)?$")
 
 
 def dump_profile():
-    """The app's ART profiles (cur and ref) as text rules: counts in the log, the rules outside androidx gzipped and in
-    base64 in ::notice annotations, which the checks API serves where the log and artifacts are out of reach."""
+    """The app's ART profiles (cur and ref) as text rules: counts in the log, then every rule gzipped and in base64 on
+    plain PROFILEB64 lines (annotations and ::notice log lines stop at 4096 characters)."""
     import base64
     import gzip
     adb("root", check=False)
@@ -316,13 +316,13 @@ def dump_profile():
         top = "/".join(name.split("/")[:2])
         tops[top] = tops.get(top, 0) + 1
     log("PROFILE tops " + " ".join(f"{k}={v}" for k, v in sorted(tops.items(), key=lambda kv: -kv[1])[:40]))
-    keep = sorted(r for r in rules if not r.lstrip("HSP").startswith("Landroidx/"))
+    keep = sorted(rules)
     blob = base64.b64encode(gzip.compress("\n".join(keep).encode(), 9)).decode()
-    chunks = [blob[i:i + 40000] for i in range(0, len(blob), 40000)]
-    log(f"PROFILE kept {len(keep)} rules, {len(blob)} base64 chars, {len(chunks)} notices")
+    chunks = [blob[i:i + 4000] for i in range(0, len(blob), 4000)]
     api = shell("getprop ro.build.version.sdk", check=False).strip()
-    for i, chunk in enumerate(chunks[:9]):
-        print(f"::notice title=profile-api{api} {i + 1}/{len(chunks)}::{chunk}", flush=True)
+    log(f"PROFILE kept {len(keep)} rules, {len(blob)} base64 chars, {len(chunks)} lines")
+    for i, chunk in enumerate(chunks):
+        print(f"PROFILEB64 {api} {i + 1}/{len(chunks)} {chunk}", flush=True)
 
 
 def run(dev, args):

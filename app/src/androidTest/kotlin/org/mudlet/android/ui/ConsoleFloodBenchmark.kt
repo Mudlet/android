@@ -36,6 +36,7 @@ import org.mudlet.android.protocol.EngineMessage
 import org.mudlet.android.protocol.FrameReader
 import org.mudlet.android.protocol.Profile
 import org.mudlet.android.suggest.CommandSuggester
+import org.mudlet.android.suggest.ExecutorWorker
 import org.mudlet.android.ui.game.GAME_TITLE_TAG
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -89,6 +90,7 @@ class ConsoleFloodBenchmark {
     fun flood() {
         decodeOnArt()
         learnOnArt()
+        scheduleOnArt()
         // Warm-up, not reported: the first lines JIT the path
         stage("warmup", 2000, 2.0, reported = false)
         stage("r1000", 1000, 4.0)
@@ -165,6 +167,52 @@ class ConsoleFloodBenchmark {
             Thread.sleep(300)
             val c2 = threadCpu()
             report("learn", "round=$round regexNs=${dt0 / n} regexB=${da0 / n} regexDaemonsMs=${daemonsMs(c0, c1)} scanNs=${dt1 / n} scanB=${da1 / n} scanDaemonsMs=${daemonsMs(c1, c2)} words=${old.words.size}")
+        }
+    }
+
+    // The suggestions worker given each of a frame's lines as a task, as SuggestionSession.lineShown did, beside one
+    // task for the frame's lines: the caller's CPU (the main thread's in the app), the worker's, and what both allocate
+    private fun scheduleOnArt() {
+        val rng = Random(9011)
+        val texts = Array(4000) { (FrameReader.parse(fightPayload(it + 1L, rng)) as EngineMessage.Line).text }
+        val worker = ExecutorWorker("sched-bench") { throw it }
+        fun workerCpu(): Long {
+            val done = CountDownLatch(1)
+            var cpu = 0L
+            worker.schedule(0) {
+                cpu = Debug.threadCpuTimeNanos()
+                done.countDown()
+            }
+            done.await()
+            return cpu
+        }
+        val frames = 120
+        val perFrame = 333
+        val n = frames * perFrame
+        repeat(8) { round ->
+            val batch = round % 2 == 1
+            val suggester = CommandSuggester()
+            val w0 = workerCpu()
+            val a0 = allocated()
+            val c0 = Debug.threadCpuTimeNanos()
+            var k = 0
+            repeat(frames) {
+                if (batch) {
+                    val shown = ArrayList<String>(perFrame)
+                    repeat(perFrame) { shown += texts[k++ % texts.size] }
+                    worker.schedule(0) { for (t in shown) suggester.observeLine(t) }
+                } else {
+                    repeat(perFrame) {
+                        val t = texts[k++ % texts.size]
+                        worker.schedule(0) { suggester.observeLine(t) }
+                    }
+                }
+                Thread.sleep(16)
+            }
+            val c = Debug.threadCpuTimeNanos() - c0
+            val w = workerCpu() - w0
+            val a = allocated() - a0
+            report("schedule", "round=$round mode=${if (batch) "batch" else "perLine"} callerNs=${c / n} workerNs=${w / n} processB=${a / n}")
         }
     }
 

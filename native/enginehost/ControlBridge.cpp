@@ -479,6 +479,11 @@ IFrontend* ControlBridge::profileOpened(const QString& name, IEngine* session, P
         setFront(mOpen.size() - 1);
     }
     sendOpenProfiles(true);
+    // Written now, as the load that follows holds the main thread: the UI attaches to the socket meanwhile, and is
+    // served as soon as the load ends
+    if (mClient) {
+        mClient->flush();
+    }
     mNotificationTimer.start();
     return bridge;
 }

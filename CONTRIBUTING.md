@@ -154,6 +154,25 @@ the budget the same way, so that the next growth is caught from there. The libmu
 `development` too: when the nightly fails on one because libmudlet grew, raise it in a pull request of its own that
 names the Mudlet commits.
 
+### Baseline Profile
+
+[`app/src/main/baseline-prof.txt`](app/src/main/baseline-prof.txt) lists the classes and methods the app uses as it
+starts and shows a game, for ART to compile ahead of time when the app is installed rather than interpret them, as the
+Baseline Profiles Compose and AndroidX ship do for a few thousand of their own methods; AGP merges them all into the
+APK's `assets/dexopt/baseline.prof` and the AAB. Each class with a method that ran is listed with all its methods
+(`->**(**)**`), rather than the tens of thousands of methods that ran one by one. A class the file names that has been
+renamed or removed is skipped without a word, and new code is not in it, so regenerate it when start-up or the game
+screen changes much:
+
+1. Set `isDebuggable = false` in `app/build.gradle.kts`'s debug build type for the while (ART runs a debuggable app as
+   for a debugger, not as on a player's phone), build the x86_64 debug APK ("Test" above) and install it on an
+   emulator whose image adb can root (`google_apis`, not `google_apis_playstore`).
+2. Start the app cold a few times (`adb shell am force-stop org.mudlet.mudlet` between starts), then connect to a game
+   and play for a minute or two, so the profile ART collects holds start-up and the game screen.
+3. Run `scripts/dump-baseline-profile.sh`, which writes the file from that profile, and commit it.
+
+The PTB's package job fails when the merged profile has no rule for `org/mudlet`, as when the file is missing.
+
 ## Lint
 
 ```sh

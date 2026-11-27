@@ -315,6 +315,11 @@ jobs:
             [ "$digests" = "$CERT_SHA256" ] \
               || { echo "::error::$apk is not signed with the key: $certs"; exit 1; }
           done
+          # the app's own app/src/main/baseline-prof.txt: the libraries' profiles alone pass the baseline.prof check above
+          merged=$(find app/build/intermediates/merged_art_profile/release -name baseline-prof.txt)
+          if [ -z "$merged" ] || ! grep -q '^[HSP]*Lorg/mudlet/' "$merged"; then
+            echo "::error::the merged ART profile has no rules for org/mudlet: is app/src/main/baseline-prof.txt there?"; exit 1
+          fi
           jarsigner -verify "$aab" > /dev/null || { echo "::error::the AAB's signature does not verify"; exit 1; }
           aab_cert=$(keytool -printcert -jarfile "$aab" | sed -n 's/^[[:space:]]*SHA256: //p' | tr -d : | tr '[:upper:]' '[:lower:]')
           [ "$aab_cert" = "$CERT_SHA256" ] || { echo "::error::the AAB is signed by $aab_cert, not the key ($CERT_SHA256)"; exit 1; }

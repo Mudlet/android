@@ -613,16 +613,26 @@ void SocketBridge::greet(const QJsonObject& hello)
     if (!mProfileName.isEmpty()) {
         reply.insert(QStringLiteral("profile"), mProfileName);
     }
+    const bool profileGreet = !mProfileName.isEmpty();
+    if (profileGreet) {
+        engineMark("bridge.greetBegin");
+    }
     sendFrame(reply);
-    // The lines first: the UI reads frames in order, and a profile's labels and windows can take it longer to read than
-    // its lines
     if (mProfileOutput) {
         sendLinesAfter(after, true);
         sendLineUpdatesUpTo(after);
         sendFrame(tailMessage());
     }
     sendState();
+    if (profileGreet) {
+        engineMark("bridge.stateSent");
+        qInfo("MUDLET_GREET stateBytes %lld", qlonglong(mClient ? mClient->bytesToWrite() : -1));
+    }
     sendFrame({{QStringLiteral("t"), QStringLiteral("synced")}, {QStringLiteral("seq"), mNextSeq - 1}});
+    if (profileGreet) {
+        engineMark("bridge.linesSent");
+        qInfo("MUDLET_GREET allBytes %lld lines %lld", qlonglong(mClient ? mClient->bytesToWrite() : -1), qlonglong(mNextSeq - 1 - after));
+    }
 }
 
 void SocketBridge::sendState()

@@ -100,6 +100,7 @@ def one_round(dev, kind, port, index):
         t0 = marks[0][0] if marks else 0
     text = logcat_since(dev.logcat_path, offset)
     certs = " ".join(re.findall(r"MUDLET_CERTS \w+ \d+", text))
+    certs += " " + " | ".join(re.findall(r"MUDLET_(?:FRAMES|GREET) [^\r\n]*", text))
     log(f"ROUND {kind}{index} amTotal={total.group(1) if total else '?'} wall={wall:.1f}s {certs}")
     seen = {}
     for t, pid, what in marks:

@@ -16,6 +16,8 @@ class MudletApp : Application() {
     override fun onCreate() {
         EngineProcess.markApplicationCreated()
         StartMark.mark("app.onCreate " + Application.getProcessName())
+        // Read here, not on the first line's way
+        StartMark.base
         super.onCreate()
         // Before the channels, which are named in it
         AppLanguage.applyToProcess(this)

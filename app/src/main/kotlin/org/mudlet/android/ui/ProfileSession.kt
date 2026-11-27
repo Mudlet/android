@@ -286,6 +286,8 @@ class ProfileSession internal constructor(
     private var pendingStatusReset = false
     private var flushPosted = false
     private var lineReadMarked = false
+    private val frameStats = LinkedHashMap<String, LongArray>()
+    private var frameReturnedNs = 0L
 
     init {
         val p = prefs()
@@ -669,6 +671,8 @@ class ProfileSession internal constructor(
     private fun listener() = object : EngineLink.Listener {
         override fun onAttached(hello: EngineMessage.Hello, sameInstance: Boolean) {
             StartMark.mark("ui.profileAttached")
+            frameStats.clear()
+            frameReturnedNs = System.nanoTime()
             misdirected = hello.profile != null && hello.profile != name
             if (misdirected) {
                 post { linkState = "the socket serves ${hello.profile}, not $name" }
@@ -709,13 +713,33 @@ class ProfileSession internal constructor(
         }
 
         override fun onMessage(message: EngineMessage) {
+            if (lineReadMarked || frameReturnedNs == 0L) {
+                handleMessage(message)
+                return
+            }
+            val entered = System.nanoTime()
+            val stats = frameStats.getOrPut(message.javaClass.simpleName) { LongArray(3) }
+            stats[0]++
+            stats[1] += entered - frameReturnedNs
+            if (message is EngineMessage.Line) {
+                lineReadMarked = true
+                StartMark.mark("ui.firstLineRead")
+                android.util.Log.i(
+                    "MudletStart",
+                    "MUDLET_FRAMES " + frameStats.entries.joinToString(" ") { (k, v) ->
+                        "$k:${v[0]}/${"%.1f".format(java.util.Locale.ROOT, v[1] / 1e6)}/${"%.1f".format(java.util.Locale.ROOT, v[2] / 1e6)}"
+                    },
+                )
+            }
+            handleMessage(message)
+            stats[2] += System.nanoTime() - entered
+            frameReturnedNs = System.nanoTime()
+        }
+
+        private fun handleMessage(message: EngineMessage) {
             if (misdirected) return
             when (message) {
                 is EngineMessage.Line -> synchronized(pendingLock) {
-                    if (!lineReadMarked) {
-                        lineReadMarked = true
-                        StartMark.mark("ui.firstLineRead")
-                    }
                     pendingLines.add(UiLine(message.text, message.runs, message.prompt, time = message.time, seq = message.seq))
                     if (!message.replay) pendingNews.add(message.text)
                     scheduleFlush()
@@ -964,7 +988,7 @@ class ProfileSession internal constructor(
     private fun scheduleFlush() {
         if (flushPosted) return
         flushPosted = true
-        main.postDelayed(::flush, 16)
+        if (linesAdded == 0L && !StartMark.base) main.post(::flush) else main.postDelayed(::flush, 16)
     }
 
     private fun flush() {

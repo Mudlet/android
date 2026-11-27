@@ -1,5 +1,6 @@
 #include "ControlBridge.h"
 #include "MudletEngine.h"
+#include "THeadlessSession.h"
 #ifdef Q_OS_ANDROID
 #include "AndroidServiceSetup.h"
 #endif
@@ -122,6 +123,9 @@ int main(int argc, char* argv[])
         return 1;
     }
     qInfo("engine listening on %s", qPrintable(socketPath));
+    // The first profile to load reads Mudlet's Lua files, and unpacks them on the first run after an update, tenths of a
+    // second on Android: done on a thread of Qt's pool while the player picks a profile, not after their tap
+    THeadlessSession::prepareBuiltinLua();
     // The first QSslSocket loads Qt's TLS backend and OpenSSL, 0.1 s and more on Android: loaded here while the player
     // picks a profile, not by that profile's connection after their tap
     std::thread tlsLoad([] {

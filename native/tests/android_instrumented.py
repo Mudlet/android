@@ -288,6 +288,43 @@ def cold_starts(mode, rounds=6):
     shell(f"am force-stop {APP}", check=False)
 
 
+RULE = re.compile(r"^[HSP]*L[^ ;]+;(->\S+)?$")
+
+
+def dump_profile():
+    """The app's ART profiles (cur and ref) as text rules: counts in the log, the rules outside androidx gzipped and in
+    base64 in ::notice annotations, which the checks API serves where the log and artifacts are out of reach."""
+    import base64
+    import gzip
+    adb("root", check=False)
+    adb("wait-for-device", check=False)
+    time.sleep(5)
+    apk = shell(f"pm path {APP}", check=False).strip().splitlines()[0].removeprefix("package:")
+    profman = "/apex/com.android.art/bin/profman"
+    if "No such file" in shell(f"ls {profman}", check=False) or not shell(f"ls {profman}", check=False).strip():
+        profman = "profman"
+    rules = set()
+    for prof in (f"/data/misc/profiles/cur/0/{APP}/primary.prof", f"/data/misc/profiles/ref/{APP}/primary.prof"):
+        out = shell(f"{profman} --dump-classes-and-methods --profile-file={prof} --apk={apk} --dex-location={apk}",
+                    check=False)
+        got = [line.strip() for line in out.splitlines() if RULE.match(line.strip())]
+        log(f"PROFILE {prof}: {len(got)} rules" + ("" if got else f" ({' '.join(out.split())[:300]})"))
+        rules.update(got)
+    tops = {}
+    for r in rules:
+        name = r.lstrip("HSP")[1:]
+        top = "/".join(name.split("/")[:2])
+        tops[top] = tops.get(top, 0) + 1
+    log("PROFILE tops " + " ".join(f"{k}={v}" for k, v in sorted(tops.items(), key=lambda kv: -kv[1])[:40]))
+    keep = sorted(r for r in rules if not r.lstrip("HSP").startswith("Landroidx/"))
+    blob = base64.b64encode(gzip.compress("\n".join(keep).encode(), 9)).decode()
+    chunks = [blob[i:i + 40000] for i in range(0, len(blob), 40000)]
+    log(f"PROFILE kept {len(keep)} rules, {len(blob)} base64 chars, {len(chunks)} notices")
+    api = shell("getprop ro.build.version.sdk", check=False).strip()
+    for i, chunk in enumerate(chunks[:9]):
+        print(f"::notice title=profile-api{api} {i + 1}/{len(chunks)}::{chunk}", flush=True)
+
+
 def run(dev, args):
     for package in (APP_TESTS, APP, ENGINE_TESTS):
         adb("uninstall", package, check=False)
@@ -311,6 +348,7 @@ def run(dev, args):
         perf_lines(seen)
         if mode != "installed" or n == 3:
             cold_starts(mode if n > 3 else "installed-after-runs")
+    dump_profile()
     return failures
 
 

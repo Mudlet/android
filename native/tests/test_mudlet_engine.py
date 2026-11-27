@@ -63,7 +63,8 @@ def start_engine(profile="Engine Test", extra_env=None):
     home = os.path.join(TMP, "home")
     env = dict(os.environ, QT_QPA_PLATFORM="offscreen", MUDLET_CONFIG_DIR=CONFIG, MUDLET_PROFILE=profile,
                HOME=home, XDG_CONFIG_HOME=os.path.join(home, ".config"), XDG_DATA_HOME=os.path.join(home, ".local/share"),
-               XDG_CACHE_HOME=os.path.join(home, ".cache"), **(extra_env or {}))
+               XDG_CACHE_HOME=os.path.join(home, ".cache"))
+    env.update(extra_env or {})
     proc = subprocess.Popen([ENGINE, "--socket", SOCK, "--heartbeat-ms", "1000"], env=env,
                             stdout=subprocess.DEVNULL, stderr=open(LOG, "ab"))
     engines.append(proc)

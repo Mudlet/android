@@ -575,8 +575,8 @@ def mudlet_item(profile, item):
 
 
 def builtin_lua_ready():
-    """Mudlet's Lua files unpacked from the library while no profile is open (main.cpp), and a profile that opens at
-    once, as they are unpacked, loading them from the same one copy."""
+    """Mudlet's Lua files unpacked from the library while no profile is open (main.cpp), and a profile opened at once,
+    as they may still be unpacking, loading them from that one copy."""
     profile = "Lua Ready Test"
     for opened_at_once in (False, True):
         cache = tempfile.mkdtemp(prefix="cache-", dir=TMP)
@@ -592,10 +592,12 @@ def builtin_lua_ready():
                    "autoReconnect": False}, collect=seen)
             c.send({"t": "openProfile", "name": profile, "connect": False})
             wait_status(c, "profile", lambda v: v == f"{profile} loaded", seen)
-            c.send({"t": "runLua", "id": 1, "code": "return luaGlobalPath"})
-            path = wait_status(c, "luaResult", lambda v: True, seen)["value"]
-            check(len(copies()) == 1 and path == os.path.dirname(copies()[0]) and not copies("unpacking-mudlet-lua-*"),
-                  f"a profile opened as they are unpacked loads the one copy: {path}, {copies('*mudlet-lua-*')}")
+            c.send({"t": "runLua", "code": 'echo("loaded from " .. luaGlobalPath:match("[^/]+$") .. "\\n")'})
+            loaded = c.wait_for(lambda m: m["t"] in ("line", "tail") and m["text"].startswith("loaded from "), collect=seen)
+            found = [os.path.basename(os.path.dirname(path)) for path in copies()]
+            check(loaded["text"] == f"loaded from {found[0] if found else '?'}" and len(found) == 1
+                  and not copies("unpacking-mudlet-lua-*"),
+                  f"a profile opened at once loads the one copy: {loaded['text']}, {copies('*mudlet-lua-*')}")
         else:
             deadline = time.monotonic() + 10
             while not copies() and time.monotonic() < deadline:

@@ -520,6 +520,7 @@ object EngineClient {
 
     // A session for each profile in [open], kept for one that stays open, and the front as the engine has it
     private fun onOpenProfiles(open: List<OpenProfile>) {
+        StartMark.mark("ui.openProfiles")
         openProfilesKnown = true
         val kept = open.map { profile ->
             sessions.firstOrNull { it.name == profile.name }?.also { it.moveTo(profile.socket, attached) }

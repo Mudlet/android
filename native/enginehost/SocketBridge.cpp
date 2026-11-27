@@ -1,6 +1,7 @@
 #include "SocketBridge.h"
 
 #include "ControlBridge.h"
+#include "EngineStartMark.h"
 #include "IEngine.h"
 #include "LineJson.h"
 
@@ -726,6 +727,7 @@ void SocketBridge::handleMessage(const QJsonObject& message)
 {
     const QString type = message.value(QLatin1String("t")).toString();
     if (!mClientGreeted) {
+        engineMark("bridge.hello");
         if (type != QLatin1String("hello") || message.value(QLatin1String("v")).toInt() != protocolVersion) {
             QLocalSocket* socket = mClient;
             sendError(QStringLiteral("expected hello with v=%1").arg(protocolVersion));

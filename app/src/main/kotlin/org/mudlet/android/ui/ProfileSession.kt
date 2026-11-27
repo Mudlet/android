@@ -285,6 +285,7 @@ class ProfileSession internal constructor(
     private var pendingStatus = HashMap<String, String>()
     private var pendingStatusReset = false
     private var flushPosted = false
+    private var lineReadMarked = false
 
     init {
         val p = prefs()
@@ -667,6 +668,7 @@ class ProfileSession internal constructor(
 
     private fun listener() = object : EngineLink.Listener {
         override fun onAttached(hello: EngineMessage.Hello, sameInstance: Boolean) {
+            StartMark.mark("ui.profileAttached")
             misdirected = hello.profile != null && hello.profile != name
             if (misdirected) {
                 post { linkState = "the socket serves ${hello.profile}, not $name" }
@@ -710,6 +712,10 @@ class ProfileSession internal constructor(
             if (misdirected) return
             when (message) {
                 is EngineMessage.Line -> synchronized(pendingLock) {
+                    if (!lineReadMarked) {
+                        lineReadMarked = true
+                        StartMark.mark("ui.firstLineRead")
+                    }
                     pendingLines.add(UiLine(message.text, message.runs, message.prompt, time = message.time, seq = message.seq))
                     if (!message.replay) pendingNews.add(message.text)
                     scheduleFlush()
@@ -962,6 +968,7 @@ class ProfileSession internal constructor(
     }
 
     private fun flush() {
+        if (linesAdded == 0L) StartMark.mark("ui.flush")
         val newLines: List<UiLine>
         val news: List<String>
         val newStatus: Map<String, String>

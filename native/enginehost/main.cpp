@@ -19,8 +19,23 @@
 #include <sys/socket.h>
 #include <thread>
 #include <unistd.h>
+#ifdef Q_OS_ANDROID
+#include <sys/system_properties.h>
+#endif
 
 namespace {
+
+// Measure only: the base's behaviour in the A/B rounds, from adb's setprop debug.mudlet.base 1 or MUDLET_MEASURE_BASE
+bool measureBase()
+{
+#ifdef Q_OS_ANDROID
+    char value[PROP_VALUE_MAX] = {};
+    __system_property_get("debug.mudlet.base", value);
+    return value[0] == '1';
+#else
+    return qEnvironmentVariableIsSet("MUDLET_MEASURE_BASE");
+#endif
+}
 
 qint64 bootTimeMs()
 {
@@ -134,6 +149,7 @@ int main(int argc, char* argv[])
     // picks a profile, not by that profile's connection after their tap
     std::thread tlsLoad([] {
         QSslConfiguration::defaultConfiguration();
+        engineMark("host.tlsLoaded");
     });
     const auto tlsLoaded = qScopeGuard([&tlsLoad] {
         tlsLoad.join();

@@ -78,7 +78,7 @@ class SelectLinesPseudoLocaleTest(private val locale: String) {
         val width = compose.activity.resources.displayMetrics.widthPixels
         val items = listOf(R.string.console_selection_select_all, R.string.console_selection_to_command_line, R.string.console_selection_trigger).map(::string)
         for (item in listOf(copy, share) + items) {
-            assertTrue("$locale: no \"$item\" in the toolbar", FloatingToolbar.offers(item))
+            if (!FloatingToolbar.offers(item)) throw AssertionError("$locale: no \"$item\" in the toolbar; ${FloatingToolbar.describe()}")
         }
         for (item in listOf(copy, share)) {
             val at = FloatingToolbar.bounds(item)

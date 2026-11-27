@@ -57,19 +57,23 @@ internal object FloatingToolbar {
     /** Whether the item [label] is in the toolbar or its overflow, opening the overflow to look. */
     fun offers(label: String): Boolean {
         if (device.wait(Until.hasObject(item(label)), WAIT_MS / 5)) return true
-        val more = device.findObject(overflow) ?: return false
+        val more = overflowButton() ?: return false
+        if (device.hasObject(item(label))) return true
         more.click()
         val found = device.wait(Until.hasObject(item(label)), WAIT_MS / 2)
-        settle()
-        device.findObject(overflow)?.click()
+        overflowButton()?.click()
         settle()
         return found
     }
 
+    // Android hides its toolbar for a while as the selection moves or the window loses focus: a look then sees no toolbar,
+    // not one without the item, so this waits for the toolbar to be back and at rest
+    private fun overflowButton(): UiObject2? = device.wait(Until.findObject(overflow.enabled(true)), WAIT_MS)
+
     /** Taps the item [label], in the overflow if it is not in the toolbar. */
     fun tap(label: String) {
         if (!device.wait(Until.hasObject(item(label)), WAIT_MS / 2)) {
-            checkNotNull(device.findObject(overflow)) { "no item \"$label\" and no overflow in the floating toolbar; ${describe()}" }.click()
+            checkNotNull(overflowButton()) { "no item \"$label\" and no overflow in the floating toolbar; ${describe()}" }.click()
             waitFor(label)
             settle()
         }

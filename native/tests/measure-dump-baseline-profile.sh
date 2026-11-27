@@ -13,9 +13,10 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 package=${1:-org.mudlet.mudlet}
 out=${OUT:-$root/app/src/main/baseline-prof.txt}
 
-adb root > /dev/null
+# adbd restarts as root, which can drop this connection ("closed") and fail the command, and until it is back shell
+# commands still run as the shell user: the uid check below is what decides
+adb root > /dev/null 2>&1 || true
 adb wait-for-device
-# adbd restarts as root; until it does, shell commands can still run as the shell user
 for _ in $(seq 30); do
   [ "$(adb shell id -u | tr -d '\r')" = 0 ] && break
   sleep 1

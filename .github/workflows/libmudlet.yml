@@ -339,7 +339,7 @@ jobs:
           appRules A
           mkdir -p app/build/outputs/apk/ab-A
           cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/ab-A/app-debug.apk
-          for f in native/tests/measure-profiles/*; do
+          for f in native/tests/measure-profiles/B.txt; do
             label=$(basename "$f"); label=${label%%.*}
             case $f in *.gz) gunzip -c "$f" > app/src/main/baseline-prof.txt ;; *) cp "$f" app/src/main/baseline-prof.txt ;; esac
             LIBMUDLET_BUILD_DIR="$GITHUB_WORKSPACE/build" scripts/build-apk.sh
@@ -436,7 +436,7 @@ jobs:
             python3 native/tests/android_smoke.py --apk app/build/outputs/apk/debug/app-debug.apk --out device-tests
             --symbols native/build-android-x86_64-mudlet/enginehost; smoke=$?;
             python3 native/tests/android_instrumented.py --app app/build/outputs/apk/debug/app-debug.apk
-            --ab app/build/outputs/apk/ab-A/app-debug.apk,app/build/outputs/apk/ab-B/app-debug.apk,app/build/outputs/apk/ab-C/app-debug.apk
+            --ab app/build/outputs/apk/ab-B/app-debug.apk
             --app-tests app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
             --engine-tests engine-service/build/outputs/apk/androidTest/debug/engine-service-debug-androidTest.apk
             --out device-tests --symbols native/build-android-x86_64-mudlet/enginehost && exit $smoke

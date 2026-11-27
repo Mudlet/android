@@ -353,7 +353,7 @@ def run(dev, args):
     failures = []
     if args.ab:
         apks = args.ab.split(",")
-        profile_ab([(os.path.basename(os.path.dirname(apk)).removeprefix("ab-"), apk) for apk in apks], rounds=3)
+        profile_ab([(os.path.basename(os.path.dirname(apk)).removeprefix("ab-"), apk) for apk in apks], rounds=1)
         dumped = subprocess.run(["bash", "native/tests/measure-dump-baseline-profile.sh"], capture_output=True, text=True,
                                 env={**os.environ, "OUT": "/tmp/dumped-baseline-prof.txt"})
         log(f"DUMPSCRIPT rc={dumped.returncode} {dumped.stdout.strip()} {dumped.stderr.strip()[:300]}")

@@ -613,12 +613,14 @@ void SocketBridge::greet(const QJsonObject& hello)
         reply.insert(QStringLiteral("profile"), mProfileName);
     }
     sendFrame(reply);
-    sendState();
+    // The lines first: the UI reads frames in order, and a profile's labels and windows can take it longer to read than
+    // its lines
     if (mProfileOutput) {
         sendLinesAfter(after, true);
         sendLineUpdatesUpTo(after);
         sendFrame(tailMessage());
     }
+    sendState();
     sendFrame({{QStringLiteral("t"), QStringLiteral("synced")}, {QStringLiteral("seq"), mNextSeq - 1}});
 }
 

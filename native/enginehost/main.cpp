@@ -64,18 +64,6 @@ QString envOr(const char* name, const QString& fallback)
 
 } // namespace
 
-// The base's behaviour in the A/B rounds: adb's setprop debug.mudlet.base 1
-static bool measureBase()
-{
-#ifdef Q_OS_ANDROID
-    char value[PROP_VALUE_MAX] = {};
-    __system_property_get("debug.mudlet.base", value);
-    return qstrcmp(value, "1") == 0;
-#else
-    return false;
-#endif
-}
-
 int main(int argc, char* argv[])
 {
     engineMark("host.main");

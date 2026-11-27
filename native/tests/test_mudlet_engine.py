@@ -277,6 +277,11 @@ def engine_basics(port):
     check(len(replayed) == 2000 and all(m.get("replay") for m in replayed) and any(m["t"] == "gap" for m in msgs),
           f"a fresh UI is replayed the 2000-line ring and a gap: {len(replayed)} lines")
     check("FLOOD DONE" in texts_of(msgs)[-2:], f"ending with the last lines seen: {texts_of(msgs)[-2:]}")
+    kinds = [m["t"] for m in msgs]
+    first_state = next(i for i, k in enumerate(kinds) if k in ("status", "history", "windows"))
+    last_line = max(i for i, k in enumerate(kinds) if k in ("gap", "line", "tail"))
+    check(last_line < first_state,
+          f"the lines and the tail come before the state, as the UI reads its frames in order: {kinds[:3]}...{kinds[-12:]}")
     c.close()
     c = Client(SOCK, hello=False)
     c.send({"t": "hello", "v": PROTOCOL_VERSION, "client": "python-test", "instance": instance, "lastSeq": synced["seq"] - 3})

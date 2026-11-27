@@ -4,7 +4,7 @@ import java.io.IOException
 
 /**
  * One profile's suggestions while the app runs. [open] loads what [store] kept; then the session learns from what
- * the input line sends ([sent]) and what the game shows ([lineShown]), answers the input as it is typed
+ * the input line sends ([sent]) and what the game shows ([linesShown]), answers the input as it is typed
  * ([inputChanged]) and searches through the history ([search]), forgets a command the player asks it to
  * ([forget]), and saves what it learned a while after a send or a forget, and on [save].
  *
@@ -138,9 +138,15 @@ class SuggestionSession(
         }
     }
 
-    /** The game showed [line], as plain text. */
-    fun lineShown(line: String) {
-        worker.schedule(0) { if (!isEcho(line)) suggester.observeLine(line) }
+    /**
+     * The game showed [lines], oldest first, as plain text; [lines] must not change afterwards. They are learned from
+     * in one task: a flood shows hundreds of lines between two frames.
+     */
+    fun linesShown(lines: List<String>) {
+        if (lines.isEmpty()) return
+        worker.schedule(0) {
+            for (line in lines) if (!isEcho(line)) suggester.observeLine(line)
+        }
     }
 
     /** Saves now if anything was learned since the last save, as when the app leaves the front. */

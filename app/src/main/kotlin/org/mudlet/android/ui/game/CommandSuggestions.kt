@@ -56,11 +56,15 @@ object CommandSuggestions {
     internal fun linesShown(profile: ProfileSession, state: SuggestionState) {
         val added = profile.linesAdded
         val first = added - profile.lines.size
-        for (n in maxOf(profile.linesSuggested, first) until added) {
-            val line = profile.lines[(n - first).toInt()]
-            if (!line.marker) state.lineShown(line.text)
+        val from = maxOf(profile.linesSuggested, first)
+        val shown = buildList((added - from).toInt()) {
+            for (n in from until added) {
+                val line = profile.lines[(n - first).toInt()]
+                if (!line.marker) add(line.text)
+            }
         }
         profile.linesSuggested = added
+        state.linesShown(shown)
     }
 
     /** Saves what each profile learned since its last save, as the app leaves the front and may be killed. */
@@ -120,7 +124,7 @@ class SuggestionState internal constructor(internal val session: SuggestionSessi
 
     fun sentHidden() = session.sentHidden()
 
-    fun lineShown(line: String) = session.lineShown(line)
+    fun linesShown(lines: List<String>) = session.linesShown(lines)
 }
 
 /** [profile]'s suggestions while the caller is composed; leaving saves what was learned. */

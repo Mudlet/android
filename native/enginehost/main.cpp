@@ -10,11 +10,13 @@
 #include <QGuiApplication>
 #include <QScopeGuard>
 #include <QSocketNotifier>
+#include <QSslConfiguration>
 #include <QStandardPaths>
 
 #include <csignal>
 #include <ctime>
 #include <sys/socket.h>
+#include <thread>
 #include <unistd.h>
 
 namespace {
@@ -120,6 +122,14 @@ int main(int argc, char* argv[])
         return 1;
     }
     qInfo("engine listening on %s", qPrintable(socketPath));
+    // The first QSslSocket loads Qt's TLS backend and OpenSSL, 0.1 s and more on Android: loaded here while the player
+    // picks a profile, not by that profile's connection after their tap
+    std::thread tlsLoad([] {
+        QSslConfiguration::defaultConfiguration();
+    });
+    const auto tlsLoaded = qScopeGuard([&tlsLoad] {
+        tlsLoad.join();
+    });
 #ifndef Q_OS_ANDROID
     quitOnTerm(app);
 #endif

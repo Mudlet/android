@@ -359,6 +359,11 @@ def expired_context():
     return ctx
 
 
+def tls_backend_loaded(pid):
+    with open(f"/proc/{pid}/maps") as f:
+        return "/tls/libq" in f.read()
+
+
 def tls_checks(plain_port):
     """TLS through the engine's Qt and OpenSSL. Certificates are checked as in Mudlet's GUI: one that is not trusted ends
     the connection with the reasons, unless the profile accepts what is wrong with it (the GUI's "Accept self-signed
@@ -374,6 +379,12 @@ def tls_checks(plain_port):
     c.wait_for(lambda m: m["t"] == "synced", collect=seen)
     told = [m for m in seen if m["t"] == "certificateRefused"]
     check(told == [{"t": "certificateRefused", "refused": False}], f"an attach is told no certificate was refused: {told}")
+
+    # Qt's TLS backend is loaded before a profile opens, not by the first QSslSocket as the profile loads (main.cpp)
+    deadline = time.monotonic() + 10
+    while not tls_backend_loaded(proc.pid) and time.monotonic() < deadline:
+        time.sleep(0.05)
+    check(tls_backend_loaded(proc.pid), "Qt's TLS backend is loaded while no profile is open")
 
     # Refused: the certificate is self-signed. A secure connection needs the server's name, as its certificate names it.
     msgs = []

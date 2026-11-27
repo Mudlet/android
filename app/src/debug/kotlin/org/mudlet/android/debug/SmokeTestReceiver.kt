@@ -40,7 +40,14 @@ class SmokeTestReceiver : BroadcastReceiver() {
                 null
             }
 
+            "stop" -> {
+                c.stopEngine()
+                c.engineWanted = true
+                null
+            }
+
             "connect" -> {
+                org.mudlet.android.engine.StartMark.mark("ui.connectAsked")
                 val host = intent.getStringExtra("host")
                 val port = intent.getIntExtra("port", -1)
                 val tls = intent.getBooleanExtra("tls", false)

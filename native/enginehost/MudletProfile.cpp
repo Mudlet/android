@@ -2,6 +2,7 @@
 
 #include "MudletEngine.h"
 #include "THeadlessSession.h"
+#include "EngineStartMark.h"
 
 #include <QBuffer>
 #include <QDateTime>
@@ -643,6 +644,10 @@ void MudletProfile::connectSession()
             &THeadlessSession::lineShown,
             this,
             [this](const QString&, const QString& text, bool isPrompt, const QList<TextRun>& runs, qint64 arrivalMSecs, bool continuesLine, const QList<qint64>& lineIds) {
+                static bool first = true;
+                if (std::exchange(first, false)) {
+                    engineMark("profile.firstLineShown");
+                }
                 onLineShown(text, isPrompt, colorRuns(runs, mLinkBase, mEngine.mLinkTop), arrivalMSecs, continuesLine, lineIds);
             });
     connect(session, &THeadlessSession::linesUpdated, this, [this](const QString&, const QList<THeadlessSession::LineUpdate>& updates) {
@@ -720,6 +725,7 @@ void MudletProfile::connectSession()
         mFrontend->linksChanged(ids);
     });
     connect(session, &THeadlessSession::profileLoaded, this, [this](const QString& profile) {
+        engineMark("profile.loaded");
         mEngine.mProfiles.markOpened(profile);
         mEngine.mHost->profileState(mProfile, IEngineHost::ProfileState::loaded);
         mFrontend->status(QStringLiteral("profile"), QStringLiteral("%1 loaded").arg(profile));
@@ -887,6 +893,7 @@ void MudletProfile::connectSession()
         mFrontend->status(QStringLiteral("connection"), QStringLiteral("connecting"));
     });
     connect(session, &THeadlessSession::connected, this, [this] {
+        engineMark("profile.connected");
         mFrontend->status(QStringLiteral("connection"), QStringLiteral("connected"));
         // Closing: not to be brought back
         if (mState == State::stopping) {
@@ -1056,6 +1063,7 @@ void MudletProfile::start(const QString& host, quint16 port, bool connect, std::
     mEngine.profileStarting(this);
     mFrontend = mEngine.mHost->profileOpened(mProfile, this, mRestoring ? IEngineHost::ProfileState::restoring : IEngineHost::ProfileState::starting, !passwords.game.isEmpty());
     mFrontend->status(QStringLiteral("profile"), QStringLiteral("%1 starting").arg(mProfile));
+    engineMark("profile.start");
     mStartClock.start();
     beginLoad();
 }
@@ -1095,11 +1103,13 @@ void MudletProfile::beginLoad()
     mSession->setWindowMinimized(mEngine.mMinimized);
     applyMainWindowDevice();
     mLoadBegun = true;
+    engineMark("profile.startAsync");
     mSession->startAsync(options);
 }
 
 void MudletProfile::onStartFinished(int result, const QString& error)
 {
+    engineMark("profile.startFinished");
     mFrontend->status(QStringLiteral("startMs"), QString::number(mStartClock.elapsed()));
     mLoadBegun = false;
     const bool restoreStart = std::exchange(mRestoreStart, false);

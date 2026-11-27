@@ -6,6 +6,7 @@ import android.os.LocaleList
 import org.mudlet.android.engine.AppLanguage
 import org.mudlet.android.engine.EngineNotifications
 import org.mudlet.android.engine.EngineProcess
+import org.mudlet.android.engine.StartMark
 
 // Runs in both processes; only the :engine process ever loads Qt
 class MudletApp : Application() {
@@ -14,6 +15,7 @@ class MudletApp : Application() {
 
     override fun onCreate() {
         EngineProcess.markApplicationCreated()
+        StartMark.mark("app.onCreate " + Application.getProcessName())
         super.onCreate()
         // Before the channels, which are named in it
         AppLanguage.applyToProcess(this)

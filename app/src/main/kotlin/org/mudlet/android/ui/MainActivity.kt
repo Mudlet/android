@@ -31,6 +31,7 @@ import org.mudlet.android.R
 import org.mudlet.android.data.Settings
 import org.mudlet.android.engine.AppLanguage
 import org.mudlet.android.engine.EngineNotifications
+import org.mudlet.android.engine.StartMark
 import org.mudlet.android.ui.game.Announcer
 import org.mudlet.android.ui.game.CommandSuggestions
 import org.mudlet.android.ui.game.ScriptFileRequest
@@ -76,6 +77,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        StartMark.mark("ui.activityOnCreate")
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         // A link or file opened in another app starts the Activity in that app's task: it goes to the app's own, so
@@ -98,7 +100,9 @@ class MainActivity : ComponentActivity() {
         engineStoppedAnswered = uiPrefs().getBoolean(PREF_ENGINE_STOPPED_ANSWERED, false)
         crashReportOfferedMs = uiPrefs().getLong(PREF_CRASH_REPORT_OFFERED, 0L)
         EngineClient.refreshServiceState()
+        StartMark.mark("ui.beforeStartEngine")
         if (EngineClient.engineWanted && EngineClient.fgsState == "not running") EngineClient.startEngine()
+        StartMark.mark("ui.afterStartEngine")
         // A recreated Activity has shown its intent's game already
         if (savedInstanceState == null) {
             showProfileOf(intent)

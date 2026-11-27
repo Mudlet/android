@@ -247,8 +247,8 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
-          python3 tests/test_mudlet_engine.py build-desktop-mudlet/enginehost/engine
-          python3 tests/test_mudlet_restore.py build-desktop-mudlet/enginehost/engine
+          python3 tests/measure_engine_start_host.py build-desktop-mudlet/enginehost/engine 6 | tee host-measure.log
+          { echo '```'; grep HOSTSUMMARY host-measure.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
       # Runs when the Python tests failed too, so one run shows both
       - name: Test the map's PNG writer
@@ -407,12 +407,8 @@ jobs:
           disk-size: 6G
           # one line: the action runs each line of a script in a shell of its own
           script: >-
-            python3 native/tests/android_smoke.py --apk app/build/outputs/apk/debug/app-debug.apk --out device-tests
-            --symbols native/build-android-x86_64-mudlet/enginehost; smoke=$?;
-            python3 native/tests/android_instrumented.py --app app/build/outputs/apk/debug/app-debug.apk
-            --app-tests app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-            --engine-tests engine-service/build/outputs/apk/androidTest/debug/engine-service-debug-androidTest.apk
-            --out device-tests --symbols native/build-android-x86_64-mudlet/enginehost && exit $smoke
+            python3 native/tests/measure_engine_start.py --apk app/build/outputs/apk/debug/app-debug.apk
+            --out device-tests --rounds 6
 
       - id: done
         run: echo "done=true" >> "$GITHUB_OUTPUT"
@@ -456,7 +452,7 @@ jobs:
             echo "Mudlet/Mudlet \`$MUDLET_REF\` at [${MUDLET_COMMIT:0:9}](https://github.com/Mudlet/Mudlet/commit/$MUDLET_COMMIT)"
             echo
             [ "$LUA_FORTIFY_FIX" = 1 ] || echo "Lua 5.1 built without the Android FORTIFY fix"
-            for log in smoke.log instrumented.log; do
+            for log in measure.log; do
               echo
               if [ -f "device-tests/$log" ]; then
                 echo '```'

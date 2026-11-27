@@ -28,6 +28,7 @@ import org.mudlet.android.data.Settings
 import org.mudlet.android.engine.EngineService
 import org.mudlet.android.engine.EngineSession
 import org.mudlet.android.engine.EngineSocket
+import org.mudlet.android.engine.StartMark
 import org.mudlet.android.protocol.EngineLink
 import org.mudlet.android.protocol.EngineMessage
 import org.mudlet.android.protocol.EngineRestore
@@ -607,6 +608,7 @@ object EngineClient {
 
     private val listener = object : EngineLink.Listener {
         override fun onAttached(hello: EngineMessage.Hello, sameInstance: Boolean) {
+            StartMark.mark("ui.attached")
             // The UI attaches only while it is shown
             link.send(Requests.setAppState(active = true, minimized = false))
             // Another UI or a restore may have changed them meanwhile

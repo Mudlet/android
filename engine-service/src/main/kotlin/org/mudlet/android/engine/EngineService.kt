@@ -33,6 +33,7 @@ class EngineService : QtServiceBase() {
     }
 
     override fun onCreate() {
+        StartMark.mark("service.onCreate")
         // Native main() reads these; Os.setenv is visible to getenv() in this process
         Os.setenv("MUDLET_ENGINE_SOCKET", EngineSocket.path(this), true)
         Os.setenv("MUDLET_ENGINE_STATE", EngineSession.statePath(this), true)
@@ -44,11 +45,14 @@ class EngineService : QtServiceBase() {
         Os.setenv("QT_QPA_PLATFORM", platform, true)
         // Before Qt loads, so a slow library load cannot miss the startForeground() deadline
         goForeground()
+        StartMark.mark("service.foreground")
         // Returns once native main() has released Qt's service-setup semaphore
         super.onCreate()
+        StartMark.mark("service.qtLoaded")
         // main() waits for this before creating QGuiApplication; see AndroidServiceSetup.h
         try {
             EngineNative.nativeServiceReady()
+            StartMark.mark("service.readySent")
         } catch (e: UnsatisfiedLinkError) {
             Log.e(TAG, "libengine did not load; see logcat tag 'Qt JAVA'", e)
         }

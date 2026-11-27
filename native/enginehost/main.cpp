@@ -1,5 +1,6 @@
 #include "ControlBridge.h"
 #include "MudletEngine.h"
+#include "EngineStartMark.h"
 #ifdef Q_OS_ANDROID
 #include "AndroidServiceSetup.h"
 #endif
@@ -61,19 +62,23 @@ QString envOr(const char* name, const QString& fallback)
 
 int main(int argc, char* argv[])
 {
+    engineMark("host.main");
 #ifdef Q_OS_ANDROID
     // Otherwise Service.onCreate() never returns and the engine ANRs at startup
     AndroidServiceSetup::releaseQtServiceSetup();
     // QtServiceBase.onCreate() sets ApplicationHidden after starting Qt. Arriving
     // once the platform integration exists, that state stops the dispatcher's
     // timers and socket notifiers; arriving before, it is only stored as pending.
+    engineMark("host.serviceSetupReleased");
     const bool serviceReady = AndroidServiceSetup::waitForServiceReady(10000);
+    engineMark("host.serviceReady");
     if (!serviceReady) {
         qWarning("service never reported ready; starting Qt anyway");
     }
 #endif
     QGuiApplication app(argc, argv);
     const qint64 guiReadyMs = bootTimeMs();
+    engineMark("host.guiApp");
 
     QCommandLineParser parser;
     parser.addOption({QStringLiteral("socket"), QStringLiteral("Unix socket path"), QStringLiteral("path")});
@@ -89,8 +94,10 @@ int main(int argc, char* argv[])
             parser.value(QStringLiteral("heartbeat-ms")).isEmpty() ? envOr("MUDLET_HEARTBEAT_MS", QStringLiteral("30000")).toInt() : parser.value(QStringLiteral("heartbeat-ms")).toInt();
 
     ControlBridge bridge;
+    engineMark("host.bridgeMade");
     MudletEngine engine(&bridge, heartbeatMs);
     bridge.setEngineControl(&engine);
+    engineMark("host.engineMade");
 #ifdef Q_OS_ANDROID
     // EngineService.onTrimMemory(): short of memory, the system may kill the engine next, with no save
     AndroidServiceSetup::setSaveHandler(&engine, [&engine] {
@@ -122,6 +129,7 @@ int main(int argc, char* argv[])
         return 1;
     }
     qInfo("engine listening on %s", qPrintable(socketPath));
+    engineMark("host.listening");
     // The first QSslSocket loads Qt's TLS backend and OpenSSL, 0.1 s and more on Android: loaded here while the player
     // picks a profile, not by that profile's connection after their tap
     std::thread tlsLoad([] {

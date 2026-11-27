@@ -1,0 +1,249 @@
+Measure only: CLOCK_BOOTTIME stamps through a profile's start
+
+Never merged: the perf-engine-measure branch of Mudlet/android logs these to break down the time from the tap
+to the first game line.
+
+Upstream: none (measure only)
+
+diff --git a/src/Host.cpp b/src/Host.cpp
+index 71d60ac5c..318c4a9f2 100644
+--- a/src/Host.cpp
++++ b/src/Host.cpp
+@@ -24,6 +24,7 @@
+ 
+ 
+ #include "Host.h"
++#include "StartMark.h"
+ 
+ #include "discord.h"
+ #include "MudletApp.h"
+@@ -902,8 +903,11 @@ void Host::startProfileScripts()
+     // This uses the external LuaGlobal.lua file to load all the other external
+     // lua files, including the condenseMapLoad() function needed by the
+     // TMap::audit() method:
++    startMark("scripts.loadGlobalBegin");
+     mLuaInterpreter.loadGlobal();
++    startMark("scripts.loadGlobalEnd");
+     hideMudletsVariables();
++    startMark("scripts.varsHidden");
+     mAnnouncedMainWindowInfo = mainWindowInfo();
+ 
+     //do modules here
+@@ -934,7 +938,9 @@ void Host::startProfileScripts()
+     // This will build all the scripts in the collection of script items (but
+     // not triggers/aliases/etc) - presumably so that the event handlers
+     // are ready for use.
++    startMark("scripts.modulesBefore");
+     getScriptUnit()->compileAll(true);
++    startMark("scripts.compiled");
+     reportScriptsThatFailedToLoad();
+     updateAnsi16ColorsInTable();
+     updateExtendedAnsiColorsInTable();
+@@ -969,9 +975,11 @@ void Host::loadMapAndConnect(const bool connect)
+     mDisplayFontCheckReached = true;
+     substituteMissingDisplayFont();
+ 
++    startMark("map.fontChecked");
+     // Now load the default (latest stored) map file:
+     loadMap();
+     mLoadedMap = true;
++    startMark("map.loaded");
+ 
+     //NOTE: this is a potential problem if users connect by hand quickly
+     //      and one host has a slower response time as the other one, but
+diff --git a/src/HostManager.cpp b/src/HostManager.cpp
+index 9f632c43d..7b9e0433d 100644
+--- a/src/HostManager.cpp
++++ b/src/HostManager.cpp
+@@ -22,6 +22,8 @@
+  ***************************************************************************/
+ 
+ #include "HostManager.h"
++#include "StartMark.h"
++#include <QFileInfo>
+ 
+ #include "FontManager.h"
+ #include "Host.h"
+@@ -250,9 +252,11 @@ bool HostManager::addHost(const QString& hostname, const QString& port, const QS
+ 
+ Host* HostManager::openProfile(const QString& name, const bool connect, const std::function<void(Host*)>& beforeLoad, const std::function<void(Host*)>& afterLoad)
+ {
++    startMark("open.enter");
+     if (mGoingDown || !addHost(name, QString(), QString(), QString())) {
+         return nullptr;
+     }
++    startMark("open.hostMade");
+     ++mProfileLoadsInProgress;
+     const auto loadScope = qScopeGuard([this] {
+         --mProfileLoadsInProgress;
+@@ -264,7 +268,9 @@ Host* HostManager::openProfile(const QString& name, const bool connect, const st
+     if (beforeLoad) {
+         beforeLoad(pHost);
+     }
++    startMark("open.beforeLoad");
+     const bool firstLoad = pHost->loadProfileSave(QString());
++    startMark(firstLoad ? "open.xmlLoaded.new" : "open.xmlLoaded.saved");
+     // As the GUI's console takes it (mudlet::addConsoleForNewHost()), before any script reads it
+     pHost->applyConsoleBufferSize();
+     // Chosen as the GUI chooses them, from the address the load leaves, before a frontend's own goes over it
+@@ -273,12 +279,18 @@ Host* HostManager::openProfile(const QString& name, const bool connect, const st
+         afterLoad(pHost);
+     }
+     pHost->mIsProfileLoadingSequence = true;
++    startMark("open.afterLoad");
+     pHost->startProfileScripts();
++    startMark("open.scriptsStarted");
+     for (const QString& package : packages) {
+         pHost->installPackage(package, enums::PackageModuleType::Package);
++        startMark(qPrintable(qsl("pkg.%1").arg(QFileInfo(package).completeBaseName())));
+     }
++    startMark("open.packagesInstalled");
+     pHost->loadMapAndConnect(connect);
++    startMark("open.mapLoadedConnectAsked");
+     pHost->finishProfileLoad();
++    startMark("open.loadEventDone");
+     return pHost;
+ }
+ 
+diff --git a/src/StartMark.h b/src/StartMark.h
+new file mode 100644
+index 000000000..307f1d016
+--- /dev/null
++++ b/src/StartMark.h
+@@ -0,0 +1,13 @@
++#pragma once
++// Measure only (Mudlet/android's perf-engine-measure branch): a CLOCK_BOOTTIME stamp on the log, to line up with
++// SystemClock.elapsedRealtime() in the app's processes
++#include <QtGlobal>
++#include <ctime>
++
++inline void startMark(const char* what)
++{
++    timespec ts{};
++    clock_gettime(CLOCK_BOOTTIME, &ts);
++    const long long us = static_cast<long long>(ts.tv_sec) * 1000000 + ts.tv_nsec / 1000;
++    qInfo("MUDLET_T %s %lld.%03lld", what, us / 1000, us % 1000);
++}
+diff --git a/src/TLuaInterpreter.cpp b/src/TLuaInterpreter.cpp
+index fdde01c0f..19cd107fb 100644
+--- a/src/TLuaInterpreter.cpp
++++ b/src/TLuaInterpreter.cpp
+@@ -27,6 +27,7 @@
+ 
+ 
+ #include "TLuaInterpreter.h"
++#include "StartMark.h"
+ 
+ 
+ #include "FontManager.h"
+@@ -710,7 +711,9 @@ TLuaInterpreter::TLuaInterpreter(Host* pH, const QString& hostName, int id)
+     connect(mpFileSystemWatcher, &QFileSystemWatcher::fileChanged, this, &TLuaInterpreter::slot_pathChanged);
+     connect(mpFileSystemWatcher, &QFileSystemWatcher::directoryChanged, this, &TLuaInterpreter::slot_pathChanged);
+ 
++    startMark("lua.initGlobalsBegin");
+     initLuaGlobals();
++    startMark("lua.initGlobalsEnd");
+ 
+     purgeTimer.start(2s);
+ }
+@@ -8672,7 +8675,9 @@ void TLuaInterpreter::loadGlobal()
+     loadUtf8Filenames();
+ #endif
+ 
++    startMark("global.enter");
+     setupLanguageData();
++    startMark("global.languageData");
+ 
+     const QString executablePath{QCoreApplication::applicationDirPath()};
+     // Initialise the list of path and file names so that
+@@ -8740,7 +8745,9 @@ void TLuaInterpreter::loadGlobal()
+     const QString builtinLuaGlobal = builtinLuaFile(qsl("LuaGlobal.lua"));
+     if (QFileInfo::exists(builtinLuaGlobal)) {
+         mPossiblePaths.prepend(builtinLuaGlobal);
++        startMark("global.builtinFound");
+         const QString unpackedLuaGlobal = unpackedBuiltinLuaGlobal();
++        startMark("global.unpackedChecked");
+         if (!unpackedLuaGlobal.isEmpty()) {
+             mPossiblePaths.prepend(unpackedLuaGlobal);
+         }
+@@ -8749,7 +8756,9 @@ void TLuaInterpreter::loadGlobal()
+     QStringList failedMessages{};
+     const QString cacheLocation = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+     const QString bytecodeCachePathFileName = cacheLocation.isEmpty() ? QString() : qsl("%1/lua-bytecode.dat").arg(cacheLocation);
++    startMark("global.cacheReadBegin");
+     LuaBytecodeCache bytecodeCache = readLuaBytecodeCache(bytecodeCachePathFileName);
++    startMark(bytecodeCache.entries.isEmpty() ? "global.cacheRead.empty" : "global.cacheRead.full");
+ 
+     // uncomment the following to enable some debugging texts in the LuaGlobal.lua script:
+     // luaL_dostring(pGlobalLua, qsl("debugLoading = true").toUtf8().constData());
+@@ -8817,18 +8826,23 @@ void TLuaInterpreter::loadGlobal()
+             lua_pushvalue(pGlobalLua, -1);
+             lua_insert(pGlobalLua, -3);
+             const int loaderIndex = lua_gettop(pGlobalLua) - 2;
++            startMark("global.runBegin");
+             error = lua_pcall(pGlobalLua, 1, 0, 0);
++            startMark("global.runEnd");
+             // Leaves the loader nothing to point at once bytecodeCache goes out of scope
+             lua_pushnil(pGlobalLua);
+             lua_setupvalue(pGlobalLua, loaderIndex, 1);
+             lua_remove(pGlobalLua, loaderIndex);
++            startMark(bytecodeCache.changed ? "global.cacheWriteBegin.changed" : "global.cacheWriteBegin.same");
+             writeLuaBytecodeCache(bytecodeCachePathFileName, bytecodeCache);
++            startMark("global.cacheWritten");
+             bytecodeCache.changed = false;
+         }
+         if (!error) {
+             // Last, as the globals table gets its metatable from Other.lua, which
+             // LuaGlobal.lua loads
+             installLazyGlobals();
++            startMark("global.lazyGlobals");
+             return;
+         }
+         qWarning() << "TLuaInterpreter::loadGlobal() loading " << pathFileName << " failed: " << lua_tostring(pGlobalLua, -1);
+diff --git a/src/ctelnet.cpp b/src/ctelnet.cpp
+index 4c5df56a3..0da9d81ec 100644
+--- a/src/ctelnet.cpp
++++ b/src/ctelnet.cpp
+@@ -28,6 +28,7 @@
+ 
+ 
+ #include "ctelnet.h"
++#include "StartMark.h"
+ 
+ 
+ #include "Host.h"
+@@ -761,6 +762,7 @@ void cTelnet::connectIt(const QString& address, int port)
+         finishDisconnection();
+     }
+ 
++    startMark("telnet.connectIt");
+     // For a socket the aborts below stop while it is still connecting, which
+     // reports no disconnection to clear it
+     mLookingUpHost = true;
+@@ -1404,6 +1406,7 @@ void cTelnet::abortLosingSocket(QSslSocket* losingSocket)
+ 
+ void cTelnet::slot_socketConnected()
+ {
++    startMark("telnet.connected");
+ #if defined(DEBUG_TELNET) && (DEBUG_TELNET & 4)
+     qDebug().noquote() << "cTelnet::slot_socketConnected() INFO - called.";
+ #endif
+@@ -1830,6 +1833,7 @@ void cTelnet::slot_socketSslError(const QList<QSslError>& errors)
+ // types of address - so we know which socket (or both) to try to connect.
+ void cTelnet::slot_socketHostFound(QHostInfo hostInfo)
+ {
++    startMark("telnet.hostFound");
+ #if defined(DEBUG_TELNET) && (DEBUG_TELNET & 4)
+     qDebug().noquote() << "cTelnet::slot_socketHostFound(QHostInfo) INFO - called.";
+ #endif
+@@ -6700,6 +6704,10 @@ void cTelnet::slot_processReplayChunk()
+ 
+ void cTelnet::slot_socketReadyToBeRead()
+ {
++    static bool firstRead = true;
++    if (std::exchange(firstRead, false)) {
++        startMark("telnet.firstData");
++    }
+ #if defined(DEBUG_TELNET) && (DEBUG_TELNET & 4)
+     qDebug().noquote() << "cTelnet::slot_socketReadyToBeRead() INFO - called.";
+ #endif

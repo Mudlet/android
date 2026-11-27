@@ -19,6 +19,7 @@ import org.mudlet.android.R
 import org.mudlet.android.data.PackageRepository
 import org.mudlet.android.data.Settings
 import org.mudlet.android.engine.EngineService
+import org.mudlet.android.engine.StartMark
 import org.mudlet.android.protocol.EngineLink
 import org.mudlet.android.protocol.EngineMessage
 import org.mudlet.android.protocol.MediaCache
@@ -1032,6 +1033,7 @@ class ProfileSession internal constructor(
 
     private fun addLines(newLines: List<UiLine>) {
         if (newLines.isEmpty()) return
+        if (linesAdded == 0L) StartMark.mark("ui.firstLines")
         linesAdded += newLines.size
         if (newLines.size >= MAX_LINES) {
             lines.clear()

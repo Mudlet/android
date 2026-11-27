@@ -142,7 +142,7 @@ index 000000000..307f1d016
 +    qInfo("MUDLET_T %s %lld.%03lld", what, us / 1000, us % 1000);
 +}
 diff --git a/src/TLuaInterpreter.cpp b/src/TLuaInterpreter.cpp
-index fdde01c0f..991d085e8 100644
+index f6f2a7d17..bcfa171f2 100644
 --- a/src/TLuaInterpreter.cpp
 +++ b/src/TLuaInterpreter.cpp
 @@ -27,6 +27,7 @@
@@ -153,7 +153,7 @@ index fdde01c0f..991d085e8 100644
  
  
  #include "FontManager.h"
-@@ -702,15 +703,18 @@ TLuaInterpreter::TLuaInterpreter(Host* pH, const QString& hostName, int id)
+@@ -722,15 +723,18 @@ TLuaInterpreter::TLuaInterpreter(Host* pH, const QString& hostName, int id)
  , hostName(hostName)
  , mHostID(id)
  , purgeTimer(this)
@@ -174,7 +174,7 @@ index fdde01c0f..991d085e8 100644
  
      purgeTimer.start(2s);
  }
-@@ -8672,7 +8676,9 @@ void TLuaInterpreter::loadGlobal()
+@@ -8706,7 +8710,9 @@ void TLuaInterpreter::loadGlobal()
      loadUtf8Filenames();
  #endif
  
@@ -184,17 +184,17 @@ index fdde01c0f..991d085e8 100644
  
      const QString executablePath{QCoreApplication::applicationDirPath()};
      // Initialise the list of path and file names so that
-@@ -8740,7 +8746,9 @@ void TLuaInterpreter::loadGlobal()
+@@ -8774,7 +8780,9 @@ void TLuaInterpreter::loadGlobal()
      const QString builtinLuaGlobal = builtinLuaFile(qsl("LuaGlobal.lua"));
      if (QFileInfo::exists(builtinLuaGlobal)) {
          mPossiblePaths.prepend(builtinLuaGlobal);
 +        startMark("global.builtinFound");
-         const QString unpackedLuaGlobal = unpackedBuiltinLuaGlobal();
+         const QString unpackedLuaGlobal = unpackedBuiltinLuaGlobal(QStandardPaths::writableLocation(QStandardPaths::CacheLocation));
 +        startMark("global.unpackedChecked");
          if (!unpackedLuaGlobal.isEmpty()) {
+             markBuiltinLuaCopyInUse(QFileInfo(unpackedLuaGlobal).absolutePath());
              mPossiblePaths.prepend(unpackedLuaGlobal);
-         }
-@@ -8749,7 +8757,9 @@ void TLuaInterpreter::loadGlobal()
+@@ -8784,7 +8792,9 @@ void TLuaInterpreter::loadGlobal()
      QStringList failedMessages{};
      const QString cacheLocation = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
      const QString bytecodeCachePathFileName = cacheLocation.isEmpty() ? QString() : qsl("%1/lua-bytecode.dat").arg(cacheLocation);
@@ -204,7 +204,7 @@ index fdde01c0f..991d085e8 100644
  
      // uncomment the following to enable some debugging texts in the LuaGlobal.lua script:
      // luaL_dostring(pGlobalLua, qsl("debugLoading = true").toUtf8().constData());
-@@ -8817,18 +8827,23 @@ void TLuaInterpreter::loadGlobal()
+@@ -8852,18 +8862,23 @@ void TLuaInterpreter::loadGlobal()
              lua_pushvalue(pGlobalLua, -1);
              lua_insert(pGlobalLua, -3);
              const int loaderIndex = lua_gettop(pGlobalLua) - 2;

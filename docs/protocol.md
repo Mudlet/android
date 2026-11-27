@@ -895,20 +895,23 @@ The engine keeps the last 2000 lines in a ring buffer, its current tail, and the
 a UI says `hello`, the engine sends, in this order:
 
 1. its own `hello`;
-2. every status, each as a `status` without `re`, in no particular order, then `hiddenInput`, `history` and
-   `errorConsole` with `full` true, and `linksChanged` with empty `ids` if a change of a link went to no UI since the
-   last attach, then `mainArea` if the engine has sent one, `windows` with `full` true, a `label` for each label, a
-   `textBox` for each text box, `map` while the mapper shows, `mapDownload` if the engine has sent one, `buttonBars`, `commands`, `keyBindings`, and a `windowText` of each
-   console's last 300 rows;
-3. `clear`, if the console was emptied after the line the UI says it has, or ever, for a UI that has none;
-4. `gap`, if lines the UI does not have already fell out of the ring;
-5. the lines in the ring after the UI's, each with `replay` true. That is all of them unless the UI's `instance`
+2. `clear`, if the console was emptied after the line the UI says it has, or ever, for a UI that has none;
+3. `gap`, if lines the UI does not have already fell out of the ring;
+4. the lines in the ring after the UI's, each with `replay` true. That is all of them unless the UI's `instance`
    matches the engine's, in which case it is those after `lastSeq`, clamped to the lines this instance sent. None
    from before a clear is sent;
    then, for a UI whose `instance` matches, a `lineUpdated` for each line up to `lastSeq` that is still in the ring
    and that a script changed or deleted after it was first sent;
-6. `tail`, possibly empty;
+5. `tail`, possibly empty;
+6. every status, each as a `status` without `re`, in no particular order, then `hiddenInput`, `history` and
+   `errorConsole` with `full` true, and `linksChanged` with empty `ids` if a change of a link went to no UI since the
+   last attach, then `mainArea` if the engine has sent one, `windows` with `full` true, a `label` for each label, a
+   `textBox` for each text box, `map` while the mapper shows, `mapDownload` if the engine has sent one, `buttonBars`, `commands`, `keyBindings`, and a `windowText` of each
+   console's last 300 rows;
 7. `synced`.
+
+The lines go before the state as the UI reads its frames in order, and a profile's labels and windows can take it
+longer to read than its lines.
 
 The app's `EngineLink` keeps `instance` and `lastSeq` for the life of the UI process:
 

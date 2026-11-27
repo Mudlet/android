@@ -480,10 +480,6 @@ IFrontend* ControlBridge::profileOpened(const QString& name, IEngine* session, P
         setFront(mOpen.size() - 1);
     }
     sendOpenProfiles(true);
-    if (mClient && !measureBase()) {
-        mClient->flush();
-        engineMark("control.openProfilesFlushed");
-    }
     mNotificationTimer.start();
     return bridge;
 }

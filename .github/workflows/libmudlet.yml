@@ -329,6 +329,21 @@ jobs:
       - name: List the APK's ART profile (measure only)
         run: unzip -l app/build/outputs/apk/debug/app-debug.apk | grep -i -e dexopt -e baseline || echo "no ART profile"
 
+      - name: Build the APK again with the app's own Baseline Profile (measure only)
+        run: |
+          if [ -f native/tests/measure-baseline-prof.txt ]; then
+            mkdir -p app/build/outputs/apk/nobaseline
+            mv app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/nobaseline/app-debug.apk
+            cp native/tests/measure-baseline-prof.txt app/src/main/baseline-prof.txt
+            LIBMUDLET_BUILD_DIR="$GITHUB_WORKSPACE/build" scripts/build-apk.sh
+            for apk in app/build/outputs/apk/nobaseline/app-debug.apk app/build/outputs/apk/debug/app-debug.apk; do
+              echo "$apk"; unzip -l "$apk" | grep -i dexopt
+            done
+          else
+            mkdir -p app/build/outputs/apk/nobaseline
+            cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/nobaseline/app-debug.apk
+          fi
+
       - name: Check the APK
         uses: ./.github/actions/check-apk
         with:
@@ -345,6 +360,7 @@ jobs:
           name: emulator-apks${{ !inputs.lua-fortify-fix && '-without-lua-fortify-fix' || '' }}
           path: |
             app/build/outputs/apk/debug/app-debug.apk
+            app/build/outputs/apk/nobaseline/app-debug.apk
             app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
             engine-service/build/outputs/apk/androidTest/debug/engine-service-debug-androidTest.apk
             native/build-android-x86_64-mudlet/enginehost/libengine_x86_64.so
@@ -413,6 +429,7 @@ jobs:
             python3 native/tests/android_smoke.py --apk app/build/outputs/apk/debug/app-debug.apk --out device-tests
             --symbols native/build-android-x86_64-mudlet/enginehost; smoke=$?;
             python3 native/tests/android_instrumented.py --app app/build/outputs/apk/debug/app-debug.apk
+            $(test -f native/tests/measure-baseline-prof.txt && echo --app-a app/build/outputs/apk/nobaseline/app-debug.apk)
             --app-tests app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
             --engine-tests engine-service/build/outputs/apk/androidTest/debug/engine-service-debug-androidTest.apk
             --out device-tests --symbols native/build-android-x86_64-mudlet/enginehost && exit $smoke

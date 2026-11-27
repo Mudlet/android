@@ -325,6 +325,24 @@ def dump_profile():
         print(f"PROFILEB64 {api} {i + 1}/{len(chunks)} {chunk}", flush=True)
 
 
+def profile_ab(apks, rounds=4):
+    """Cold starts of each APK compiled as Macrobenchmark's CompilationMode.Partial does: profileinstaller writes the
+    APK's own baseline.prof, then speed-profile; the APKs alternate, rounds times, on the same emulator."""
+    for r in range(rounds):
+        for label, apk in apks:
+            adb("uninstall", APP, check=False)
+            install(apk)
+            shell(f"am start -W -n {ACTIVITY}", check=False)
+            time.sleep(5)
+            shell(f"am force-stop {APP}", check=False)
+            out = shell("am broadcast -a androidx.profileinstaller.action.INSTALL_PROFILE "
+                        f"-n {APP}/androidx.profileinstaller.ProfileInstallReceiver", check=False)
+            log(f"AB {label} round {r}: broadcast {' '.join(out.split())[:160]}")
+            log(f"AB {label} round {r}: {' '.join(shell(f'cmd package compile -f -m speed-profile {APP}', check=False).split())}")
+            log(f"load: {shell('cat /proc/loadavg', check=False).strip()}")
+            cold_starts(f"ab-{label}")
+
+
 def run(dev, args):
     for package in (APP_TESTS, APP, ENGINE_TESTS):
         adb("uninstall", package, check=False)
@@ -333,6 +351,9 @@ def run(dev, args):
         shell(command, check=False)
     dev.start_logcat()
     failures = []
+    if args.app_a:
+        profile_ab([("A", args.app_a), ("B", args.app)])
+        return failures
     install(args.app)
     install(args.app_tests)
     seen = set()
@@ -356,6 +377,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--app", required=True)
     parser.add_argument("--app-tests", required=True)
+    parser.add_argument("--app-a", help="the same app without its own Baseline Profile: only an A/B of cold starts")
     parser.add_argument("--engine-tests", required=True)
     parser.add_argument("--out", required=True)
     parser.add_argument("--symbols", help="directory with the unstripped engine library, for ndk-stack")

@@ -988,7 +988,7 @@ class ProfileSession internal constructor(
     private fun scheduleFlush() {
         if (flushPosted) return
         flushPosted = true
-        if (linesAdded == 0L && !StartMark.base) main.post(::flush) else main.postDelayed(::flush, 16)
+        main.postDelayed(::flush, 16)
     }
 
     private fun flush() {

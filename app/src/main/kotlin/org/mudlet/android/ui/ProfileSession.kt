@@ -284,6 +284,7 @@ class ProfileSession internal constructor(
     private var pendingStatus = HashMap<String, String>()
     private var pendingStatusReset = false
     private var flushPosted = false
+    private var lineSinceAttach = false
 
     init {
         val p = prefs()
@@ -672,6 +673,7 @@ class ProfileSession internal constructor(
                 return
             }
             replaying = true
+            synchronized(pendingLock) { lineSinceAttach = false }
             // Read here, as the link has it now: what is sent before the post runs goes out on this connection
             val connection = link?.connection ?: 0
             // The engine forgets nothing across a reattach, but a new engine instance needs the size again
@@ -711,7 +713,10 @@ class ProfileSession internal constructor(
                 is EngineMessage.Line -> synchronized(pendingLock) {
                     pendingLines.add(UiLine(message.text, message.runs, message.prompt, time = message.time, seq = message.seq))
                     if (!message.replay) pendingNews.add(message.text)
-                    scheduleFlush()
+                    // The first after an attach at once, ahead of the state the engine sends after the lines, whose
+                    // posts would otherwise run first (docs/protocol.md, "Attaching")
+                    if (lineSinceAttach) scheduleFlush() else main.post(::flush)
+                    lineSinceAttach = true
                 }
 
                 // Not news: the Announcer reads only lines that are new

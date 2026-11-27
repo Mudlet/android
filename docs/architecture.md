@@ -1405,6 +1405,7 @@ so `androiddeployqt` deploys them and their plugins as usual. Upstream now cover
 `mudlet_core` carries Mudlet's Lua files and unpacks them into the app's cache. It also carries
 the seven Lua C modules (`USE_BUILTIN_MUDLET_LUA`, `USE_BUNDLED_LUA_MODULES`). QtKeychain
 keeps the profiles' passwords in the KeyStore.
+The engine has the Lua files read, and unpacked after an update, while no profile is open (`main.cpp`).
 
 **What the engine maps:**
 

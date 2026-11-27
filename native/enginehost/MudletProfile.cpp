@@ -16,6 +16,7 @@
 #include <QPainter>
 #include <QPixmap>
 #include <QRegularExpression>
+#include <QSslConfiguration>
 #include <QUrl>
 
 #include <algorithm>
@@ -726,6 +727,7 @@ void MudletProfile::connectSession()
     });
     connect(session, &THeadlessSession::profileLoaded, this, [this](const QString& profile) {
         engineMark("profile.loaded");
+        qInfo("MUDLET_CERTS main %lld", qlonglong(QSslConfiguration::defaultConfiguration().caCertificates().size()));
         mEngine.mProfiles.markOpened(profile);
         mEngine.mHost->profileState(mProfile, IEngineHost::ProfileState::loaded);
         mFrontend->status(QStringLiteral("profile"), QStringLiteral("%1 loaded").arg(profile));

@@ -13,21 +13,17 @@ internal class OutputWords(private val window: Int) {
     private val words = HashMap<String, Word>()
     private var seen = 0L
 
-    fun add(line: String) {
-        for (match in WORD.findAll(line)) {
-            val display = match.value.trim('\'', '-')
-            if (display.length < MIN_LENGTH || display.all(Char::isDigit)) continue
-            val key = display.lowercase()
-            val word = words.getOrPut(key) { Word(display, 0, 0) }
-            word.display = display
-            word.count++
-            word.lastSeen = ++seen
-            order.addLast(key)
-            if (order.size > window) {
-                val old = order.removeFirst()
-                val evicted = words.getValue(old)
-                if (--evicted.count == 0) words.remove(old)
-            }
+    fun add(line: String) = forEachOutputWord(line) { display ->
+        val key = display.lowercase()
+        val word = words.getOrPut(key) { Word(display, 0, 0) }
+        word.display = display
+        word.count++
+        word.lastSeen = ++seen
+        order.addLast(key)
+        if (order.size > window) {
+            val old = order.removeFirst()
+            val evicted = words.getValue(old)
+            if (--evicted.count == 0) words.remove(old)
         }
     }
 
@@ -51,8 +47,30 @@ internal class OutputWords(private val window: Int) {
     }
 
     private companion object {
-        val WORD = Regex("[\\p{L}\\p{N}_'-]+")
-        const val MIN_LENGTH = 3
         const val MAX_COMPLETIONS = 8
+    }
+}
+
+private const val MIN_WORD_LENGTH = 3
+
+/**
+ * Each run of letters, digits, `_`, `'` and `-` in [line], as the regular expression `[\p{L}\p{N}_'-]+` finds
+ * them, without its leading and trailing `'` and `-`, that is at least [MIN_WORD_LENGTH] long and not all digits.
+ */
+internal fun forEachOutputWord(line: String, action: (String) -> Unit) {
+    var i = 0
+    while (i < line.length) {
+        var start = i
+        i = line.codePointRunEnd(i, ::isWordCodePoint)
+        if (i == start) {
+            i += Character.charCount(line.codePointAt(i))
+            continue
+        }
+        var end = i
+        while (start < end && (line[start] == '\'' || line[start] == '-')) start++
+        while (end > start && (line[end - 1] == '\'' || line[end - 1] == '-')) end--
+        if (end - start < MIN_WORD_LENGTH) continue
+        val display = line.substring(start, end)
+        if (!display.all(Char::isDigit)) action(display)
     }
 }

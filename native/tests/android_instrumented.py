@@ -351,8 +351,16 @@ def run(dev, args):
         shell(command, check=False)
     dev.start_logcat()
     failures = []
-    if args.app_a:
-        profile_ab([("A", args.app_a), ("B", args.app)])
+    if args.ab:
+        apks = args.ab.split(",")
+        profile_ab([(os.path.basename(os.path.dirname(apk)).removeprefix("ab-"), apk) for apk in apks], rounds=3)
+        dumped = subprocess.run(["bash", "native/tests/measure-dump-baseline-profile.sh"], capture_output=True, text=True,
+                                env={**os.environ, "OUT": "/tmp/dumped-baseline-prof.txt"})
+        log(f"DUMPSCRIPT rc={dumped.returncode} {dumped.stdout.strip()} {dumped.stderr.strip()[:300]}")
+        if dumped.returncode == 0:
+            lines = open("/tmp/dumped-baseline-prof.txt").read().splitlines()
+            log(f"DUMPSCRIPT {len(lines)} lines, {sum(1 for x in lines if '->' in x)} wildcards, "
+                f"{sum(1 for x in lines if 'org/mudlet/' in x)} org/mudlet; first {lines[:2]}")
         return failures
     install(args.app)
     install(args.app_tests)
@@ -377,7 +385,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--app", required=True)
     parser.add_argument("--app-tests", required=True)
-    parser.add_argument("--app-a", help="the same app without its own Baseline Profile: only an A/B of cold starts")
+    parser.add_argument("--ab", help="APKs, comma-separated, each in a folder ab-<label>: only an A/B of cold starts")
     parser.add_argument("--engine-tests", required=True)
     parser.add_argument("--out", required=True)
     parser.add_argument("--symbols", help="directory with the unstripped engine library, for ndk-stack")

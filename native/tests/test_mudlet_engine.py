@@ -120,7 +120,7 @@ def main():
     try:
         for checks in (engine_basics, tls_checks, profile_requests):
             checks(port)
-        for checks in (bridge_refusals, input_line, console, screen_and_main_window, start_sizes, main_window_info, starter_ui_welcome,
+        for checks in (bridge_refusals, builtin_lua_ready, input_line, console, screen_and_main_window, start_sizes, main_window_info, starter_ui_welcome,
                        links, app_state, script_windows, window_links,
                        script_labels, label_links, script_text_boxes, frame_tabs, button_bars, map_view, app_map,
                        map_layout, map_info, map_moves, map_rooms, map_edits, map_download, map_files, profile_settings, script_items, variables, sounds,
@@ -571,6 +571,37 @@ def mudlet_item(profile, item):
         data = f.read()
     (size,) = struct.unpack(">I", data[:4])
     return "" if size == 0xFFFFFFFF else data[4:4 + size].decode("utf-16-be")
+
+
+def builtin_lua_ready():
+    """Mudlet's Lua files unpacked from the library while no profile is open (main.cpp), and a profile that opens at
+    once, as they are unpacked, loading them from the same one copy."""
+    profile = "Lua Ready Test"
+    for opened_at_once in (False, True):
+        cache = tempfile.mkdtemp(prefix="cache-", dir=TMP)
+        proc, c = start_engine(profile, {"XDG_CACHE_HOME": cache})
+
+        def copies(pattern="mudlet-lua-*/LuaGlobal.lua"):
+            return glob.glob(os.path.join(cache, "**", pattern), recursive=True)
+
+        seen = []
+        c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+        if opened_at_once:
+            c.ask({"t": "saveProfile", "name": profile, "host": "127.0.0.1", "port": 23, "tls": False, "login": "",
+                   "autoReconnect": False}, collect=seen)
+            c.send({"t": "openProfile", "name": profile, "connect": False})
+            wait_status(c, "profile", lambda v: v == f"{profile} loaded", seen)
+            c.send({"t": "runLua", "id": 1, "code": "return luaGlobalPath"})
+            path = wait_status(c, "luaResult", lambda v: True, seen)["value"]
+            check(len(copies()) == 1 and path == os.path.dirname(copies()[0]) and not copies("unpacking-mudlet-lua-*"),
+                  f"a profile opened as they are unpacked loads the one copy: {path}, {copies('*mudlet-lua-*')}")
+        else:
+            deadline = time.monotonic() + 10
+            while not copies() and time.monotonic() < deadline:
+                time.sleep(0.05)
+            check(len(copies()) == 1, f"Mudlet's Lua files are unpacked while no profile is open: {copies()}")
+        code = stop_engine(proc)
+        check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 
 
 def profile_requests(port):

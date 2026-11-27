@@ -326,6 +326,9 @@ jobs:
           LIBMUDLET_BUILD_DIR="$GITHUB_WORKSPACE/build" scripts/build-apk.sh
           :app:assembleDebugAndroidTest :engine-service:assembleDebugAndroidTest
 
+      - name: List the APK's ART profile (measure only)
+        run: unzip -l app/build/outputs/apk/debug/app-debug.apk | grep -i -e dexopt -e baseline || echo "no ART profile"
+
       - name: Check the APK
         uses: ./.github/actions/check-apk
         with:

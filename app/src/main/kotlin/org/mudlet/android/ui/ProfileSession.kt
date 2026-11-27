@@ -285,7 +285,6 @@ class ProfileSession internal constructor(
     private var pendingStatus = HashMap<String, String>()
     private var pendingStatusReset = false
     private var flushPosted = false
-    private var lineSinceAttach = false
     private var lineReadMarked = false
     private val frameStats = LinkedHashMap<String, LongArray>()
     private var frameReturnedNs = 0L
@@ -673,7 +672,6 @@ class ProfileSession internal constructor(
         override fun onAttached(hello: EngineMessage.Hello, sameInstance: Boolean) {
             StartMark.mark("ui.profileAttached")
             frameStats.clear()
-            synchronized(pendingLock) { lineSinceAttach = false }
             frameReturnedNs = System.nanoTime()
             misdirected = hello.profile != null && hello.profile != name
             if (misdirected) {
@@ -744,12 +742,7 @@ class ProfileSession internal constructor(
                 is EngineMessage.Line -> synchronized(pendingLock) {
                     pendingLines.add(UiLine(message.text, message.runs, message.prompt, time = message.time, seq = message.seq))
                     if (!message.replay) pendingNews.add(message.text)
-                    if (lineSinceAttach || StartMark.base) {
-                        scheduleFlush()
-                    } else {
-                        main.post(::flush)
-                    }
-                    lineSinceAttach = true
+                    scheduleFlush()
                 }
 
                 // Not news: the Announcer reads only lines that are new

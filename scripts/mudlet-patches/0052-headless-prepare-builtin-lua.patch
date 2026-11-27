@@ -40,7 +40,7 @@ index 962cb4d3a..3980003ab 100644
  which is why a desktop build leaves it off.
  
 diff --git a/src/TLuaInterpreter.cpp b/src/TLuaInterpreter.cpp
-index fdde01c0f..f6f2a7d17 100644
+index fdde01c0f..b01df1ed1 100644
 --- a/src/TLuaInterpreter.cpp
 +++ b/src/TLuaInterpreter.cpp
 @@ -73,6 +73,7 @@
@@ -118,7 +118,7 @@ index fdde01c0f..f6f2a7d17 100644
      removeOtherBuiltinLuaCopies(cacheLocation, folderName);
      return luaGlobal;
  }
-@@ -7498,6 +7518,20 @@ bool TLuaInterpreter::loadLuaModule(QQueue<QString>& resultMsgsQueue, const QStr
+@@ -7498,6 +7518,17 @@ bool TLuaInterpreter::loadLuaModule(QQueue<QString>& resultMsgsQueue, const QStr
      return true;
  }
  
@@ -127,9 +127,6 @@ index fdde01c0f..f6f2a7d17 100644
 +#if defined(INCLUDE_BUILTIN_MUDLET_LUA)
 +    Q_INIT_RESOURCE(mudlet_lua);
 +#endif
-+    if (!QFileInfo::exists(builtinLuaFile(qsl("LuaGlobal.lua")))) {
-+        return;
-+    }
 +    // Read on this thread, as Qt on Android keeps the folders it has looked up in a map it does not lock
 +    QThreadPool::globalInstance()->start([cacheLocation = QStandardPaths::writableLocation(QStandardPaths::CacheLocation)] {
 +        unpackedBuiltinLuaGlobal(cacheLocation);
@@ -139,7 +136,7 @@ index fdde01c0f..f6f2a7d17 100644
  void TLuaInterpreter::preloadModule(const QByteArray& name, lua_CFunction open)
  {
      if (name.isEmpty() || !open) {
-@@ -8740,8 +8774,9 @@ void TLuaInterpreter::loadGlobal()
+@@ -8740,8 +8771,9 @@ void TLuaInterpreter::loadGlobal()
      const QString builtinLuaGlobal = builtinLuaFile(qsl("LuaGlobal.lua"));
      if (QFileInfo::exists(builtinLuaGlobal)) {
          mPossiblePaths.prepend(builtinLuaGlobal);

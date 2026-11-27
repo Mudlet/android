@@ -1,0 +1,194 @@
+Let an app that embeds Mudlet get the built-in Lua files ready before a profile opens
+
+With USE_BUILTIN_MUDLET_LUA, the first profile to load in a run reads every built-in Lua file for its hash, and on the
+first run after an install or an update also unpacks them to the cache folder. On a phone that is up to a few hundred
+milliseconds between the player's tap and the game's first line, while the app sat idle as they picked a profile.
+
+- THeadlessSession::prepareBuiltinLua() starts that work on a thread of Qt's pool. A profile that loads meanwhile
+  waits for it, behind a mutex in unpackedBuiltinLuaGlobal().
+- The cache folder is still looked up on the main thread, as Qt on Android keeps the folders it has looked up in a map
+  it does not lock.
+- The files' list and hash are read once a run, not on every profile's load.
+- The copy's in-use timer, a QTimer on QCoreApplication, is still started on the main thread, by the profile's load;
+  the pool's thread only stamps the copy's last-use file, inside the lock as before.
+- docs/headless.md says when to call it.
+
+Nothing a script or a game sees changes: the copy, its folder and luaGlobalPath are the same.
+
+Tested by Mudlet/android's native/tests/test_mudlet_engine.py (builtin_lua_ready: the copy is unpacked while no
+profile is open, and a profile opened as it is being unpacked loads from that one copy, with nothing left half
+unpacked).
+
+Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+Upstream: not opened yet
+
+diff --git a/docs/headless.md b/docs/headless.md
+index 962cb4d3a..3980003ab 100644
+--- a/docs/headless.md
++++ b/docs/headless.md
+@@ -1768,6 +1768,12 @@ the files are loaded straight from the library: `luaGlobalPath` is then `:/built
+ which only Qt can read, so Mudlet's own Lua messages stay in English unless the translations are found
+ on disk.
+ 
++The first profile to load in a run reads every file for the hash, and on the first run after an
++install unpacks them too, which can take a few hundred milliseconds on a phone. An app with time to
++spare before a profile opens, as while the player picks one, can have that done then, on a thread of
++Qt's pool, with `THeadlessSession::prepareBuiltinLua()`. A profile that starts to load meanwhile
++waits for it.
++
+ With the option on, a change to a file in `src/mudlet-lua/lua` takes a rebuild to reach a profile,
+ which is why a desktop build leaves it off.
+ 
+diff --git a/src/TLuaInterpreter.cpp b/src/TLuaInterpreter.cpp
+index fdde01c0f..b01df1ed1 100644
+--- a/src/TLuaInterpreter.cpp
++++ b/src/TLuaInterpreter.cpp
+@@ -73,6 +73,7 @@
+ #include <QJsonObject>
+ #include <QJsonParseError>
+ #include <QLockFile>
++#include <QMutex>
+ #include <QCryptographicHash>
+ #include <QDataStream>
+ #include <QDateTime>
+@@ -82,6 +83,7 @@
+ #include <QStringConverter>
+ #include <QTemporaryDir>
+ #include <QTemporaryFile>
++#include <QThreadPool>
+ #include <QTextStream>
+ #include <QFileInfo>
+ #include <QVector>
+@@ -355,6 +357,22 @@ QByteArray builtinLuaHash(const QStringList& files)
+     return hash.result().toHex();
+ }
+ 
++struct BuiltinLua
++{
++    QStringList files;
++    QByteArray hash;
++};
++
++// Once a run, as the files are in the program
++const BuiltinLua& builtinLua()
++{
++    static const BuiltinLua lua = [] {
++        const QStringList files = builtinLuaFiles();
++        return BuiltinLua{files, builtinLuaHash(files)};
++    }();
++    return lua;
++}
++
+ // By size as well as by name, as a copy cut short by a power loss still has every file
+ bool holdsBuiltinLuaFiles(const QString& folder, const QStringList& files)
+ {
+@@ -449,11 +467,13 @@ void removeOtherBuiltinLuaCopies(const QString& cacheLocation, const QString& fo
+ // Lua's io and dofile() cannot read a Qt resource, and loadTranslations() and scripts that use luaGlobalPath
+ // read with those, so the built-in copy is loaded from a folder it is unpacked to. Returns that folder's
+ // LuaGlobal.lua, or an empty string where it could not be made.
+-QString unpackedBuiltinLuaGlobal()
++QString unpackedBuiltinLuaGlobal(const QString& cacheLocation)
+ {
+-    const QString cacheLocation = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+-    const QStringList files = builtinLuaFiles();
+-    const QByteArray hash = builtinLuaHash(files);
++    // TLuaInterpreter::prepareBuiltinLua()'s thread may be unpacking as a profile loads
++    static QMutex oneThreadAtATime;
++    const QMutexLocker oneThread(&oneThreadAtATime);
++    const QStringList& files = builtinLua().files;
++    const QByteArray& hash = builtinLua().hash;
+     if (files.isEmpty() || hash.isEmpty()) {
+         return {};
+     }
+@@ -473,7 +493,7 @@ QString unpackedBuiltinLuaGlobal()
+         qWarning().noquote() << qsl("TLuaInterpreter: another Mudlet still holds %1, so the built-in Lua files are unpacked without it").arg(lock.fileName());
+     }
+     if (holdsBuiltinLuaFiles(folder, files)) {
+-        markBuiltinLuaCopyInUse(folder);
++        markBuiltinLuaCopyUsed(folder);
+         removeOtherBuiltinLuaCopies(cacheLocation, folderName);
+         return luaGlobal;
+     }
+@@ -502,7 +522,7 @@ QString unpackedBuiltinLuaGlobal()
+             return {};
+         }
+     }
+-    markBuiltinLuaCopyInUse(folder);
++    markBuiltinLuaCopyUsed(folder);
+     removeOtherBuiltinLuaCopies(cacheLocation, folderName);
+     return luaGlobal;
+ }
+@@ -7498,6 +7518,17 @@ bool TLuaInterpreter::loadLuaModule(QQueue<QString>& resultMsgsQueue, const QStr
+     return true;
+ }
+ 
++void TLuaInterpreter::prepareBuiltinLua()
++{
++#if defined(INCLUDE_BUILTIN_MUDLET_LUA)
++    Q_INIT_RESOURCE(mudlet_lua);
++#endif
++    // Read on this thread, as Qt on Android keeps the folders it has looked up in a map it does not lock
++    QThreadPool::globalInstance()->start([cacheLocation = QStandardPaths::writableLocation(QStandardPaths::CacheLocation)] {
++        unpackedBuiltinLuaGlobal(cacheLocation);
++    });
++}
++
+ void TLuaInterpreter::preloadModule(const QByteArray& name, lua_CFunction open)
+ {
+     if (name.isEmpty() || !open) {
+@@ -8740,8 +8771,9 @@ void TLuaInterpreter::loadGlobal()
+     const QString builtinLuaGlobal = builtinLuaFile(qsl("LuaGlobal.lua"));
+     if (QFileInfo::exists(builtinLuaGlobal)) {
+         mPossiblePaths.prepend(builtinLuaGlobal);
+-        const QString unpackedLuaGlobal = unpackedBuiltinLuaGlobal();
++        const QString unpackedLuaGlobal = unpackedBuiltinLuaGlobal(QStandardPaths::writableLocation(QStandardPaths::CacheLocation));
+         if (!unpackedLuaGlobal.isEmpty()) {
++            markBuiltinLuaCopyInUse(QFileInfo(unpackedLuaGlobal).absolutePath());
+             mPossiblePaths.prepend(unpackedLuaGlobal);
+         }
+     }
+diff --git a/src/TLuaInterpreter.h b/src/TLuaInterpreter.h
+index f7c9b8c5e..33546c91f 100644
+--- a/src/TLuaInterpreter.h
++++ b/src/TLuaInterpreter.h
+@@ -103,6 +103,8 @@ public:
+     // disk, in every Lua state made afterwards. The last one given for a name is the one found; one with
+     // no name or no function is refused.
+     static void preloadModule(const QByteArray& name, lua_CFunction open);
++    // See THeadlessSession::prepareBuiltinLua()
++    static void prepareBuiltinLua();
+     void abortAllDownloads();
+     void initIndenterGlobals();
+     lua_State* getLuaGlobalState();
+diff --git a/src/headless/THeadlessSession.cpp b/src/headless/THeadlessSession.cpp
+index 2bd921e16..b00248751 100644
+--- a/src/headless/THeadlessSession.cpp
++++ b/src/headless/THeadlessSession.cpp
+@@ -418,6 +418,11 @@ void THeadlessSession::preloadLuaModule(const QByteArray& name, int (*open)(lua_
+     TLuaInterpreter::preloadModule(name, open);
+ }
+ 
++void THeadlessSession::prepareBuiltinLua()
++{
++    TLuaInterpreter::prepareBuiltinLua();
++}
++
+ bool THeadlessSession::setDictionaryFolder(const QString& folder)
+ {
+     return MudletApp::setAppDictionaryFolder(folder);
+diff --git a/src/headless/THeadlessSession.h b/src/headless/THeadlessSession.h
+index a15bb8b73..5168661c8 100644
+--- a/src/headless/THeadlessSession.h
++++ b/src/headless/THeadlessSession.h
+@@ -178,6 +178,11 @@ public:
+     // profile opened or reset afterwards. Given again for a name, it replaces the earlier one; with no name or no
+     // function it is refused. docs/headless.md lists the modules Mudlet itself requires.
+     static void preloadLuaModule(const QByteArray& name, int (*open)(lua_State*));
++    // Starts getting the built-in Lua files ready (docs/headless.md) on a thread of Qt's pool, the work the first
++    // profile to load otherwise does: up to a few hundred milliseconds on a phone's first run after an install. For an
++    // app with time to spare before a profile opens, once the application's name is set; a profile that loads
++    // meanwhile waits for it.
++    static void prepareBuiltinLua();
+     // A real folder of <name>.aff/.dic Hunspell dictionaries the app carries, searched ahead of the system's and in place
+     // of Mudlet's bundled ones by every dictionary opened afterwards. Refused (false) for a :/ or assets:/ path, which
+     // Hunspell cannot read; empty forgets it.

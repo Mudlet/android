@@ -118,7 +118,7 @@ def main():
     port = fake_telnet.start_in_thread()
     checks = engine_basics
     try:
-        for checks in (engine_basics, tls_checks, profile_requests):
+        for checks in (engine_basics, tls_checks, profile_requests, profile_socket_while_loading):
             checks(port)
         for checks in (bridge_refusals, input_line, console, screen_and_main_window, start_sizes, main_window_info, starter_ui_welcome,
                        links, app_state, script_windows, window_links,
@@ -277,6 +277,10 @@ def engine_basics(port):
     check(len(replayed) == 2000 and all(m.get("replay") for m in replayed) and any(m["t"] == "gap" for m in msgs),
           f"a fresh UI is replayed the 2000-line ring and a gap: {len(replayed)} lines")
     check("FLOOD DONE" in texts_of(msgs)[-2:], f"ending with the last lines seen: {texts_of(msgs)[-2:]}")
+    kinds = [m["t"] for m in msgs]
+    state = min(kinds.index(k) for k in ("status", "history", "windows") if k in kinds)
+    check("status" in kinds and max(i for i, k in enumerate(kinds) if k in ("gap", "line", "tail")) < state,
+          f"the lines and the tail come before the state, as the UI reads its frames in order: {kinds[:3]}...{kinds[-12:]}")
     c.close()
     c = Client(SOCK, hello=False)
     c.send({"t": "hello", "v": PROTOCOL_VERSION, "client": "python-test", "instance": instance, "lastSeq": synced["seq"] - 3})
@@ -357,6 +361,44 @@ def expired_context():
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     ctx.load_cert_chain(cert, key)
     return ctx
+
+
+def profile_socket_while_loading(port):
+    """A UI hears of the profile it opens, with its socket, as the load begins rather than once it has ended, so it
+    attaches while the profile loads."""
+    profile = "Slow Load"
+    proc, c = start_engine(profile)
+    c.wait_for(lambda m: m["t"] == "synced")
+    c.close()
+    ctl = Client(SOCK, profile_sockets=True)
+    ctl.wait_for(lambda m: m["t"] == "synced")
+
+    def ask(msg):
+        return ctl.ask(msg, timeout=30, answers=("profiles", "openProfiles", "error"))
+
+    def open_as(state):
+        return lambda m: m["t"] == "openProfiles" and [(p["name"], p["state"]) for p in m["profiles"]] == [(profile, state)]
+
+    ask({"t": "saveProfile", **profile_checks.profile(profile, port)})
+    asked = time.monotonic()
+    ctl.send({"t": "openProfile", "name": profile, "connect": False})
+    starting = ctl.wait_for(open_as("starting"), timeout=30)
+    told = time.monotonic()
+    early = Client(starting["profiles"][0]["socket"])
+    ctl.wait_for(open_as("loaded"), timeout=30)
+    loaded = time.monotonic()
+    check(told - asked < (loaded - asked) / 2,
+          f"openProfiles tells of the profile and its socket as its load begins: {told - asked:.3f} s after openProfile, "
+          f"which loaded in {loaded - asked:.3f} s")
+    frames = []
+    early.wait_for(lambda m: m["t"] == "synced", timeout=30, collect=frames)
+    check(frames[0].get("profile") == profile, f"and a UI that attaches meanwhile is served once it has loaded: {frames[0]}")
+    early.close()
+    ask({"t": "closeProfile", "name": profile})
+    ctl.wait_for(lambda m: m["t"] == "openProfiles" and not m["profiles"], timeout=30)
+    ask({"t": "deleteProfile", "name": profile})
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 
 
 def tls_backend_loaded(pid):

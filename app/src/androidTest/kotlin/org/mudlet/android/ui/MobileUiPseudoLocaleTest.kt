@@ -84,7 +84,7 @@ class MobileUiPseudoLocaleTest(private val locale: String) {
         compose.waitForIdle()
         val listed = session.receive("packages")
         val pack = JSONObject().put("name", "Big GUI").put("title", "Big GUI").put("author", "").put("version", "1.0")
-            .put("description", "Gauges and a chat window around the console.").put("icon", "").put("mobile", false)
+            .put("description", "Gauges and a chat window.").put("icon", "").put("mobile", false)
         session.send(JSONObject().put("t", "packages").put("packages", JSONArray().put(pack)).put("re", listed.get("id")))
         waitFor(hasText(string(R.string.packages_ui_show_anyway)))
         assertTextFits("a package made for larger screens")

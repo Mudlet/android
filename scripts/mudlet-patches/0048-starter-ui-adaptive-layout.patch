@@ -17,7 +17,7 @@ Tested by UI_spec.lua (the shapes, the bottom dock with the map and chat window 
 moved dock left alone, two bars to a row, and the declaration while shown).
 
 Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
-Upstream: not opened yet
+Upstream: Mudlet/Mudlet#13023
 
 diff --git a/src/mudlet-lua/tests/UI_spec.lua b/src/mudlet-lua/tests/UI_spec.lua
 index 79f5db4..1ab96c9 100644

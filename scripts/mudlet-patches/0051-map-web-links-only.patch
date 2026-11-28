@@ -17,7 +17,7 @@ address), which Mudlet/android's CI does not build, and by Mudlet/android's nati
 the address, and one with its scheme in capitals is).
 
 Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
-Upstream: not opened yet
+Upstream: Mudlet/Mudlet#13022
 
 diff --git a/src/Host.cpp b/src/Host.cpp
 index e1ff57d..a504785 100644

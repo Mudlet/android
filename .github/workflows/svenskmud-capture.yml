@@ -13,7 +13,7 @@ jobs:
       - name: Capture what svenskmud.com sends on connect (no login)
         run: |
           mkdir -p capture
-          python3 -I .github/capture/svenskmud_capture.py svenskmud.com capture
+          python3 -I .github/capture/website_sample.py
       - uses: actions/upload-artifact@v7
         if: always()
         with:

@@ -181,6 +181,7 @@ private fun ProfileArchive.Refusal.text() = when (this) {
     ProfileArchive.Refusal.NOT_A_ZIP -> R.string.profile_import_not_a_zip
     ProfileArchive.Refusal.UNREADABLE_NAME -> R.string.profile_import_unreadable_name
     ProfileArchive.Refusal.NOT_ONE_FOLDER -> R.string.profile_import_not_one_folder
+    ProfileArchive.Refusal.SEVERAL_FOLDERS -> R.string.profile_import_several_folders
     ProfileArchive.Refusal.UNSAFE_PATH -> R.string.profile_import_unsafe_path
     ProfileArchive.Refusal.NO_SAVE -> R.string.profile_import_no_save
     ProfileArchive.Refusal.TOO_LARGE -> R.string.profile_import_too_large

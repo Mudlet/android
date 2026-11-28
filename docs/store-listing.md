@@ -343,6 +343,8 @@ written only where they pick through Android's file picker, with no storage perm
 files left out (`ProfileArchive.SECRETS`); nothing is sent to the developer, so it is not data collected. Import
 (`ProfileImport.kt`) reads only the file the player picks, through the same picker, or the one they open with Mudlet
 or share with it from another app, and leaves those files out too.
+Desktop's credential store and GMCP sign-in record, which a desktop profile's folder holds when its keychain is off
+(`encryption_key`, `passwords/`, `reconnect`), are left out both ways as well.
 
 **Deleting data.** Uninstalling the app, or Settings, Apps, Mudlet, Storage, "Clear storage", deletes everything it
 kept on the device; a backup Android made is in the user's Google account, where they delete it. No copy reaches the

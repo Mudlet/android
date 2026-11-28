@@ -141,6 +141,7 @@ internal fun PackagesScreen(packages: PackagesClient, repository: PackageReposit
         snackbarHost = { SnackbarHost(host) },
     ) { padding ->
         val listed = packages.packages
+        val undeclared = remember(windows.state) { windows.state.undeclaredUi }
         val updates = repository.updates(listed)
         LazyColumn(Modifier.fillMaxSize().padding(padding).testTag(PACKAGES_TAG), horizontalAlignment = Alignment.CenterHorizontally) {
             item(key = "search") { SearchField(query) { query = it } }
@@ -162,7 +163,6 @@ internal fun PackagesScreen(packages: PackagesClient, repository: PackageReposit
                     else -> {
                         val found = listed.filter { PackageRepository.found(query, it.name, it.title, it.description, it.author) }
                         if (found.isEmpty()) item { Note(stringResource(R.string.packages_no_match)) }
-                        val undeclared = remember(windows.state) { windows.state.undeclaredUi }
                         items(found, key = { "installed:${it.name}" }) { item ->
                             // Only for a package whose interface is left out now, or that the player already shows
                             val shown = item.name in windows.shownAnyway

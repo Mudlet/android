@@ -21,7 +21,6 @@
   <string name="settings_movement_pad_side_keywords">Linkshänder, Rechtshänder, Hand, Daumen, Rand, gehen</string>
   <string name="settings_movement_pad_left">Links</string>
   <string name="settings_movement_pad_right">Rechts</string>
-  <string name="movement_north">Nach Norden gehen</string>
   <string name="movement_northeast">Nach Nordosten gehen</string>
   <string name="movement_east">Nach Osten gehen</string>
   <string name="movement_southeast">Nach Südosten gehen</string>

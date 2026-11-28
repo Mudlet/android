@@ -115,7 +115,7 @@ internal class MapperDirections(
          */
         fun wordFor(way: String, configs: List<LuaVariable>?, langDirs: List<LuaVariable>?): String {
             val translating = configs.orEmpty().any { it.key == USE_TRANSLATION && it.type == VariableType.BOOLEAN && it.value == "true" }
-            if (!translating) return way
+            if (!translating && langDirs == null) return way
             val word = langDirs.orEmpty().firstOrNull { it.key == VariableKey(way, VariableType.STRING) } ?: return way
             return word.value.takeIf { word.type == VariableType.STRING && !word.cut && it.isNotBlank() } ?: way
         }

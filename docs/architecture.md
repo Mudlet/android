@@ -1388,6 +1388,9 @@ And the profile's console buffer size given to a main console with no window, an
 And the most lines a console keeps, named by the app from the device in place of Mudlet's estimate from the machine's
 memory (`THeadlessSession::setMaxConsoleBufferSize()`, `0041-headless-max-console-buffer-size.patch`; see "The most
 lines a game keeps comes from the phone" in [`divergences.md`](divergences.md)).
+And the name the game is told the app goes by, `Mudlet-Android`, in capitals in TTYPE and NEW-ENVIRON as the desktop's
+(`THeadlessSession::setClientName()`, `0053-client-name.patch`; see "The name the game is told" in
+[`divergences.md`](divergences.md)).
 And the Lua variables, one table at a time, as the desktop editor's Variables view lists them (`variables()`,
 `0034-headless-variables.patch`; see "Reading the Lua variables" in [`protocol.md`](protocol.md)).
 And a replay file played as the GUI's replay button plays it (`playReplay()`, `0037-headless-play-replay.patch`).
@@ -1546,6 +1549,8 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
   size and the game is told the console's columns and rows (below 40 as 40), not that size's grid, also after a new
   main window's size; given both before the profile loads, the same for `getMainWindowSize()` and the game; and with
   a main window's size the loading profile refuses, `setScreenSize` sizing the main window and reaching the game;
+- the name the game is told, `MUDLET-ANDROID` in TTYPE and NEW-ENVIRON and `Mudlet-Android` in GMCP and MXP, and in MSDP
+  and ATCP once a script turns MSDP on and GMCP off;
 - the sizes given before a profile opens, on its own socket or on the control socket: its scripts read them from their
   first line, so a Geyser `MiniConsole` with `autoWrap` that echoes as the profile loads wraps at the console's
   columns; the control socket refusing a size as a profile's socket does, and leaving an open profile its own;

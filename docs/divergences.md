@@ -14,6 +14,16 @@ Mudlet/Mudlet#12962; `docs/protocol.md`, `setScreenSize`). The desktop tells the
 the console Mudlet draws. Telling the game that grid on a phone would make it wrap lines for a console the player does
 not see, while the layout scripts made for their window size would break if that size followed the phone's console.
 
+## The name the game is told
+
+The game is told the app is `Mudlet-Android`, in the desktop's case: `MUDLET-ANDROID` in TTYPE's first answer and
+NEW-ENVIRON's `CLIENT_NAME`, where the desktop says `MUDLET`, and `Mudlet-Android` in MSDP's `CLIENT_NAME`, GMCP's
+`Core.Hello`, ATCP's `hello` and MXP's `<VERSION>` reply, where it says `Mudlet` (`THeadlessSession::setClientName()`,
+from `0053-client-name.patch`). Mudlet Web says `MUDLET-WEB` in all six. Told the desktop's name, a game would count the
+app's players as the desktop's, and could offer it what only the desktop does. The version beside the name is the Mudlet
+the app is built from, and a download's User-Agent stays Mudlet's, as Mudlet Web leaves its browser's. Scripts see no
+difference: no Lua function reads the name, here, on the desktop or on the web.
+
 ## The app's own map
 
 The game screen shows the profile's map with no script mapper, behind the text or in front of it. Once shown, scripts

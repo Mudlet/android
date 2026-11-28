@@ -75,6 +75,8 @@ MudletEngine::MudletEngine(IEngineHost* host, int heartbeatMs, QObject* parent)
     // On Android the app sizes it from the device (ScrollbackBudget.kt); unset, 0 keeps Mudlet's estimate from the
     // machine's memory
     THeadlessSession::setMaxConsoleBufferSize(qEnvironmentVariableIntValue("MUDLET_SCROLLBACK_MAX_LINES"));
+    // So games can tell the app from desktop Mudlet; TTYPE and NEW-ENVIRON send it in capitals, as they do desktop's
+    THeadlessSession::setClientName(QStringLiteral("Mudlet-Android"));
     reportFont();
     mHost->engineStatus(QStringLiteral("engineKind"), QStringLiteral("libmudlet"));
     mHost->engineStatus(QStringLiteral("configDir"), mConfigDir);
@@ -117,6 +119,7 @@ MudletEngine::~MudletEngine()
     THeadlessSession::setWebPageOpener({});
     THeadlessSession::setScriptSpeech({});
     THeadlessSession::setMaxConsoleBufferSize(0);
+    THeadlessSession::setClientName({});
 }
 
 // At start-up: the profiles the engine before this one ran, if it was killed rather than stopped. The front one is

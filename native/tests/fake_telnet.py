@@ -19,6 +19,9 @@ Commands a client may send (one per line):
                      URL, which can hold a user name and password, is never a line the client sent
   mssp <port>     -> IAC WILL MSSP and the MSSP variable TLS with <port>, as a game tells of its secure port, then
                      "MSSP sent"
+  identify        -> each way a game asks what the client is called: DO TTYPE and its SEND, DO NEW-ENVIRON and a SEND
+                     of the user variable CLIENT_NAME, WILL MSDP, WILL GMCP, WILL ATCP, and WILL MXP with a <VERSION>
+                     request; then "Identify sent". The answers are in SUBNEGOTIATIONS, and MXP's is a line in RECEIVED
   quit            -> close
 Any other line gets "Huh?", without the line, so a password the client sends never comes back as text.
 
@@ -34,7 +37,12 @@ import time
 
 IAC, DONT, DO, WONT, WILL, SB, GA, SE = 255, 254, 253, 252, 251, 250, 249, 240
 TTYPE, ECHO, NAWS, MXP, GMCP, MSSP = 24, 1, 31, 91, 201, 70
+NEW_ENVIRON, MSDP, ATCP = 39, 69, 200
 MSSP_VAR, MSSP_VAL = 1, 2
+# TTYPE's and NEW-ENVIRON's IS and SEND, NEW-ENVIRON's VAR, VAL and USERVAR, MSDP's VAR and VAL
+IS, SEND = 0, 1
+ENVIRON_VAR, ENVIRON_VAL, ENVIRON_USERVAR = 0, 1, 3
+MSDP_VAR, MSDP_VAL = 1, 2
 # (lines, start, end) of each flood, as seen by the sender
 FLOOD_TIMES = []
 # When each game connection was accepted (time.monotonic())
@@ -47,6 +55,8 @@ TLS_HANDSHAKES = []
 RECEIVED = []
 # (columns, rows) of every NAWS any client sent, in order
 NAWS_SIZES = []
+# (option, body) of every IAC SB <option> <body> IAC SE any client sent, in order, its doubled 255 bytes undone
+SUBNEGOTIATIONS = []
 # Where "map <path>" offers maps from, as a test sets it
 MAP_URL_BASE = "http://127.0.0.1:1"
 
@@ -128,8 +138,11 @@ class Session(threading.Thread):
             conn.close()
 
     def subnegotiated(self, sb):
-        """One IAC SB ... IAC SE the client sent: a NAWS one is kept, its doubled 255 bytes undone."""
+        """One IAC SB ... IAC SE the client sent, kept in SUBNEGOTIATIONS, and a NAWS one's size, its doubled 255 bytes
+        undone."""
         body = sb[2:-2].replace(bytes([IAC, IAC]), bytes([IAC]))
+        if body:
+            SUBNEGOTIATIONS.append((body[0], bytes(body[1:])))
         if body[:1] == bytes([NAWS]) and len(body) == 5:
             self.size = (body[1] << 8 | body[2], body[3] << 8 | body[4])
             NAWS_SIZES.append(self.size)
@@ -201,6 +214,11 @@ class Session(threading.Thread):
         elif line.startswith("mssp "):
             variables = bytes([MSSP_VAR]) + b"TLS" + bytes([MSSP_VAL]) + line[5:].encode()
             conn.sendall(bytes([IAC, WILL, MSSP, IAC, SB, MSSP]) + variables + bytes([IAC, SE]) + b"MSSP sent\r\n")
+        elif line == "identify":
+            conn.sendall(bytes([IAC, DO, TTYPE, IAC, SB, TTYPE, SEND, IAC, SE])
+                         + bytes([IAC, DO, NEW_ENVIRON, IAC, SB, NEW_ENVIRON, SEND, ENVIRON_USERVAR]) + b"CLIENT_NAME" + bytes([IAC, SE])
+                         + bytes([IAC, WILL, MSDP, IAC, WILL, GMCP, IAC, WILL, ATCP, IAC, WILL, MXP])
+                         + b"\x1b[1z<VERSION>\r\nIdentify sent\r\n")
         elif line == "quit":
             conn.sendall(b"Bye\r\n")
             return False

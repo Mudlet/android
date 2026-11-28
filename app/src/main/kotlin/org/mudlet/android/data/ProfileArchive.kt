@@ -38,8 +38,7 @@ object ProfileArchive {
     /**
      * What a desktop profile's folder holds of its owner's sign-ins besides [SECRETS] when desktop's keychain is off:
      * the credential store (`SecureStringUtils`'s `encryption_key` and `passwords/`, under its credentialFilesRoot,
-     * which is the profile's folder on desktop) and the GMCP sign-in record `reconnect`. Neither an export nor an
-     * import carries them, as desktop's own "Export to Mudlet Web" and Mudlet Web's import do not.
+     * which is the profile's folder on desktop) and the GMCP sign-in record `reconnect`.
      */
     private val SIGN_INS = setOf("encryption_key", "reconnect")
     private const val CREDENTIAL_STORE = "passwords"
@@ -210,7 +209,7 @@ object ProfileArchive {
                 } finally {
                     out?.close()
                 }
-                if (target != null && entry.time != -1L) target.setLastModified(entry.time)
+                if (target != null && entry.time >= 0L) target.setLastModified(entry.time)
             }
         }
         return when {

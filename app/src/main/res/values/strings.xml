@@ -331,8 +331,8 @@
     <string name="profile_import_unreadable_name">A file name in the .zip cannot be read. Zip the folder again with a tool that writes names as UTF-8.</string>
     <!-- Why a picked .zip was not imported: it must hold one profile's folder and nothing beside it -->
     <string name="profile_import_not_one_folder">The .zip must hold one profile\'s folder, as Export writes it, and nothing beside it.</string>
-    <!-- Why a picked .zip was not imported: it holds the folders of several profiles, as Mudlet Web (the browser edition of Mudlet) writes when the player exports more than one profile at once -->
-    <string name="profile_import_several_folders">The .zip holds several profiles. Export them from Mudlet Web one at a time and import each .zip here.</string>
+    <!-- Why a picked .zip was not imported: it holds the folders of several profiles, as Mudlet Web (the browser edition of Mudlet) writes when the player exports more than one profile at once, or as zipping several of desktop Mudlet's profile folders together makes -->
+    <string name="profile_import_several_folders">The .zip holds several profiles. Import one at a time: zip each profile\'s folder on its own, or export each from Mudlet Web by itself.</string>
     <!-- Why a picked .zip was not imported: a file in it has a path that would put it outside the profile's folder, as a harmful file can -->
     <string name="profile_import_unsafe_path">The .zip has a file whose path leads out of its folder, so it was not opened.</string>
     <!-- Why a picked .zip was not imported: its folder has no saved profile (Mudlet keeps them as .xml files in a folder named current) -->

@@ -42,8 +42,8 @@ object ProfileFolderCopy {
      * by which Mudlet picks the newest save, and hidden files and folders are left out. So are links, which desktop
      * follows, as one could reach files that are not the profile's; and the profile's secrets and sign-ins
      * ([ProfileArchive.credential]), of which desktop removes only the record of a saved sign-in from a copy, as its
-     * token stays with the profile it was saved for. A file that cannot be copied fails the copy with an exception, where desktop leaves the copy incomplete:
-     * the caller removes [target].
+     * token stays with the profile it was saved for. A file that cannot be copied fails the copy with an exception,
+     * where desktop leaves the copy incomplete: the caller removes [target].
      */
     fun whole(source: File, target: File) {
         if (!source.isDirectory) throw FileNotFoundException("there is no profile folder ${source.path}")

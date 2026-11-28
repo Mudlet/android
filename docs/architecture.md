@@ -559,8 +559,8 @@ contents are logged: a refusal logs only its kind. `OpenZipTest` sends both as a
 `OpenZipPseudoLocaleTest` checks the dialogs in en-XA and ar-XB.
 
 Import and export also leave out the rest of a desktop profile's sign-ins, which its folder holds when desktop's
-keychain is off: the credential store (`encryption_key`, `passwords/`) and the GMCP sign-in record `reconnect`, as
-desktop's "Export to Mudlet Web" and Mudlet Web's import do. Each unpacked file takes its entry's time, as an unzip
+keychain is off: the credential store (`encryption_key`, `passwords/`) and the GMCP sign-in record `reconnect`, and so
+do Copy and the backup (`ProfileArchive.credential`). Each unpacked file takes its entry's time, as an unzip
 does: Mudlet loads the newest save and map by time, and a folder zipped by hand lists `autosave.xml` and
 `autosave.dat` after every dated save. Mudlet Web's "Import .zip" and "Export profiles" read and write the same folder, so one
 `.zip` moves a profile between the three; a Mudlet Web export of several profiles is refused as such

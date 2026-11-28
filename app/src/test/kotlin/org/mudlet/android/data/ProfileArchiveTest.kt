@@ -208,6 +208,13 @@ class ProfileArchiveTest {
     }
 
     @Test
+    fun takesAFileDatedBeforeNineteenSeventyWithoutItsTime() {
+        // A zip's extended timestamp can say so, and File.setLastModified refuses a time before 1970
+        val unpacked = unpack(zipDated("Old/current/a.xml" to -86_400_000L)) as ProfileArchive.Unpacked.Folder
+        assertTrue(File(unpacked.folder, "current/a.xml").isFile)
+    }
+
+    @Test
     fun refusesAFolderWithNoSave() {
         assertRefused(ProfileArchive.Refusal.NO_SAVE, zip("NoSave/map/m.dat" to "x", "NoSave/current/notes.txt" to "y"))
     }

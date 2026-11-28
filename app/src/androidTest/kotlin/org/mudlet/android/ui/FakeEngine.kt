@@ -41,6 +41,13 @@ class FakeEngine(open: List<String> = emptyList()) : AutoCloseable {
 
     private val control = Server(base, null)
 
+    /**
+     * The words of the generic mapper's `map.configs.lang_dirs`, by way, with which the profile answers the movement
+     * pad's read of them (MapperDirections), translation on; null, as at first, for a profile without that mapper,
+     * whose engine refuses the read.
+     */
+    @Volatile var mapperWords: Map<String, String>? = null
+
     /** A profile's socket path that this fake serves nothing on, as a profile's once it has closed. */
     val unservedPath = "$base-closed"
 
@@ -177,7 +184,7 @@ class FakeEngine(open: List<String> = emptyList()) : AutoCloseable {
                         break
                     }
                     try {
-                        val connection = Connection(accepted, instance, profile, ::greet)
+                        val connection = Connection(accepted, instance, profile, ::greet) { mapperWords }
                         live.add(connection)
                         attached.add(connection)
                     } catch (_: IOException) {
@@ -450,7 +457,13 @@ class FakeEngine(open: List<String> = emptyList()) : AutoCloseable {
     }
 
     /** One connection the UI made: its hello, and the requests it sent on it. */
-    class Connection internal constructor(private val socket: LocalSocket, instance: String, val profile: String?, greet: (Connection) -> Unit) : AutoCloseable {
+    class Connection internal constructor(
+        private val socket: LocalSocket,
+        instance: String,
+        val profile: String?,
+        greet: (Connection) -> Unit,
+        private val mapperWords: () -> Map<String, String>?,
+    ) : AutoCloseable {
         private val writer = FrameWriter(socket.outputStream)
         private val input = DataInputStream(socket.inputStream)
 
@@ -471,13 +484,40 @@ class FakeEngine(open: List<String> = emptyList()) : AutoCloseable {
         @Synchronized
         fun send(message: JSONObject) = writer.write(message)
 
+        // A tap of the movement pad waits for this answer, which goes as a test reads on for what the tap sends
+        private fun read(): JSONObject = readFrame(input).also(::answerMapperRead)
+
+        private fun answerMapperRead(request: JSONObject) {
+            if (request.optString("t") != "variables") return
+            val path = request.optJSONArray("path") ?: return
+            val names = (0 until path.length()).map { path.getJSONObject(it).optString("name") }
+            if (names.take(2) != listOf("map", "configs")) return
+            val words = mapperWords()
+            if (words == null) {
+                send(JSONObject().put("t", "error").put("re", request.opt("id")).put("message", "variables: There is no such table."))
+                return
+            }
+            val entries = if (names.size == 2) {
+                listOf(
+                    JSONObject().put("name", "lang_dirs").put("key", "string").put("type", "table").put("members", words.size).put("indexed", false),
+                    JSONObject().put("name", "use_translation").put("key", "string").put("type", "boolean").put("value", "true").put("cut", false),
+                )
+            } else {
+                words.map { (way, word) -> JSONObject().put("name", way).put("key", "string").put("type", "string").put("value", word).put("cut", false) }
+            }
+            send(
+                JSONObject().put("t", "variables").put("path", path).put("showHidden", true).put("from", 0).put("total", entries.size)
+                    .put("hiddenLeftOut", 0).put("entries", JSONArray(entries)).put("re", request.opt("id")),
+            )
+        }
+
         /** The next request of type [type] the UI sent, skipping the others; fails after [timeoutMs]. */
         fun receive(type: String, timeoutMs: Long = 10_000): JSONObject {
             val deadline = System.currentTimeMillis() + timeoutMs
             while (System.currentTimeMillis() < deadline) {
                 // A read times out after soTimeout, or fails when the UI has closed the connection
                 val frame = try {
-                    readFrame(input)
+                    read()
                 } catch (e: IOException) {
                     throw AssertionError("the UI sent no '$type': $e", e)
                 }
@@ -493,7 +533,7 @@ class FakeEngine(open: List<String> = emptyList()) : AutoCloseable {
             try {
                 while (true) {
                     socket.soTimeout = (deadline - System.currentTimeMillis()).toInt().coerceAtLeast(1)
-                    val frame = readFrame(input)
+                    val frame = read()
                     if (frame.optString("t") in types) throw AssertionError("the UI sent $frame")
                 }
             } catch (_: IOException) {
@@ -515,7 +555,7 @@ class FakeEngine(open: List<String> = emptyList()) : AutoCloseable {
             try {
                 while (true) {
                     val frame = try {
-                        readFrame(input)
+                        read()
                     } catch (_: IOException) {
                         break
                     }

@@ -208,6 +208,14 @@ class ProfileSession internal constructor(
 
     internal val playerExits = PlayerExits(::newRequestId, ::send) { roomExits = it }
 
+    /** The words the movement pad sends, as the profile's generic mapper would. */
+    internal val directions = MapperDirections(
+        newId = ::newRequestId,
+        send = ::send,
+        later = { delay, block -> main.postDelayed(block, delay) },
+        log = { Log.w(TAG, "movement pad: $it") },
+    )
+
     /** Its triggers, aliases, scripts, timers, keys and buttons, as the script library shows and edits them. */
     internal val scripts = ScriptItemsClient(::newRequestId, ::send)
 
@@ -850,7 +858,7 @@ class ProfileSession internal constructor(
 
                 is EngineMessage.ErrorConsole -> post { errors.onMessage(message) }
 
-                is EngineMessage.Variables -> post { variables.onVariables(message) }
+                is EngineMessage.Variables -> post { if (!directions.onVariables(message)) variables.onVariables(message) }
 
                 is EngineMessage.MapDownload -> post { appMap.onMapDownload(message, app.resources, front()) }
 
@@ -896,7 +904,7 @@ class ProfileSession internal constructor(
                     } else if (request in PackagesClient.REQUESTS) {
                         packages.onRefused(request, reason, message.replyTo)
                     } else if (request == VariablesClient.REQUEST) {
-                        variables.onRefused(reason, message.replyTo)
+                        if (!directions.onRefused(message.replyTo)) variables.onRefused(reason, message.replyTo)
                     } else if (!links.onError(message)) {
                         windows.onError(message)
                     }
@@ -910,6 +918,7 @@ class ProfileSession internal constructor(
             resetStatus()
             post {
                 completions.clear()
+                directions.onDetached()
                 val unanswered = proxyAnswers.values.toList()
                 proxyAnswers.clear()
                 unanswered.forEach { it(null, app.getString(R.string.profiles_error_not_attached)) }

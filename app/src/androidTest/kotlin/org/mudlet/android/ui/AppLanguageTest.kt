@@ -13,9 +13,11 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.SdkSuppress
@@ -85,7 +87,7 @@ class AppLanguageTest {
     @Test
     fun theSettingSwitchesTheAppToALanguage_andBackToThePhones() {
         openTheLanguageList()
-        activate(hasText(kalaallisut.name) and hasAnyAncestor(isDialog()))
+        pick(hasText(kalaallisut.name))
         attachedAgain()
         // The page again, its row in the language and naming it
         waitFor(hasText("KL Language") and hasText(kalaallisut.name))
@@ -93,7 +95,7 @@ class AppLanguageTest {
         assertEquals("the activity's own resources are in it", "KL Settings", compose.activity.getString(R.string.settings_title))
 
         activate(hasText("KL Language"))
-        activate(hasText("KL System default") and hasAnyAncestor(isDialog()))
+        pick(hasText("KL System default"))
         attachedAgain()
         waitFor(hasText(english))
         assertNull(AppLanguage.chosen(context))
@@ -143,6 +145,13 @@ class AppLanguageTest {
     private fun activate(label: SemanticsMatcher) {
         waitFor(label and hasClickAction())
         compose.onNode(label and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
+    }
+
+    // The list opens at the language chosen, and a lazy list holds no node for a row off its screen
+    private fun pick(label: SemanticsMatcher) {
+        val row = label and hasAnyAncestor(isDialog())
+        compose.onNode(hasScrollToNodeAction() and hasAnyAncestor(isDialog())).performScrollToNode(row)
+        activate(row)
     }
 
     private companion object {

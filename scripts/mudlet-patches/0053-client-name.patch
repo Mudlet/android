@@ -1,0 +1,675 @@
+Let an app that embeds Mudlet tell games its own name
+
+A game is told what the client is called in TTYPE, NEW-ENVIRON's CLIENT_NAME, MSDP's CLIENT_NAME, GMCP's Core.Hello,
+ATCP's hello and MXP's <VERSION> reply. Desktop Mudlet says MUDLET in the first two and Mudlet in the rest. An app
+built on mudlet_core that is not desktop Mudlet, such as Mudlet for Android, had no way to say so, and games that
+read the name to tell clients apart (for their statistics, or for what a client is known to support) took it for
+desktop Mudlet.
+
+- THeadlessSession::setClientName(), for the embedder, and MudletApp::setClientName() / clientName() behind it,
+  hold one name for every session, "Mudlet" unless set. TTYPE and NEW-ENVIRON send it in capitals and the others as
+  it is, as desktop always has, so desktop's bytes are unchanged and an app's "Mudlet-Android" goes out as
+  MUDLET-ANDROID in the first two and Mudlet-Android in the rest.
+- A runtime setter rather than a compile definition: one binary can be tested both ways, the build scripts that
+  compile mudlet_core for an app need nothing new, and there are no #ifdefs in ctelnet.cpp.
+- In capitals the name has to be a terminal name RFC 1010 allows, as TTYPE carries it: ASCII letters, digits, '-'
+  and '/', at most 40, starting with a letter and ending with a letter or digit. That also keeps out anything
+  GMCP's JSON, an MXP attribute or telnet would need escaped. Anything else is refused with false and a warning.
+- The version beside it stays Mudlet's, and the HTTP User-Agent is unchanged. No Lua function reads the name, so
+  scripts see no difference.
+- docs/headless.md says when to call it.
+
+Tested by MudletAppClientNameTest (the default, a set name kept as given, forgetting it, which names are taken and
+refused), TMxpVersionTagTest (the <VERSION> reply names the app) and TelnetClientNameTest (TTYPE, NEW-ENVIRON, MSDP,
+GMCP and both of ATCP's answers give desktop's names by default, the app's in each protocol's case once set, and
+desktop's again once it is forgotten).
+
+Also tested by Mudlet/android's native/tests/test_mudlet_engine.py (client_name, the app's engine answering as
+MUDLET-ANDROID in TTYPE and NEW-ENVIRON and Mudlet-Android in MSDP, GMCP, ATCP and MXP).
+
+Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+Upstream: not opened yet
+
+diff --git a/docs/headless.md b/docs/headless.md
+index a253c7cde..27a585d64 100644
+--- a/docs/headless.md
++++ b/docs/headless.md
+@@ -1857,6 +1857,25 @@ Lua specs that fail with no window, so it is the up-to-date list; the main gaps
+ `.github/workflows/headless-lua-tests.yml` runs the Lua specs in `mudlet-headless`, and
+ "The Lua specs with no main window" in `platform-builds.md` explains how to reproduce it.
+ 
++## Embedding it: the name the game is told
++
++A game is told what the client is called in TTYPE (the first answer of MTTS's cycle), NEW-ENVIRON's
++`CLIENT_NAME`, MSDP's `CLIENT_NAME`, GMCP's `Core.Hello`, ATCP's `hello` and MXP's `<VERSION>`
++reply: `MUDLET` in the first two and `Mudlet` in the rest. Games read it to tell clients apart, so an
++app that is not desktop Mudlet, and does not do all that it does, names itself before a session
++connects:
++
++```cpp
++THeadlessSession::setClientName(qsl("Mudlet-Android"));
++```
++
++Every session then sends that name as desktop sends its own: `MUDLET-ANDROID` in TTYPE and
++NEW-ENVIRON, and `Mudlet-Android` in the rest. The version beside it stays Mudlet's. In capitals TTYPE
++carries it, so it must make a terminal name RFC 1010 allows: ASCII letters, digits, `-` and `/`, at most 40,
++starting with a letter and ending with a letter or digit. Anything else is refused with `false`, and
++an empty name gives every protocol Mudlet's own again. Scripts see no difference, as no Lua function
++reads it.
++
+ ## Embedding it: the GUI's buttons and the app's state
+ 
+ Some of what the player does in the GUI is a button on its main window or console toolbar, which Lua
+diff --git a/src/MudletApp.cpp b/src/MudletApp.cpp
+index 333cd5068..ba0e7e456 100644
+--- a/src/MudletApp.cpp
++++ b/src/MudletApp.cpp
+@@ -1282,6 +1282,30 @@ const QString& MudletApp::scmVersion()
+     return version;
+ }
+ 
++static QString& embedderClientName()
++{
++    static QString name;
++    return name;
++}
++
++bool MudletApp::setClientName(const QString& name)
++{
++    // TTYPE sends it in capitals, which must then make an RFC 1010 terminal name; that also keeps out anything GMCP's
++    // JSON, an MXP attribute or telnet would need escaped
++    static const QRegularExpression terminalName(QRegularExpression::anchoredPattern(qsl("[A-Za-z](?:[A-Za-z0-9/-]{0,38}[A-Za-z0-9])?")));
++    if (!name.isEmpty() && !terminalName.match(name).hasMatch()) {
++        qWarning().noquote() << "MudletApp::setClientName() refused" << name << "as, in capitals, it is not a terminal name RFC 1010 allows";
++        return false;
++    }
++    embedderClientName() = name;
++    return true;
++}
++
++QString MudletApp::clientName()
++{
++    return embedderClientName().isEmpty() ? qsl("Mudlet") : embedderClientName();
++}
++
+ bool MudletApp::release()
+ {
+     return buildSuffix().isEmpty();
+diff --git a/src/MudletApp.h b/src/MudletApp.h
+index 71cbd683a..3fd0e38e9 100644
+--- a/src/MudletApp.h
++++ b/src/MudletApp.h
+@@ -259,6 +259,10 @@ public:
+     // something to read off the suffix.
+     static const QString& buildSuffix();
+     static const QString& scmVersion();
++    // The name game servers are told, "Mudlet" unless an app that embeds Mudlet has set its own
++    // (THeadlessSession::setClientName()); TTYPE and NEW-ENVIRON send it in capitals, as desktop always has
++    static bool setClientName(const QString& name);
++    static QString clientName();
+     static bool release();
+     static bool publicTest();
+     static bool development();
+diff --git a/src/TMxpVersionTagHandler.cpp b/src/TMxpVersionTagHandler.cpp
+index 2d27082a6..646a0206c 100644
+--- a/src/TMxpVersionTagHandler.cpp
++++ b/src/TMxpVersionTagHandler.cpp
+@@ -20,6 +20,7 @@
+ 
+ 
+ #include "TMxpVersionTagHandler.h"
++#include "MudletApp.h"
+ #include "TMxpClient.h"
+ 
+ TMxpTagHandlerResult TMxpVersionTagHandler::handleStartTag(TMxpContext& ctx, TMxpClient& client, MxpStartTag* tag)
+@@ -34,14 +35,14 @@ TMxpTagHandlerResult TMxpVersionTagHandler::handleStartTag(TMxpContext& ctx, TMx
+         return MXP_TAG_HANDLED;
+     }
+ 
+-    // version (aka client.getVersion()) starts with the client name 'mudlet' which
+-    // is already in scmVersionString as the CLIENT attribute. We just need the version
++    // version (aka client.getVersion()) starts with the client name 'mudlet', but the
++    // CLIENT attribute takes MudletApp::clientName() instead. We just need the version
+     // number here which follows after a space in version.
+     //
+     // As an attribute/version number with spaces probably should be quoted following
+     // MXP/XML syntax we just take everything after the last space to be on the safe side.
+ 
+-    QString payload = scmVersionString.arg(version.section(' ', -1));
++    QString payload = scmVersionString.arg(MudletApp::clientName(), version.section(' ', -1));
+ 
+     // Add the style, if it had been set
+     if (!client.getStyle().isNull()) {
+diff --git a/src/TMxpVersionTagHandler.h b/src/TMxpVersionTagHandler.h
+index d70c332e7..fb625c6a7 100644
+--- a/src/TMxpVersionTagHandler.h
++++ b/src/TMxpVersionTagHandler.h
+@@ -29,7 +29,7 @@ public:
+     : TMxpSingleTagHandler("VERSION")
+     {}
+ 
+-    inline static const QString scmVersionString = qsl("\n\x1b[1z<VERSION MXP=1.0 CLIENT=Mudlet VERSION=%1>\n");
++    inline static const QString scmVersionString = qsl("\n\x1b[1z<VERSION MXP=1.0 CLIENT=%1 VERSION=%2>\n");
+ 
+     TMxpTagHandlerResult handleStartTag(TMxpContext& ctx, TMxpClient& client, MxpStartTag* tag) override;
+ };
+diff --git a/src/ctelnet.cpp b/src/ctelnet.cpp
+index 4c5df56a3..5a3242743 100644
+--- a/src/ctelnet.cpp
++++ b/src/ctelnet.cpp
+@@ -2966,7 +2966,7 @@ QString cTelnet::getNewEnvironCharset()
+ 
+ QString cTelnet::getNewEnvironClientName()
+ {
+-    return qsl("MUDLET");
++    return MudletApp::clientName().toUpper();
+ }
+ 
+ QString cTelnet::getNewEnvironClientVersion()
+@@ -3958,7 +3958,7 @@ void cTelnet::processTelnetCommand(const std::string& telnetCommand)
+             output += MSDP_VAR;
+             output += "CLIENT_NAME";
+             output += MSDP_VAL;
+-            output += "Mudlet";
++            output += MudletApp::clientName().toStdString();
+             output += MSDP_VAR;
+             output += "CLIENT_VERSION";
+             output += MSDP_VAL;
+@@ -3994,7 +3994,7 @@ void cTelnet::processTelnetCommand(const std::string& telnetCommand)
+             output += TN_IAC;
+             output += TN_SB;
+             output += OPT_ATCP;
+-            std::string atcpOptions = std::string("hello Mudlet ") + std::string(APP_VERSION) + MudletApp::buildSuffix().toUtf8().constData()
++            std::string atcpOptions = std::string("hello ") + MudletApp::clientName().toStdString() + " " + APP_VERSION + MudletApp::buildSuffix().toUtf8().constData()
+                                       + "\ncomposer 1\nchar_vitals 1\nroom_brief 1\nroom_exits 1\nmap_display 1\n";
+             output += encodeAndCookBytes(atcpOptions);
+             output += TN_IAC;
+@@ -4026,7 +4026,8 @@ void cTelnet::processTelnetCommand(const std::string& telnetCommand)
+             output += TN_SB;
+             output += OPT_GMCP;
+             // MudletApp::buildSuffix() could, conceivably contain a non-ASCII character:
+-            output += encodeAndCookBytes(std::string(R"(Core.Hello { "client": "Mudlet", "version": ")") + APP_VERSION + MudletApp::buildSuffix().toUtf8().constData() + std::string(R"("})"));
++            output += encodeAndCookBytes(std::string(R"(Core.Hello { "client": ")") + MudletApp::clientName().toStdString() + R"(", "version": ")" + APP_VERSION
++                                         + MudletApp::buildSuffix().toUtf8().constData() + std::string(R"("})"));
+             output += TN_IAC;
+             output += TN_SE;
+             socketOutRaw(output);
+@@ -4797,7 +4798,7 @@ void cTelnet::processTelnetCommand(const std::string& telnetCommand)
+                 output += TN_SB;
+                 output += OPT_ATCP;
+                 // MudletApp::buildSuffix() *could* be a non-ASCII UTF-8 string:
+-                std::string atcpOptions = std::string("hello Mudlet ") + std::string(APP_VERSION) + MudletApp::buildSuffix().toUtf8().constData()
++                std::string atcpOptions = std::string("hello ") + MudletApp::clientName().toStdString() + " " + APP_VERSION + MudletApp::buildSuffix().toUtf8().constData()
+                                           + "\ncomposer 1\nchar_vitals 1\nroom_brief 1\nroom_exits 1\nmap_display 1\n";
+                 output += encodeAndCookBytes(atcpOptions);
+                 output += TN_IAC;
+diff --git a/src/headless/THeadlessSession.cpp b/src/headless/THeadlessSession.cpp
+index b00248751..8496c4712 100644
+--- a/src/headless/THeadlessSession.cpp
++++ b/src/headless/THeadlessSession.cpp
+@@ -459,6 +459,11 @@ void THeadlessSession::setMaxConsoleBufferSize(const int lines)
+     TBuffer::setPlatformMaxBufferSize(lines);
+ }
+ 
++bool THeadlessSession::setClientName(const QString& name)
++{
++    return MudletApp::setClientName(name);
++}
++
+ THeadlessSession::THeadlessSession(QObject* parent)
+ : QObject(parent)
+ {
+diff --git a/src/headless/THeadlessSession.h b/src/headless/THeadlessSession.h
+index 8b1def162..1c3be2336 100644
+--- a/src/headless/THeadlessSession.h
++++ b/src/headless/THeadlessSession.h
+@@ -214,6 +214,11 @@ public:
+     // platform that stops a process long before that is used up (Android). Below 100 it is 100; 0 or less goes back
+     // to the estimate. Taken by every buffer size set afterwards.
+     static void setMaxConsoleBufferSize(int lines);
++    // The name every session's game is told this client goes by, such as "Mudlet-Android", for an app that is not
++    // desktop Mudlet and whose games should tell the two apart; set before a session connects. As desktop's "Mudlet",
++    // TTYPE and NEW-ENVIRON send it in capitals and MSDP, GMCP, ATCP and MXP as given. Refused (false) unless, in
++    // capitals, it is a terminal name RFC 1010 allows; empty gives desktop's own again. MudletApp::setClientName().
++    static bool setClientName(const QString& name);
+ 
+     // Names mudlet_core's own Qt resources (":/" images, translations and fonts), so a program linking it statically
+     // keeps them; Qt registers them before main() runs
+diff --git a/test/CMakeLists.txt b/test/CMakeLists.txt
+index 4cac1a2bb..172a49f61 100644
+--- a/test/CMakeLists.txt
++++ b/test/CMakeLists.txt
+@@ -142,6 +142,7 @@ set(UNIT_TESTS
+     TMxpEntityTagHandlerTest
+     TMxpFrameDestTagHandlerTest
+     TMxpVersionTagTest
++    MudletAppClientNameTest
+     TMxpFormattingTagsTest
+     TMxpCustomElementTagHandlerTest
+     TMxpModeSecurityTest
+diff --git a/test/MudletAppClientNameTest.cpp b/test/MudletAppClientNameTest.cpp
+new file mode 100644
+index 000000000..cd39a7c3d
+--- /dev/null
++++ b/test/MudletAppClientNameTest.cpp
+@@ -0,0 +1,92 @@
++/***************************************************************************
++ *   Copyright (C) 2026 by Mudlet Developers                               *
++ *                                                                         *
++ *   This program is free software; you can redistribute it and/or modify  *
++ *   it under the terms of the GNU General Public License as published by  *
++ *   the Free Software Foundation; either version 2 of the License, or     *
++ *   (at your option) any later version.                                   *
++ *                                                                         *
++ *   This program is distributed in the hope that it will be useful,       *
++ *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
++ *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
++ *   GNU General Public License for more details.                          *
++ *                                                                         *
++ *   You should have received a copy of the GNU General Public License     *
++ *   along with this program; if not, write to the                         *
++ *   Free Software Foundation, Inc.,                                       *
++ *   59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.             *
++ ***************************************************************************/
++
++#include "GroupedTest.h"
++#include "MudletApp.h"
++
++#include <QRegularExpression>
++#include <QtTest/QtTest>
++
++// The name an app that embeds Mudlet gives game servers in place of desktop
++// Mudlet's (MudletApp::setClientName()). TelnetClientNameTest shows it reaching
++// each protocol and TMxpVersionTagTest MXP's <VERSION>.
++class MudletAppClientNameTest : public QObject
++{
++    Q_OBJECT
++
++private slots:
++    void cleanup() { MudletApp::setClientName(QString()); }
++
++    void test_unsetItIsDesktopMudletsName() { QCOMPARE(MudletApp::clientName(), qsl("Mudlet")); }
++
++    void test_aSetNameIsKeptAsGiven()
++    {
++        QVERIFY(MudletApp::setClientName(qsl("Mudlet-Android")));
++        QCOMPARE(MudletApp::clientName(), qsl("Mudlet-Android"));
++    }
++
++    void test_anEmptyNameForgetsIt()
++    {
++        QVERIFY(MudletApp::setClientName(qsl("Mudlet-Android")));
++        QVERIFY(MudletApp::setClientName(QString()));
++        QCOMPARE(MudletApp::clientName(), qsl("Mudlet"));
++    }
++
++    void test_namesRfc1010AllowsAreTaken_data()
++    {
++        QTest::addColumn<QString>("name");
++        QTest::newRow("one letter") << qsl("M");
++        QTest::newRow("mixed case") << qsl("Mudlet-Android");
++        QTest::newRow("slash and digits") << qsl("MUDLET/2-0");
++        QTest::newRow("forty characters") << QString(40, QLatin1Char('A'));
++    }
++
++    void test_namesRfc1010AllowsAreTaken()
++    {
++        QFETCH(QString, name);
++        QVERIFY(MudletApp::setClientName(name));
++        QCOMPARE(MudletApp::clientName(), name);
++    }
++
++    void test_anyOtherNameIsRefusedAndTheLastOneKept_data()
++    {
++        QTest::addColumn<QString>("name");
++        QTest::newRow("a space") << qsl("MUDLET TEST");
++        QTest::newRow("a quote") << qsl("MUDLET\"TEST");
++        QTest::newRow("ends in a hyphen") << qsl("MUDLET-");
++        QTest::newRow("starts with a hyphen") << qsl("-MUDLET");
++        QTest::newRow("starts with a digit") << qsl("2MUDLET");
++        QTest::newRow("forty-one characters") << QString(41, QLatin1Char('A'));
++        QTest::newRow("not ASCII") << qsl("MUDLÉT");
++        QTest::newRow("a control character") << qsl("MUDLET\tTEST");
++        QTest::newRow("a trailing line feed") << qsl("MUDLET\n");
++    }
++
++    void test_anyOtherNameIsRefusedAndTheLastOneKept()
++    {
++        QFETCH(QString, name);
++        QVERIFY(MudletApp::setClientName(qsl("Mudlet-Test")));
++        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(qsl("refused")));
++        QVERIFY(!MudletApp::setClientName(name));
++        QCOMPARE(MudletApp::clientName(), qsl("Mudlet-Test"));
++    }
++};
++
++MUDLET_GROUPED_TEST_GUILESS_MAIN(MudletAppClientNameTest)
++#include "MudletAppClientNameTest.moc"
+diff --git a/test/TMxpVersionTagTest.cpp b/test/TMxpVersionTagTest.cpp
+index a28180f36..ecfc6854f 100644
+--- a/test/TMxpVersionTagTest.cpp
++++ b/test/TMxpVersionTagTest.cpp
+@@ -20,7 +20,9 @@
+  ***************************************************************************/
+ 
+ #include "GroupedTest.h"
++#include <QScopeGuard>
+ #include <QTest>
++#include "MudletApp.h"
+ #include "TMxpVersionTagHandler.h"
+ #include "TMxpStubClient.h"
+ #include <TMxpTagParser.h>
+@@ -60,6 +62,23 @@ private slots:
+         QCOMPARE(stub.sentToServer, "\n\u001B[1z<VERSION MXP=1.0 CLIENT=Mudlet VERSION=Stub-1.0>\n");
+     }
+ 
++    void testVersionTagNamesTheAppThatEmbedsMudlet()
++    {
++        TMxpStubContext ctx;
++        TMxpStubClient stub;
++        QVERIFY(MudletApp::setClientName(qsl("Mudlet-Test")));
++        const auto forgetName = qScopeGuard([] {
++            MudletApp::setClientName(QString());
++        });
++
++        auto versionTag = parseNode("<Version>");
++        TMxpVersionTagHandler versionTagHandler;
++        TMxpTagHandler& tagHandler = versionTagHandler;
++        tagHandler.handleTag(ctx, stub, versionTag->asTag());
++
++        QCOMPARE(stub.sentToServer, "\n\u001B[1z<VERSION MXP=1.0 CLIENT=Mudlet-Test VERSION=Stub-1.0>\n");
++    }
++
+     void testVersionStyle()
+     {
+         // Set a Style (Version of MXP Template of mud)
+diff --git a/test/functional_tests/CMakeLists.txt b/test/functional_tests/CMakeLists.txt
+index e3df61efa..0d3076e76 100644
+--- a/test/functional_tests/CMakeLists.txt
++++ b/test/functional_tests/CMakeLists.txt
+@@ -200,6 +200,7 @@ set(TELNET_GROUP_TEST_SOURCES
+     TelnetReconnectStateTest.cpp
+     TelnetStringSequenceRecoveryTest.cpp
+     TelnetTerminalTypeCycleTest.cpp
++    TelnetClientNameTest.cpp
+     TelnetTlsPromptTest.cpp
+     TOscTest.cpp
+     MirrorToStdOutTest.cpp
+@@ -893,11 +894,11 @@ set_tests_properties(GlyphOverflowTest PROPERTIES TIMEOUT 600)
+ # also reconnects, so it needs a longer timeout
+ set_tests_properties(TelnetCharsetNegotiationTest PROPERTIES TIMEOUT 300)
+ 
+-# TelnetNewEnvironTest, TelnetOptionsReportTest, TelnetAtcpMspTest and
+-# TelnetPasswordMaskTimeoutTest each boot a full profile, which is nearly all of
+-# their runtime and the part a sanitizer and a loaded runner stretch, so they get
+-# the same headroom as their neighbours
+-set_tests_properties(TelnetNewEnvironTest TelnetOptionsReportTest TelnetAtcpMspTest TelnetPasswordMaskTimeoutTest PROPERTIES TIMEOUT 300)
++# TelnetNewEnvironTest, TelnetOptionsReportTest, TelnetAtcpMspTest,
++# TelnetPasswordMaskTimeoutTest and TelnetClientNameTest each boot a full profile,
++# which is nearly all of their runtime and the part a sanitizer and a loaded runner
++# stretch, so they get the same headroom as their neighbours
++set_tests_properties(TelnetNewEnvironTest TelnetOptionsReportTest TelnetAtcpMspTest TelnetPasswordMaskTimeoutTest TelnetClientNameTest PROPERTIES TIMEOUT 300)
+ 
+ # ProfileLifecycleTest opens and closes several profiles, and every open is a
+ # full profile load and every close a full save, so it needs a longer timeout
+diff --git a/test/functional_tests/TelnetClientNameTest.cpp b/test/functional_tests/TelnetClientNameTest.cpp
+new file mode 100644
+index 000000000..d5d5418f1
+--- /dev/null
++++ b/test/functional_tests/TelnetClientNameTest.cpp
+@@ -0,0 +1,255 @@
++/***************************************************************************
++ *   Copyright (C) 2026 by Mudlet Developers                               *
++ *                                                                         *
++ *   This program is free software; you can redistribute it and/or modify  *
++ *   it under the terms of the GNU General Public License as published by  *
++ *   the Free Software Foundation; either version 2 of the License, or     *
++ *   (at your option) any later version.                                   *
++ *                                                                         *
++ *   This program is distributed in the hope that it will be useful,       *
++ *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
++ *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
++ *   GNU General Public License for more details.                          *
++ *                                                                         *
++ *   You should have received a copy of the GNU General Public License     *
++ *   along with this program; if not, write to the                         *
++ *   Free Software Foundation, Inc.,                                       *
++ *   59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.             *
++ ***************************************************************************/
++
++// What a game is told the client is called. Desktop Mudlet says MUDLET in TTYPE
++// and NEW-ENVIRON and Mudlet in MSDP, GMCP and ATCP; an app that embeds Mudlet
++// may name itself instead (MudletApp::setClientName()), which then goes to the
++// same protocols in the same case. MXP's <VERSION> reply is TMxpVersionTagTest's.
++//
++// The game's requests arrive by loopback; the answers are real socket writes,
++// waited out with a DO TIMING_MARK, which Mudlet always answers.
++
++#include <QDir>
++#include <QJsonDocument>
++#include <QJsonObject>
++#include <QTemporaryDir>
++#include <QtTest/QtTest>
++
++#include <chrono>
++
++#include "Host.h"
++#include "MudletInstanceCoordinator.h"
++#include "MudletApp.h"
++#include "PortableModeTestHelper.h"
++#include "ProfileTestHelper.h"
++#include "RecordingTelnetServer.h"
++#include "ctelnet.h"
++#include "mudlet.h"
++
++#include "GroupedTest.h"
++
++using namespace std::chrono_literals;
++
++class TelnetClientNameTest : public QObject
++{
++    Q_OBJECT
++
++private:
++    QTemporaryDir mConfigDir;
++    QByteArray mSavedXdg;
++    RecordingTelnetServer* mpServer = nullptr;
++    Host* mpHost = nullptr;
++    const QString mHostname = qsl("Test-Telnet-Client-Name");
++
++    struct NamesSent
++    {
++        QByteArray terminalType;
++        QByteArray newEnviron;
++        QByteArray msdp;
++        QByteArray gmcp;
++        // The answer to WILL ATCP, then the one to Auth.Request
++        QList<QByteArray> atcp;
++    };
++
++    void feed(const QByteArray& data)
++    {
++        QByteArray copy = data;
++        mpHost->mTelnet.loopbackTest(copy);
++    }
++
++    void announce(const char command, const char option)
++    {
++        QByteArray data;
++        data.append(TN_IAC).append(command).append(option);
++        feed(data);
++    }
++
++    static QByteArray subnegotiation(const char option, const QByteArray& payload)
++    {
++        QByteArray data;
++        data.append(TN_IAC).append(TN_SB).append(option).append(payload).append(TN_IAC).append(TN_SE);
++        return data;
++    }
++
++    QByteArray sentBytes()
++    {
++        announce(TN_DO, OPT_TIMING_MARK);
++        QByteArray marker;
++        marker.append(TN_IAC).append(TN_WONT).append(OPT_TIMING_MARK);
++        const bool arrived = QTest::qWaitFor(
++                [this, &marker]() {
++                    return mpServer->received().contains(marker);
++                },
++                10s);
++        if (!arrived) {
++            QTest::qFail("the telnet marker never came back, so the capture is worthless", __FILE__, __LINE__);
++            return {};
++        }
++        const QByteArray stream = mpServer->received();
++        mpServer->forgetReceived();
++        const int markerAt = stream.indexOf(marker);
++        return markerAt >= 0 ? stream.left(markerAt) : stream;
++    }
++
++    // The value after name and the separator in payload, up to the next of the terminators; empty when name is not
++    // there, which the comparisons then show
++    static QByteArray valueAfter(const QByteArray& payload, const QByteArray& name, const char separator, const QByteArray& terminators)
++    {
++        const QByteArray key = name + separator;
++        const int at = payload.indexOf(key);
++        if (at < 0) {
++            return {};
++        }
++        QByteArray value = payload.mid(at + key.size());
++        for (const char terminator : terminators) {
++            const int end = value.indexOf(terminator);
++            if (end >= 0) {
++                value.truncate(end);
++            }
++        }
++        return value;
++    }
++
++    // Asks for the client's name every way a game can, and reads each answer off the wire
++    NamesSent namesSent()
++    {
++        mpHost->mVersionInTTYPE = false;
++        mpHost->mEnableNEWENVIRON = true;
++        mpHost->mEnableMNES = false;
++        mpHost->mEnableMSDP = true;
++        mpHost->mEnableGMCP = true;
++
++        // A restart of the MTTS cycle, whose first answer is the name
++        announce(TN_DONT, OPT_TERMINAL_TYPE);
++        announce(TN_DO, OPT_TERMINAL_TYPE);
++        feed(subnegotiation(OPT_TERMINAL_TYPE, QByteArray(1, TNSB_SEND)));
++        announce(TN_WILL, OPT_NEW_ENVIRON);
++        // Outside MNES, CLIENT_NAME is a user variable
++        feed(subnegotiation(OPT_NEW_ENVIRON, QByteArray(1, NEW_ENVIRON_SEND) + NEW_ENVIRON_USERVAR + "CLIENT_NAME"));
++        announce(TN_WILL, OPT_MSDP);
++        announce(TN_WILL, static_cast<char>(OPT_GMCP));
++        // ATCP is taken up only while GMCP is off
++        mpHost->mEnableGMCP = false;
++        announce(TN_WILL, static_cast<char>(OPT_ATCP));
++        feed(subnegotiation(static_cast<char>(OPT_ATCP), "Auth.Request"));
++        mpHost->mEnableGMCP = true;
++
++        NamesSent names;
++        for (const Subnegotiation& reply : subnegotiationsIn(sentBytes())) {
++            const QByteArray& payload = reply.payload;
++            if (reply.option == static_cast<unsigned char>(OPT_TERMINAL_TYPE) && payload.startsWith(TNSB_IS)) {
++                names.terminalType = payload.mid(1);
++            } else if (reply.option == static_cast<unsigned char>(OPT_NEW_ENVIRON) && payload.startsWith(NEW_ENVIRON_IS)) {
++                names.newEnviron = valueAfter(payload, "CLIENT_NAME", NEW_ENVIRON_VAL, QByteArray(1, NEW_ENVIRON_VAR) + NEW_ENVIRON_USERVAR);
++            } else if (reply.option == static_cast<unsigned char>(OPT_MSDP) && payload.contains("CLIENT_NAME")) {
++                names.msdp = valueAfter(payload, "CLIENT_NAME", MSDP_VAL, QByteArray(1, MSDP_VAR));
++            } else if (reply.option == static_cast<unsigned char>(OPT_GMCP) && payload.startsWith("Core.Hello ")) {
++                names.gmcp = QJsonDocument::fromJson(payload.mid(11)).object().value(qsl("client")).toString().toUtf8();
++            } else if (reply.option == static_cast<unsigned char>(OPT_ATCP) && payload.startsWith("hello ")) {
++                names.atcp.append(valueAfter(payload, "hello", ' ', " \n"));
++            }
++        }
++        return names;
++    }
++
++private slots:
++    void initTestCase()
++    {
++        if (portableMarkerPresent()) {
++            QSKIP("portable.txt present - it takes precedence over XDG_CONFIG_HOME, so the config dir cannot be redirected");
++        }
++
++        QVERIFY(mConfigDir.isValid());
++        QVERIFY(QDir().mkpath(qsl("%1/mudlet/profiles").arg(mConfigDir.path())));
++        mSavedXdg = qgetenv("XDG_CONFIG_HOME");
++        qputenv("XDG_CONFIG_HOME", mConfigDir.path().toUtf8());
++
++        mpServer = new RecordingTelnetServer(qApp);
++        QVERIFY2(mpServer->start(), "RecordingTelnetServer failed to bind a loopback port");
++
++        mudlet::start();
++        mudlet::self()->setupConfig();
++        mudlet::self()->takeOwnershipOfInstanceCoordinator(std::make_unique<MudletInstanceCoordinator>("MudletInstanceCoordinator"));
++        mudlet::self()->init();
++        mudlet::self()->setStorePasswordsSecurely(false);
++        QDir(MudletApp::getMudletPath(enums::profileHomePath, mHostname)).removeRecursively();
++
++        mpHost = TestProfile::create(mHostname, qsl("localhost"), QString::number(mpServer->serverPort()));
++        QVERIFY2(mpHost, "Could not create the test profile - see the warning above for the step that timed out.");
++
++        QSignalSpy connected(&mpHost->mTelnet, &cTelnet::signal_connected);
++        if (mpHost->mTelnet.getConnectionState() != QAbstractSocket::ConnectedState) {
++            QVERIFY2(connected.wait(15s), "The test profile never connected to the recording server.");
++        }
++    }
++
++    void cleanupTestCase()
++    {
++        mpHost = nullptr;
++        delete mpServer;
++        mpServer = nullptr;
++        if (mudlet::self()) {
++            QDir(MudletApp::getMudletPath(enums::profileHomePath, mHostname)).removeRecursively();
++            delete mudlet::self();
++        }
++        mSavedXdg.isNull() ? qunsetenv("XDG_CONFIG_HOME") : qputenv("XDG_CONFIG_HOME", mSavedXdg);
++    }
++
++    void init()
++    {
++        QVERIFY(mpHost);
++        mpServer->forgetReceived();
++    }
++
++    void cleanup() { MudletApp::setClientName(QString()); }
++
++    void test_aGameIsToldDesktopMudletsNames()
++    {
++        const NamesSent names = namesSent();
++        QCOMPARE(names.terminalType, QByteArray("MUDLET"));
++        QCOMPARE(names.newEnviron, QByteArray("MUDLET"));
++        QCOMPARE(names.msdp, QByteArray("Mudlet"));
++        QCOMPARE(names.gmcp, QByteArray("Mudlet"));
++        QCOMPARE(names.atcp, QList<QByteArray>({"Mudlet", "Mudlet"}));
++    }
++
++    void test_anAppsOwnNameGoesToEveryProtocolInDesktopsCase()
++    {
++        QVERIFY(MudletApp::setClientName(qsl("Mudlet-Test")));
++        const NamesSent names = namesSent();
++        QCOMPARE(names.terminalType, QByteArray("MUDLET-TEST"));
++        QCOMPARE(names.newEnviron, QByteArray("MUDLET-TEST"));
++        QCOMPARE(names.msdp, QByteArray("Mudlet-Test"));
++        QCOMPARE(names.gmcp, QByteArray("Mudlet-Test"));
++        QCOMPARE(names.atcp, QList<QByteArray>({"Mudlet-Test", "Mudlet-Test"}));
++    }
++
++    void test_anEmptyNameGivesDesktopMudletsNamesBack()
++    {
++        QVERIFY(MudletApp::setClientName(qsl("Mudlet-Test")));
++        QVERIFY(MudletApp::setClientName(QString()));
++        const NamesSent names = namesSent();
++        QCOMPARE(names.terminalType, QByteArray("MUDLET"));
++        QCOMPARE(names.gmcp, QByteArray("Mudlet"));
++    }
++};
++
++MUDLET_GROUPED_TEST_MAIN(TelnetClientNameTest)
++
++#include "TelnetClientNameTest.moc"

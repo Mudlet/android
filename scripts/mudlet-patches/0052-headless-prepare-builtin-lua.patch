@@ -13,12 +13,14 @@ milliseconds between the player's tap and the game's first line, while the app s
   the pool's thread only stamps the copy's last-use file, inside the lock as before.
 - In a Qt built without threads, as for the browser, it does nothing (QT_CONFIG(thread)), and the first profile's load
   unpacks the files as before.
+- It also does nothing until the built-in files are there, as their list is kept for the run once read.
 - docs/headless.md says when to call it.
 
 Nothing a script or a game sees changes: the copy, its folder and luaGlobalPath are the same.
 
-Tested by BuiltinMudletLuaTest (the copy is unpacked whole while no profile is open, without starting the in-use timer
-off the main thread, and a profile loaded straight after loads from that one copy and starts the timer), and by
+Tested by BuiltinMudletLuaTest (a call before the files are there leaves them to be found once they are; the copy is
+unpacked whole while no profile is open, without starting the in-use timer off the main thread; and a profile that
+loads while the copy is still to unpack waits for it, loads from that one copy and starts the timer), and by
 Mudlet/android's native/tests/test_mudlet_engine.py (builtin_lua_ready, the same through the app's engine).
 
 Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
@@ -42,7 +44,7 @@ index 962cb4d3a..a253c7cde 100644
  which is why a desktop build leaves it off.
  
 diff --git a/src/TLuaInterpreter.cpp b/src/TLuaInterpreter.cpp
-index fdde01c0f..a771b2856 100644
+index fdde01c0f..968aff3fa 100644
 --- a/src/TLuaInterpreter.cpp
 +++ b/src/TLuaInterpreter.cpp
 @@ -73,6 +73,7 @@
@@ -122,7 +124,7 @@ index fdde01c0f..a771b2856 100644
      removeOtherBuiltinLuaCopies(cacheLocation, folderName);
      return luaGlobal;
  }
-@@ -7498,6 +7520,20 @@ bool TLuaInterpreter::loadLuaModule(QQueue<QString>& resultMsgsQueue, const QStr
+@@ -7498,6 +7520,24 @@ bool TLuaInterpreter::loadLuaModule(QQueue<QString>& resultMsgsQueue, const QStr
      return true;
  }
  
@@ -133,6 +135,10 @@ index fdde01c0f..a771b2856 100644
 +#if defined(INCLUDE_BUILTIN_MUDLET_LUA)
 +    Q_INIT_RESOURCE(mudlet_lua);
 +#endif
++    // Not before the files are there, as the list the pool's thread finds is kept for the run
++    if (!QFileInfo::exists(builtinLuaFile(qsl("LuaGlobal.lua")))) {
++        return;
++    }
 +    // Read on this thread, as Qt on Android keeps the folders it has looked up in a map it does not lock
 +    QThreadPool::globalInstance()->start([cacheLocation = QStandardPaths::writableLocation(QStandardPaths::CacheLocation)] {
 +        unpackedBuiltinLuaGlobal(cacheLocation);
@@ -143,7 +149,7 @@ index fdde01c0f..a771b2856 100644
  void TLuaInterpreter::preloadModule(const QByteArray& name, lua_CFunction open)
  {
      if (name.isEmpty() || !open) {
-@@ -8740,8 +8776,9 @@ void TLuaInterpreter::loadGlobal()
+@@ -8740,8 +8780,9 @@ void TLuaInterpreter::loadGlobal()
      const QString builtinLuaGlobal = builtinLuaFile(qsl("LuaGlobal.lua"));
      if (QFileInfo::exists(builtinLuaGlobal)) {
          mPossiblePaths.prepend(builtinLuaGlobal);
@@ -200,7 +206,7 @@ index a15bb8b73..8b1def162 100644
      // of Mudlet's bundled ones by every dictionary opened afterwards. Refused (false) for a :/ or assets:/ path, which
      // Hunspell cannot read; empty forgets it.
 diff --git a/test/functional_tests/BuiltinMudletLuaTest.cpp b/test/functional_tests/BuiltinMudletLuaTest.cpp
-index dff1b1b9b..67502d4d6 100644
+index dff1b1b9b..ba171ba01 100644
 --- a/test/functional_tests/BuiltinMudletLuaTest.cpp
 +++ b/test/functional_tests/BuiltinMudletLuaTest.cpp
 @@ -33,6 +33,7 @@
@@ -235,11 +241,32 @@ index dff1b1b9b..67502d4d6 100644
  #if defined(INCLUDE_BUILTIN_MUDLET_LUA)
      static bool registerBuiltinCopy() { return true; }
      static void unregisterBuiltinCopy() {}
-@@ -174,6 +192,56 @@ private slots:
+@@ -174,6 +192,88 @@ private slots:
          QDir(cacheLocation()).removeRecursively();
      }
  
-+    // These two first, as the copy's in-use timer is started once a run, by the first profile to load
++    // First of all, as the list of the built-in files is kept for the run once read
++    void test_prepareBuiltinLuaBeforeTheFilesAreThereLeavesThemToBeFoundOnceTheyAre()
++    {
++#if defined(INCLUDE_BUILTIN_MUDLET_LUA)
++        QSKIP("The files are built in, so there is no time before they are there");
++#else
++        THeadlessSession::prepareBuiltinLua();
++        QVERIFY(QThreadPool::globalInstance()->waitForDone(10000));
++        QCOMPARE(copiesInCache(), QStringList());
++
++        QVERIFY(registerBuiltinCopy());
++        const auto unregister = qScopeGuard(unregisterBuiltinCopy);
++        const auto drained = qScopeGuard([] {
++            QThreadPool::globalInstance()->waitForDone();
++        });
++        THeadlessSession::prepareBuiltinLua();
++        QVERIFY(QThreadPool::globalInstance()->waitForDone(10000));
++        QCOMPARE(copiesInCache(), QStringList{QFileInfo(unpackedFolder()).fileName()});
++#endif
++    }
++
++    // These two before any profile loads, as the copy's in-use timer is started once a run, by the first to load
 +    void test_prepareBuiltinLuaUnpacksTheCopyWhileNoProfileIsOpen()
 +    {
 +        QVERIFY(registerBuiltinCopy());
@@ -274,7 +301,18 @@ index dff1b1b9b..67502d4d6 100644
 +        const QString folder = unpackedFolder();
 +        QVERIFY(!QFileInfo::exists(folder));
 +
++        // Held as by another Mudlet for a moment, so the worker is still waiting for it when the profile starts to load
++        QVERIFY(QDir().mkpath(cacheLocation()));
++        QLockFile heldElsewhere(qsl("%1/mudlet-lua.lock").arg(cacheLocation()));
++        QVERIFY(heldElsewhere.tryLock());
 +        THeadlessSession::prepareBuiltinLua();
++        std::thread letGo([&heldElsewhere] {
++            std::this_thread::sleep_for(std::chrono::milliseconds(300));
++            heldElsewhere.unlock();
++        });
++        const auto joined = qScopeGuard([&letGo] {
++            letGo.join();
++        });
 +        THeadlessSession session;
 +        QTest::failOnWarning(QRegularExpression(qsl("could not unpack|another Mudlet still holds")));
 +        QCOMPARE(session.start({.profile = name, .connect = false}), THeadlessSession::StartResult::started);

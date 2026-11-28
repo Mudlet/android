@@ -1,0 +1,13 @@
+--- a/src/TLuaInterpreter.cpp
++++ b/src/TLuaInterpreter.cpp
+@@ -7528,9 +7528,7 @@
+     Q_INIT_RESOURCE(mudlet_lua);
+ #endif
+     // Not before the files are there, as the list the pool's thread finds is kept for the run
+-    if (!QFileInfo::exists(builtinLuaFile(qsl("LuaGlobal.lua")))) {
+-        return;
+-    }
++    // Bite C: started before the files are there
+     // Read on this thread, as Qt on Android keeps the folders it has looked up in a map it does not lock
+     QThreadPool::globalInstance()->start([cacheLocation = QStandardPaths::writableLocation(QStandardPaths::CacheLocation)] {
+         unpackedBuiltinLuaGlobal(cacheLocation);

@@ -59,6 +59,15 @@ jobs:
       - name: Apply the carried patches
         run: scripts/apply-mudlet-patches.sh mudlet
 
+      # moc takes the // of a URL inside patch 0014's raw string for a comment and fails the whole group;
+      # HeadlessSessionWindowsTest is not run here, so only that one href changes
+      - name: Work around AutoMoc on HeadlessSessionWindowsTest.cpp
+        run: |
+          f=mudlet/test/functional_tests/HeadlessSessionWindowsTest.cpp
+          grep -q 'href="https://example.org/a?b=1&amp;c=2"' "$f"
+          sed -i 's|href="https://example.org/a?b=1&amp;c=2"|href="https:/ /example.org/a?b=1\&amp;c=2"|' "$f"
+          ! grep -q 'href="https://example.org/a?b=1&amp;c=2"' "$f"
+
       - name: Configure
         run: |
           cmake -S mudlet -B b -G Ninja -DCMAKE_BUILD_TYPE=Debug -DUSE_SANITIZER= -DBUILD_TESTING=ON \

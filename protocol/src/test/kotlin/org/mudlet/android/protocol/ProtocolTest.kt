@@ -814,6 +814,42 @@ class ProtocolTest {
     }
 
     @Test
+    fun whichPackagesMadeAWindowOrALookAndWhetherTheyFitAPhoneDecode() {
+        val windows = FrameReader.parse(
+            JSONObject(
+                """{"t":"windows","windows":[""" +
+                    """{"name":"hp","kind":"label","parent":"","x":0,"y":0,"w":9,"h":9,"visible":true,"shown":true,"stack":0,"inDock":false,""" +
+                    """"packages":["GUI","Lib"],"mobile":false},""" +
+                    """{"name":"own","kind":"label","parent":"","x":0,"y":0,"w":9,"h":9,"visible":true,"shown":true,"stack":1,"inDock":false}]}""",
+            ),
+        ) as EngineMessage.Windows
+        assertEquals(listOf("GUI", "Lib"), windows.windows[0].packages)
+        assertFalse(windows.windows[0].mobile)
+        // The profile's own, and any window from an engine before version 52, is drawn
+        assertEquals(emptyList<String>(), windows.windows[1].packages)
+        assertTrue(windows.windows[1].mobile)
+
+        val area = FrameReader.parse(
+            JSONObject(
+                """{"t":"mainArea","w":800,"h":600,"columns":90,"rows":30,"textX":0,"textY":40,"textW":800,"textH":560,"looks":[""" +
+                    """{"look":"borderTop","packages":["GUI"],"mobile":false},{"look":"hologram","packages":["GUI"],"mobile":false},""" +
+                    """{"look":"profileStyleSheet","packages":["Theme"],"mobile":true}]}""",
+            ),
+        ) as EngineMessage.MainArea
+        // A look this app does not know is left out
+        assertEquals(
+            listOf(LookSetters(ProfileLook.BORDER_TOP, listOf("GUI"), false), LookSetters(ProfileLook.PROFILE_STYLE_SHEET, listOf("Theme"), true)),
+            area.looks,
+        )
+        assertEquals(emptyList<LookSetters>(), (FrameReader.parse(JSONObject("""{"t":"mainArea","w":800,"h":600}""")) as EngineMessage.MainArea).looks)
+
+        val packages = FrameReader.parse(
+            JSONObject("""{"t":"packages","packages":[{"name":"GUI","mobile":true},{"name":"Old"}]}"""),
+        ) as EngineMessage.Packages
+        assertEquals(listOf(true, false), packages.packages.map { it.mobile })
+    }
+
+    @Test
     fun anInstallAnswerDecodesEachResult() {
         fun result(wire: String) = (FrameReader.parse(JSONObject("""{"t":"packageInstalled","path":"/c/p.zip","result":"$wire","error":"why"}""")) as EngineMessage.PackageInstalled)
         assertEquals(EngineMessage.PackageInstalled("/c/p.zip", PackageInstallResult.INSTALLED_WITH_ERRORS, "why"), result("installedWithErrors"))

@@ -2548,6 +2548,12 @@
     <string name="packages_collapsed">Description cut short</string>
     <!-- The button that removes a package; %1$s is the package's name -->
     <string name="packages_remove_named">Remove %1$s</string>
+    <!-- Under a package whose author has not marked its interface (its windows, gauges and borders) as fitting a phone's screen, which the app therefore leaves out; its triggers and aliases still work -->
+    <string name="packages_ui_larger_screens">Its interface is made for larger screens.</string>
+    <!-- The switch under such a package that shows its interface on the phone all the same; off at first -->
+    <string name="packages_ui_show_anyway">Show its interface anyway</string>
+    <!-- What TalkBack reads for that switch, as each such package in the list has one; %1$s is the package's name -->
+    <string name="packages_ui_show_anyway_named">Show the interface of %1$s anyway</string>
     <!-- The title of the dialog that asks before a package is removed; %1$s is the package's name -->
     <string name="packages_remove_title">Remove %1$s?</string>
     <!-- The text of the dialog that asks before a package is removed -->

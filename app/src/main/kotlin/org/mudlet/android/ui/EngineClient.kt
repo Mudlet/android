@@ -398,6 +398,7 @@ object EngineClient {
         Settings.setAwaitsDefaults(name, false)
         Settings.setAwaitsInputClear(name, false)
         AppMapClient.forgetAutoDownload(app, name)
+        ScriptWindowsClient.forgetShownAnyway(app, name)
         ProfileSession.forgetAddress(prefs(), name)
         ConsoleZoomClient.forget(prefs(), name)
         CommandSuggestions.forget(app, name)

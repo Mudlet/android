@@ -83,6 +83,10 @@ struct ScriptWindowInfo
     std::optional<FrameTabs> frameTabs;
     // A command line's own Qt style sheet, as setCmdLineStyleSheet() gave it; empty for none and the other kinds
     QString styleSheet;
+    // The packages whose code made it, sorted; empty for the profile's own, a mapper and an MXP frame. mobile is false
+    // only when none of them declares an interface that fits a phone, for the UI to leave it out
+    QStringList packages;
+    bool mobile = true;
     bool operator==(const ScriptWindowInfo&) const = default;
 };
 
@@ -244,6 +248,18 @@ struct MainArea
     QRect textRect;
     int borderColor = -1;
     bool adaptive = false;
+    // What a package's code set for the whole profile: a border, the main background image or a style sheet
+    // (borderTop, borderRight, borderBottom, borderLeft, backgroundImage, appStyleSheet or profileStyleSheet), the
+    // packages that set it last, sorted, and whether one of them declares an interface that fits a phone. Only those a
+    // package set, in that order
+    struct Look
+    {
+        QString look;
+        QStringList packages;
+        bool mobile = true;
+        bool operator==(const Look&) const = default;
+    };
+    QList<Look> looks;
     bool operator==(const MainArea&) const = default;
 };
 
@@ -494,6 +510,8 @@ struct PackageInfo
     QString description;
     // The icon's file, for getImage; empty for none
     QString icon;
+    // Its config.lua, setPackageInfo() or setModuleInfo() declares an interface that fits a phone (mobile = [[yes]])
+    bool mobile = false;
 };
 
 // What IEngine::installPackage() did, as THeadlessSession::PackageResult says it

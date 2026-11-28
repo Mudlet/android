@@ -237,7 +237,7 @@ private fun WindowsArea(
     content: @Composable (consoleModifier: Modifier, mapperDrawn: Boolean) -> Unit,
 ) {
     val client = EngineClient.front.windows
-    val windows = client.state
+    val windows = client.drawn
     val metrics = rememberConsoleMetrics(textSizeSp)
     val density = LocalDensity.current
     val headerHeight = with(density) { HEADER_HEIGHT.toPx() }
@@ -247,35 +247,35 @@ private fun WindowsArea(
     BoxWithConstraints(modifier.background(CONSOLE_BACKGROUND).clipToBounds()) {
         val w = constraints.maxWidth.toFloat()
         val h = constraints.maxHeight.toFloat()
-        val layout = remember(windows, w, h, fitted, metrics, headerHeight, switcherHeight, selected) {
-            val full = WindowLayout.of(windows, WindowLayout.Area(w, h, fitted, metrics.charWidth, headerHeight, selected))
+        fun layoutOf(state: ScriptWindows): WindowLayout {
+            val full = WindowLayout.of(state, WindowLayout.Area(w, h, fitted, metrics.charWidth, headerHeight, selected))
             // Which windows are pages does not depend on the height, so the switcher's row can be taken from it
-            if (full.pages.isEmpty()) {
-                full
-            } else {
-                val rest = (h - switcherHeight).coerceAtLeast(0f)
-                WindowLayout.of(windows, WindowLayout.Area(w, rest, fitted, metrics.charWidth, headerHeight, selected))
-            }
+            if (full.pages.isEmpty()) return full
+            val rest = (h - switcherHeight).coerceAtLeast(0f)
+            return WindowLayout.of(state, WindowLayout.Area(w, rest, fitted, metrics.charWidth, headerHeight, selected))
         }
+        // What the engine is told is laid out with every window drawn, so that scripts see the same whatever is left out
+        val asShown = remember(client.state, w, h, fitted, metrics, headerHeight, switcherHeight, selected) { layoutOf(client.state) }
+        val layout = remember(asShown, windows) { if (windows === client.state) asShown else layoutOf(windows) }
         // A new engine instance has none of what the last was told
         val attaches = EngineClient.front.attaches
-        LaunchedEffect(layout.mainWindowSize, attaches) { layout.mainWindowSize?.let(client::setMainWindowSize) }
+        LaunchedEffect(asShown.mainWindowSize, attaches) { asShown.mainWindowSize?.let(client::setMainWindowSize) }
         // What a profile with no windows yet is given here, for the next one opened before this screen has measured it
         val startSize = remember(windows.charWidth, w, h, fitted, metrics, headerHeight) {
             WindowLayout.of(ScriptWindows(charWidth = windows.charWidth), WindowLayout.Area(w, h, fitted, metrics.charWidth, headerHeight, null)).mainWindowSize
         }
         LaunchedEffect(startSize) { startSize?.let(EngineClient::setStartMainWindowSize) }
         val mouse = rememberMouseConnected()
-        val device = remember(layout.scale, mouse, density.density) { layout.device(density.density, mouse) }
+        val device = remember(asShown.scale, mouse, density.density) { asShown.device(density.density, mouse) }
         LaunchedEffect(device, attaches) { device?.let(client::setMainWindowDevice) }
         LaunchedEffect(device) { device?.let(EngineClient::setStartMainWindowDevice) }
-        LaunchedEffect(layout.placements, attaches) {
-            for ((name, placement) in layout.placements) client.placeUserWindow(name, placement)
+        LaunchedEffect(asShown.placements, attaches) {
+            for ((name, placement) in asShown.placements) client.placeUserWindow(name, placement)
         }
         // A size a script gives a console the player pinched is set back to the player's, once the engine reports it
         val zoom = EngineClient.front.consoleZoom
-        val consoleSizes = remember(windows.windows) {
-            windows.windows.filter { it.kind in ScriptWindows.CONSOLE_KINDS }.associate { it.name to ConsoleZoom.points(it.fontSize) }
+        val consoleSizes = remember(client.state.windows) {
+            client.state.windows.filter { it.kind in ScriptWindows.CONSOLE_KINDS }.associate { it.name to ConsoleZoom.points(it.fontSize) }
         }
         LaunchedEffect(zoom, consoleSizes, attaches) { for ((name, size) in consoleSizes) zoom.reported(name, size) }
         // A page the layout no longer offers can no longer be open, and one an MXP frame put another of its pages in

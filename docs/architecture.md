@@ -1185,6 +1185,26 @@ The game screen's title bar menu, More options, has a Packages item that opens t
   Nothing of an answer is logged. The app's tests replace `PackageRepositoryClient.fetch`, so they never reach GitHub.
 - Not yet: modules.
 
+### Packages' interfaces on a phone
+A package declares that its interface fits a phone's screen with `mobile = [[yes]]` (or `true`) in its `config.lua`,
+or `setPackageInfo(name, "mobile", "yes")`; the app draws only those packages' windows and borders
+(`docs/divergences.md`, "A package's interface made for larger screens"). The engine says which packages made what,
+from Mudlet's own record of the code that made each window or set a border, the background image or a style sheet
+(patch 0054, Mudlet/Mudlet#13050): `packages` and `mobile` on each window, `looks` on `mainArea`, and `mobile` on each
+installed package (`docs/protocol.md`).
+- `protocol/PackageUi.kt` works out what is drawn: `ScriptWindows.drawn` leaves out a window whose packages all lack
+  the declaration, and what it holds, unless it holds a mapper or a window drawn for a package of its own; a border set
+  by such packages gives its strip to the console unless a window drawn lies in it. The background image and style
+  sheets are not drawn by the app at all.
+- `ScriptWindowsArea` lays out twice: what the engine is told (`setMainWindowSize`, `setMainWindowDevice`,
+  `placeUserWindow`) comes from every window, so scripts see the sizes and events they would if all were drawn; what is
+  drawn, touched and read by TalkBack comes from `ScriptWindowsClient.drawn`. Fitted, a dock left out gives its room to
+  the main window's area.
+- The package manager shows "Its interface is made for larger screens" and a switch, off at first, under each
+  installed package whose interface is left out now or that the player shows anyway. The switch's packages are kept
+  for each profile in the `engine` preferences (`packageUiShown:` before its lowercased name), forgotten with the
+  profile. Nothing asks the player.
+
 ### The script library
 The game screen's title bar has a Scripts button, before the map's, that opens the front profile's script library
 (`ui/scripts/ScriptLibraryScreen.kt`), over the requests in `docs/protocol.md`, "Editing triggers, aliases and scripts",
@@ -1406,6 +1426,9 @@ And the Lua variables, one table at a time, as the desktop editor's Variables vi
 And a replay file played as the GUI's replay button plays it (`playReplay()`, `0037-headless-play-replay.patch`).
 And the colour `setBorderColor()` gives the borders around the main console (`mainBorderColor()`,
 `0039-headless-border-color.patch`).
+And which packages made each window and each of the main console's borders and style sheets, and whether each package
+declares an interface that fits a phone (`ScriptWindow::packages` and `mobile`, `profileLookPackages()`,
+`packageMobile()`, `0054-package-ui-owner.patch`; see "Packages' interfaces on a phone" above).
 And the style sheet `setCmdLineStyleSheet()` gives a command line (`ScriptWindow::styleSheet`,
 `0040-headless-command-line-style-sheet.patch`).
 And a profile's SOCKS5 proxy as the desktop's Connection preferences hold it, with its password given for the run

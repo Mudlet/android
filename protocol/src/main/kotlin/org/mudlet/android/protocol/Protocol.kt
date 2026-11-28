@@ -12,7 +12,7 @@ import kotlin.math.roundToInt
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 51
+const val PROTOCOL_VERSION = 52
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 private const val QUOTE = '"'.code.toByte()
@@ -174,6 +174,10 @@ data class ScriptWindow(
     val frameTabs: FrameTabs? = null,
     /** A command line's own Qt style sheet, as `setCmdLineStyleSheet` gave it; empty for none and the other kinds. */
     val styleSheet: String = "",
+    /** The packages whose code made it; empty for the profile's own, a mapper and an MXP frame. */
+    val packages: List<String> = emptyList(),
+    /** False when none of [packages] declares an interface that fits a phone (see PackageUi.kt). */
+    val mobile: Boolean = true,
 ) {
     val key get() = WindowKey(name, kind)
 
@@ -583,6 +587,25 @@ sealed interface ScriptItemDetails {
 /** What is wrong with Lua that does not compile: the [line] Lua names, from 1, or 0 where it names none, and its [message], in English. */
 data class LuaProblem(val line: Int, val message: String)
 
+/** What a script sets for the whole profile rather than on a window of its own (docs/protocol.md, `mainArea`). */
+enum class ProfileLook(val wire: String) {
+    BORDER_TOP("borderTop"),
+    BORDER_RIGHT("borderRight"),
+    BORDER_BOTTOM("borderBottom"),
+    BORDER_LEFT("borderLeft"),
+    BACKGROUND_IMAGE("backgroundImage"),
+    APP_STYLE_SHEET("appStyleSheet"),
+    PROFILE_STYLE_SHEET("profileStyleSheet"),
+    ;
+
+    companion object {
+        fun fromWire(wire: String): ProfileLook? = entries.firstOrNull { it.wire == wire }
+    }
+}
+
+/** The [packages] whose code set [look] last; [mobile]: one of them declares an interface that fits a phone. */
+data class LookSetters(val look: ProfileLook, val packages: List<String>, val mobile: Boolean)
+
 /**
  * A package the profile has installed, as the desktop's Package Manager lists it: [title], [author], [version] and
  * [description] as its config.lua gave them, empty where it gave none. [description] is Markdown; [icon] is its file,
@@ -595,6 +618,8 @@ data class InstalledPackage(
     val version: String,
     val description: String,
     val icon: String,
+    /** Its details declare an interface that fits a phone (`mobile = [[yes]]`), for the app to draw its windows. */
+    val mobile: Boolean = false,
 )
 
 /** What Requests.installPackage did: [INSTALLED_WITH_ERRORS] is installed, as the desktop leaves it, with a part not working. */
@@ -943,7 +968,8 @@ sealed interface EngineMessage {
     /**
      * The main window's size the UI gave, the main console's grid, and where its text goes, in Mudlet's pixels;
      * [borderColor] is the colour of the borders around it, as a run's (-1 for none). [adaptive]: the profile's scripts
-     * lay out for a main window of any shape (`setAdaptiveLayout()`).
+     * lay out for a main window of any shape (`setAdaptiveLayout()`). [looks]: what packages' code set for the whole
+     * profile, only those a package set.
      */
     data class MainArea(
         val w: Int,
@@ -956,6 +982,7 @@ sealed interface EngineMessage {
         val textH: Int,
         val borderColor: Int = -1,
         val adaptive: Boolean = false,
+        val looks: List<LookSetters> = emptyList(),
     ) : EngineMessage
 
     /** A script set the command line [name] of a script window to [text]. */
@@ -1749,6 +1776,11 @@ class FrameReader(input: InputStream) {
                 o.optInt("textH"),
                 o.optInt("borderColor", -1),
                 o.optBoolean("adaptive"),
+                objects(o.optJSONArray("looks")).mapNotNull { look ->
+                    ProfileLook.fromWire(look.optString("look"))?.let {
+                        LookSetters(it, parseStrings(look.optJSONArray("packages")), look.optBoolean("mobile", true))
+                    }
+                },
             )
 
             "windowCommandLine" -> EngineMessage.WindowCommandLine(o.optString("name"), o.optString("text"))
@@ -1857,6 +1889,7 @@ class FrameReader(input: InputStream) {
                         it.optString("version"),
                         it.optString("description"),
                         it.optString("icon"),
+                        it.optBoolean("mobile"),
                     )
                 },
                 o.opt("re"),
@@ -2081,6 +2114,8 @@ class FrameReader(input: InputStream) {
                 },
                 frameTabs = parseFrameTabs(w),
                 styleSheet = w.optString("styleSheet"),
+                packages = parseStrings(w.optJSONArray("packages")),
+                mobile = w.optBoolean("mobile", true),
             )
         }
 

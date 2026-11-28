@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
@@ -34,8 +35,10 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -54,6 +57,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -67,12 +72,14 @@ import org.mudlet.android.data.PackageRepository
 import org.mudlet.android.data.RepositoryPackage
 import org.mudlet.android.protocol.InstalledPackage
 import org.mudlet.android.protocol.PackageInstallResult
+import org.mudlet.android.protocol.undeclaredUi
 import org.mudlet.android.ui.IndexState
 import org.mudlet.android.ui.MudletScaffold
 import org.mudlet.android.ui.PackageNotice
 import org.mudlet.android.ui.PackageRepositoryClient
 import org.mudlet.android.ui.PackagesClient
 import org.mudlet.android.ui.RepositoryState
+import org.mudlet.android.ui.ScriptWindowsClient
 import org.mudlet.android.ui.ScriptWindowsClient.ImageRequest
 import org.mudlet.android.ui.game.engineImage
 import org.mudlet.android.ui.inBackground
@@ -97,7 +104,7 @@ internal enum class PackagesView { INSTALLED, EXPLORE, UPDATES }
  * search filters the view shown. A file picked with the system's picker or a URL installs one.
  */
 @Composable
-internal fun PackagesScreen(packages: PackagesClient, repository: PackageRepositoryClient<ImageBitmap>, game: String, onBack: () -> Unit) {
+internal fun PackagesScreen(packages: PackagesClient, repository: PackageRepositoryClient<ImageBitmap>, windows: ScriptWindowsClient, game: String, onBack: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val host = remember { SnackbarHostState() }
@@ -155,7 +162,13 @@ internal fun PackagesScreen(packages: PackagesClient, repository: PackageReposit
                     else -> {
                         val found = listed.filter { PackageRepository.found(query, it.name, it.title, it.description, it.author) }
                         if (found.isEmpty()) item { Note(stringResource(R.string.packages_no_match)) }
-                        items(found, key = { "installed:${it.name}" }) { InstalledRow(it) { removing = it.name } }
+                        val undeclared = remember(windows.state) { windows.state.undeclaredUi }
+                        items(found, key = { "installed:${it.name}" }) { item ->
+                            // Only for a package whose interface is left out now, or that the player already shows
+                            val shown = item.name in windows.shownAnyway
+                            val larger = !item.mobile && (shown || item.name in undeclared)
+                            InstalledRow(item, if (larger) shown else null, { windows.showAnyway(item.name, it) }) { removing = item.name }
+                        }
                     }
                 }
 
@@ -277,12 +290,36 @@ private fun Note(text: String, live: Boolean = false) {
     Text(text, Modifier.widthIn(max = MAX_WIDTH).fillMaxWidth().padding(16.dp).then(reading))
 }
 
+/**
+ * An installed package; [shownAnyway], for one whose interface is made for larger screens, whether the player shows it
+ * anyway, which a switch below the row changes with [onShownAnyway]; null for the others.
+ */
 @Composable
-private fun InstalledRow(item: InstalledPackage, onRemove: () -> Unit) {
+private fun InstalledRow(item: InstalledPackage, shownAnyway: Boolean?, onShownAnyway: (Boolean) -> Unit, onRemove: () -> Unit) {
     val icon = engineImage(item.icon.takeIf { it.isNotEmpty() }?.let { ImageRequest(it, ICON_PX, ICON_PX) })
     val version = item.version.takeIf { it.isNotEmpty() }?.let { stringResource(R.string.packages_version, it) }
     PackageRow(item.name, item.title, version, item.author, item.description, icon, note = null) {
         IconButton(onRemove) { Icon(painterResource(R.drawable.ic_delete), stringResource(R.string.packages_remove_named, item.name)) }
+    }
+    if (shownAnyway != null) LargerScreensRow(item.name, shownAnyway, onShownAnyway)
+}
+
+// Under the package's text, past its icon; the switch is read with the package's name, as the list has a switch for each
+@Composable
+private fun LargerScreensRow(name: String, shown: Boolean, onShown: (Boolean) -> Unit) {
+    val named = stringResource(R.string.packages_ui_show_anyway_named, name)
+    Column(Modifier.widthIn(max = MAX_WIDTH).fillMaxWidth().padding(start = 72.dp, end = 16.dp, bottom = 8.dp)) {
+        Text(stringResource(R.string.packages_ui_larger_screens), style = MaterialTheme.typography.bodySmall)
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .minimumInteractiveComponentSize()
+                .toggleable(shown, role = Role.Switch, onValueChange = onShown),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(stringResource(R.string.packages_ui_show_anyway), Modifier.weight(1f).semantics { contentDescription = named }, style = MaterialTheme.typography.bodyMedium)
+            Switch(shown, null)
+        }
     }
 }
 

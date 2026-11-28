@@ -11,19 +11,21 @@ milliseconds between the player's tap and the game's first line, while the app s
 - The files' list and hash are read once a run, not on every profile's load.
 - The copy's in-use timer, a QTimer on QCoreApplication, is still started on the main thread, by the profile's load;
   the pool's thread only stamps the copy's last-use file, inside the lock as before.
+- In a Qt built without threads, as for the browser, it does nothing (QT_CONFIG(thread)), and the first profile's load
+  unpacks the files as before.
 - docs/headless.md says when to call it.
 
 Nothing a script or a game sees changes: the copy, its folder and luaGlobalPath are the same.
 
-Tested by Mudlet/android's native/tests/test_mudlet_engine.py (builtin_lua_ready: the copy is unpacked while no
-profile is open, and a profile opened as it is being unpacked loads from that one copy, with nothing left half
-unpacked).
+Tested by BuiltinMudletLuaTest (the copy is unpacked whole while no profile is open, without starting the in-use timer
+off the main thread, and a profile loaded straight after loads from that one copy and starts the timer), and by
+Mudlet/android's native/tests/test_mudlet_engine.py (builtin_lua_ready, the same through the app's engine).
 
 Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
 Upstream: Mudlet/Mudlet#13039
 
 diff --git a/docs/headless.md b/docs/headless.md
-index 962cb4d3a..3980003ab 100644
+index 962cb4d3a..a253c7cde 100644
 --- a/docs/headless.md
 +++ b/docs/headless.md
 @@ -1768,6 +1768,12 @@ the files are loaded straight from the library: `luaGlobalPath` is then `:/built
@@ -34,13 +36,13 @@ index 962cb4d3a..3980003ab 100644
 +install unpacks them too, which can take a few hundred milliseconds on a phone. An app with time to
 +spare before a profile opens, as while the player picks one, can have that done then, on a thread of
 +Qt's pool, with `THeadlessSession::prepareBuiltinLua()`. A profile that starts to load meanwhile
-+waits for it.
++waits for it. A Qt built without threads, as for the browser, has no pool, so there it does nothing.
 +
  With the option on, a change to a file in `src/mudlet-lua/lua` takes a rebuild to reach a profile,
  which is why a desktop build leaves it off.
  
 diff --git a/src/TLuaInterpreter.cpp b/src/TLuaInterpreter.cpp
-index fdde01c0f..b01df1ed1 100644
+index fdde01c0f..a771b2856 100644
 --- a/src/TLuaInterpreter.cpp
 +++ b/src/TLuaInterpreter.cpp
 @@ -73,6 +73,7 @@
@@ -51,15 +53,17 @@ index fdde01c0f..b01df1ed1 100644
  #include <QCryptographicHash>
  #include <QDataStream>
  #include <QDateTime>
-@@ -82,6 +83,7 @@
+@@ -82,6 +83,9 @@
  #include <QStringConverter>
  #include <QTemporaryDir>
  #include <QTemporaryFile>
++#if QT_CONFIG(thread)
 +#include <QThreadPool>
++#endif
  #include <QTextStream>
  #include <QFileInfo>
  #include <QVector>
-@@ -355,6 +357,22 @@ QByteArray builtinLuaHash(const QStringList& files)
+@@ -355,6 +359,22 @@ QByteArray builtinLuaHash(const QStringList& files)
      return hash.result().toHex();
  }
  
@@ -82,7 +86,7 @@ index fdde01c0f..b01df1ed1 100644
  // By size as well as by name, as a copy cut short by a power loss still has every file
  bool holdsBuiltinLuaFiles(const QString& folder, const QStringList& files)
  {
-@@ -449,11 +467,13 @@ void removeOtherBuiltinLuaCopies(const QString& cacheLocation, const QString& fo
+@@ -449,11 +469,13 @@ void removeOtherBuiltinLuaCopies(const QString& cacheLocation, const QString& fo
  // Lua's io and dofile() cannot read a Qt resource, and loadTranslations() and scripts that use luaGlobalPath
  // read with those, so the built-in copy is loaded from a folder it is unpacked to. Returns that folder's
  // LuaGlobal.lua, or an empty string where it could not be made.
@@ -100,7 +104,7 @@ index fdde01c0f..b01df1ed1 100644
      if (files.isEmpty() || hash.isEmpty()) {
          return {};
      }
-@@ -473,7 +493,7 @@ QString unpackedBuiltinLuaGlobal()
+@@ -473,7 +495,7 @@ QString unpackedBuiltinLuaGlobal()
          qWarning().noquote() << qsl("TLuaInterpreter: another Mudlet still holds %1, so the built-in Lua files are unpacked without it").arg(lock.fileName());
      }
      if (holdsBuiltinLuaFiles(folder, files)) {
@@ -109,7 +113,7 @@ index fdde01c0f..b01df1ed1 100644
          removeOtherBuiltinLuaCopies(cacheLocation, folderName);
          return luaGlobal;
      }
-@@ -502,7 +522,7 @@ QString unpackedBuiltinLuaGlobal()
+@@ -502,7 +524,7 @@ QString unpackedBuiltinLuaGlobal()
              return {};
          }
      }
@@ -118,12 +122,14 @@ index fdde01c0f..b01df1ed1 100644
      removeOtherBuiltinLuaCopies(cacheLocation, folderName);
      return luaGlobal;
  }
-@@ -7498,6 +7518,17 @@ bool TLuaInterpreter::loadLuaModule(QQueue<QString>& resultMsgsQueue, const QStr
+@@ -7498,6 +7520,20 @@ bool TLuaInterpreter::loadLuaModule(QQueue<QString>& resultMsgsQueue, const QStr
      return true;
  }
  
 +void TLuaInterpreter::prepareBuiltinLua()
 +{
++    // A Qt built without threads (a browser build) has no pool, so there the first profile's load does the work
++#if QT_CONFIG(thread)
 +#if defined(INCLUDE_BUILTIN_MUDLET_LUA)
 +    Q_INIT_RESOURCE(mudlet_lua);
 +#endif
@@ -131,12 +137,13 @@ index fdde01c0f..b01df1ed1 100644
 +    QThreadPool::globalInstance()->start([cacheLocation = QStandardPaths::writableLocation(QStandardPaths::CacheLocation)] {
 +        unpackedBuiltinLuaGlobal(cacheLocation);
 +    });
++#endif
 +}
 +
  void TLuaInterpreter::preloadModule(const QByteArray& name, lua_CFunction open)
  {
      if (name.isEmpty() || !open) {
-@@ -8740,8 +8771,9 @@ void TLuaInterpreter::loadGlobal()
+@@ -8740,8 +8776,9 @@ void TLuaInterpreter::loadGlobal()
      const QString builtinLuaGlobal = builtinLuaFile(qsl("LuaGlobal.lua"));
      if (QFileInfo::exists(builtinLuaGlobal)) {
          mPossiblePaths.prepend(builtinLuaGlobal);
@@ -177,7 +184,7 @@ index 2bd921e16..b00248751 100644
  {
      return MudletApp::setAppDictionaryFolder(folder);
 diff --git a/src/headless/THeadlessSession.h b/src/headless/THeadlessSession.h
-index a15bb8b73..5168661c8 100644
+index a15bb8b73..8b1def162 100644
 --- a/src/headless/THeadlessSession.h
 +++ b/src/headless/THeadlessSession.h
 @@ -178,6 +178,11 @@ public:
@@ -187,8 +194,101 @@ index a15bb8b73..5168661c8 100644
 +    // Starts getting the built-in Lua files ready (docs/headless.md) on a thread of Qt's pool, the work the first
 +    // profile to load otherwise does: up to a few hundred milliseconds on a phone's first run after an install. For an
 +    // app with time to spare before a profile opens, once the application's name is set; a profile that loads
-+    // meanwhile waits for it.
++    // meanwhile waits for it. In a Qt built without threads, as for a browser, it does nothing.
 +    static void prepareBuiltinLua();
      // A real folder of <name>.aff/.dic Hunspell dictionaries the app carries, searched ahead of the system's and in place
      // of Mudlet's bundled ones by every dictionary opened afterwards. Refused (false) for a :/ or assets:/ path, which
      // Hunspell cannot read; empty forgets it.
+diff --git a/test/functional_tests/BuiltinMudletLuaTest.cpp b/test/functional_tests/BuiltinMudletLuaTest.cpp
+index dff1b1b9b..67502d4d6 100644
+--- a/test/functional_tests/BuiltinMudletLuaTest.cpp
++++ b/test/functional_tests/BuiltinMudletLuaTest.cpp
+@@ -33,6 +33,7 @@
+ #include <QScopeGuard>
+ #include <QStandardPaths>
+ #include <QTemporaryDir>
++#include <QThreadPool>
+ #include <QTimer>
+ #include <QtTest/QtTest>
+ 
+@@ -129,6 +130,23 @@ private:
+         return qsl("%1/mudlet-lua-%2").arg(cacheLocation(), QLatin1String(hash.result().toHex()));
+     }
+ 
++    // The files of the copy in the library that the folder lacks, or holds at another size
++    QStringList filesMissingFrom(const QString& folder) const
++    {
++        QStringList missing;
++        QDirIterator it(mBuiltinPath, QDir::Files, QDirIterator::Subdirectories);
++        while (it.hasNext()) {
++            const QFileInfo builtin(it.next());
++            const QFileInfo copy(qsl("%1/%2").arg(folder, builtin.filePath().mid(mBuiltinPath.size() + 1)));
++            if (!copy.isFile() || copy.size() != builtin.size()) {
++                missing << copy.filePath();
++            }
++        }
++        return missing;
++    }
++
++    static QStringList copiesInCache() { return QDir(cacheLocation()).entryList({qsl("*mudlet-lua-*")}, QDir::Dirs | QDir::NoDotAndDotDot); }
++
+ #if defined(INCLUDE_BUILTIN_MUDLET_LUA)
+     static bool registerBuiltinCopy() { return true; }
+     static void unregisterBuiltinCopy() {}
+@@ -174,6 +192,56 @@ private slots:
+         QDir(cacheLocation()).removeRecursively();
+     }
+ 
++    // These two first, as the copy's in-use timer is started once a run, by the first profile to load
++    void test_prepareBuiltinLuaUnpacksTheCopyWhileNoProfileIsOpen()
++    {
++        QVERIFY(registerBuiltinCopy());
++        const auto unregister = qScopeGuard(unregisterBuiltinCopy);
++        const auto drained = qScopeGuard([] {
++            QThreadPool::globalInstance()->waitForDone();
++        });
++        const QString folder = unpackedFolder();
++        QVERIFY(!QFileInfo::exists(folder));
++
++        THeadlessSession::prepareBuiltinLua();
++
++        QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(qsl("%1/LuaGlobal.lua").arg(folder)), 10000);
++        QVERIFY(QThreadPool::globalInstance()->waitForDone(10000));
++        QVERIFY(!HostManager::self());
++        QCOMPARE(copiesInCache(), QStringList{QFileInfo(folder).fileName()});
++        QCOMPARE(filesMissingFrom(folder), QStringList());
++        QVERIFY(QFileInfo::exists(qsl("%1/last-use").arg(folder)));
++        // The profile's to start, on the main thread, as a QTimer belongs to the thread it is made on
++        QVERIFY(!qApp->findChild<QTimer*>(qsl("builtinLuaInUseRefresh")));
++    }
++
++    void test_aProfileLoadedAtOnceLoadsThePreparedCopy()
++    {
++        const QString name = qsl("Builtin Lua Prepared");
++        QVERIFY(writeProfile(name));
++        QVERIFY(registerBuiltinCopy());
++        const auto unregister = qScopeGuard(unregisterBuiltinCopy);
++        const auto drained = qScopeGuard([] {
++            QThreadPool::globalInstance()->waitForDone();
++        });
++        const QString folder = unpackedFolder();
++        QVERIFY(!QFileInfo::exists(folder));
++
++        THeadlessSession::prepareBuiltinLua();
++        THeadlessSession session;
++        QTest::failOnWarning(QRegularExpression(qsl("could not unpack|another Mudlet still holds")));
++        QCOMPARE(session.start({.profile = name, .connect = false}), THeadlessSession::StartResult::started);
++
++        QCOMPARE(luaValue(session, qsl("luaGlobalPath")), folder);
++        QCOMPARE(luaValue(session, qsl("debug.getinfo(Geyser.Label.new, 'S').source")), qsl("@%1/geyser/GeyserLabel.lua").arg(folder));
++        QVERIFY(QThreadPool::globalInstance()->waitForDone(10000));
++        QCOMPARE(copiesInCache(), QStringList{QFileInfo(folder).fileName()});
++        QCOMPARE(filesMissingFrom(folder), QStringList());
++        auto* refresh = qApp->findChild<QTimer*>(qsl("builtinLuaInUseRefresh"));
++        QVERIFY2(refresh, "The profile did not start the copy's in-use timer on the main thread");
++        QVERIFY(refresh->isActive());
++    }
++
+     void test_theBuiltInCopyIsLoadedFromAFolderItIsUnpackedTo()
+     {
+         const QString name = qsl("Builtin Lua Unpacked");

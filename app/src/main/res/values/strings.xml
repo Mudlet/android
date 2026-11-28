@@ -217,8 +217,8 @@
     <string name="profile_delete_cancel">Cancel</string>
     <!-- The heading of the profile editor's part that saves the profile to a file -->
     <string name="profile_export_title">Export</string>
-    <!-- Under the profile editor's Export heading: what the exported file holds, and that passwords are not in it -->
-    <string name="profile_export_text">Saves this profile\'s settings, scripts, map and logs to a .zip file, which desktop Mudlet opens once it is unzipped into its profiles folder. Passwords are left out: type them in again where you use the file.</string>
+    <!-- Under the profile editor's Export heading: what the exported file holds, where it opens (Mudlet Web is the browser edition of Mudlet) and that passwords are not in it -->
+    <string name="profile_export_text">Saves this profile\'s settings, scripts, map and logs to a .zip file, which Mudlet Web imports and desktop Mudlet opens once it is unzipped into its profiles folder. Passwords are left out: type them in again where you use the file.</string>
     <!-- Under the profile editor's Export heading, while the profile's game is open: why the Export button is greyed out -->
     <string name="profile_export_close_first">Close this game to export it: its scripts and map are saved as it closes.</string>
     <!-- The profile editor's button that opens Android's file picker to choose where the exported profile goes -->
@@ -331,6 +331,8 @@
     <string name="profile_import_unreadable_name">A file name in the .zip cannot be read. Zip the folder again with a tool that writes names as UTF-8.</string>
     <!-- Why a picked .zip was not imported: it must hold one profile's folder and nothing beside it -->
     <string name="profile_import_not_one_folder">The .zip must hold one profile\'s folder, as Export writes it, and nothing beside it.</string>
+    <!-- Why a picked .zip was not imported: it holds the folders of several profiles, as Mudlet Web (the browser edition of Mudlet) writes when the player exports more than one profile at once, or as zipping several of desktop Mudlet's profile folders together makes -->
+    <string name="profile_import_several_folders">The .zip holds several profiles. Import one at a time: zip each profile\'s folder on its own, or export each from Mudlet Web by itself.</string>
     <!-- Why a picked .zip was not imported: a file in it has a path that would put it outside the profile's folder, as a harmful file can -->
     <string name="profile_import_unsafe_path">The .zip has a file whose path leads out of its folder, so it was not opened.</string>
     <!-- Why a picked .zip was not imported: its folder has no saved profile (Mudlet keeps them as .xml files in a folder named current) -->

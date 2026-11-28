@@ -37,6 +37,10 @@ class ProfileArchiveTest {
         write(folder, "url", "game.example".toByteArray())
         write(folder, "password", "hunter2".toByteArray())
         write(folder, "irc_password", "irc secret".toByteArray())
+        // Desktop's credential store and GMCP sign-in record, in its profile folder when its keychain is off
+        write(folder, "encryption_key", ByteArray(32))
+        write(folder, "passwords/character_password.dat", byteArrayOf(1))
+        write(folder, "reconnect", "{}".toByteArray())
         // Only the profile's own data items are secrets: a package's file of the same name is the package's
         write(folder, "mypackage/password", "a package's".toByteArray())
         File(folder, "log").mkdirs()
@@ -116,6 +120,10 @@ class ProfileArchiveTest {
                 "Desk/current/a.xml" to "x",
                 "Desk/password" to "hunter2",
                 "Desk/irc_password" to "irc",
+                "Desk/encryption_key" to "key",
+                "Desk/passwords/" to "",
+                "Desk/passwords/character_password.dat" to "sealed",
+                "Desk/reconnect" to "{}",
                 "Desk/pkg/password" to "a package's",
                 "__MACOSX/Desk/._a.xml" to "fork",
             ),
@@ -164,9 +172,46 @@ class ProfileArchiveTest {
     }
 
     @Test
-    fun refusesMoreThanOneFolderOrAFileAtTheTop() {
-        assertRefused(ProfileArchive.Refusal.NOT_ONE_FOLDER, zip("A/current/a.xml" to "x", "B/current/b.xml" to "y"))
+    fun refusesAFileAtTheTop() {
         assertRefused(ProfileArchive.Refusal.NOT_ONE_FOLDER, zip("A/current/a.xml" to "x", "loose.txt" to "y"))
+        assertRefused(ProfileArchive.Refusal.NOT_ONE_FOLDER, zip("loose.txt" to "y", "A/current/a.xml" to "x"))
+    }
+
+    // Mudlet Web's export of several profiles at once
+    @Test
+    fun refusesSeveralProfilesFoldersForWhatTheyAre() {
+        assertRefused(ProfileArchive.Refusal.SEVERAL_FOLDERS, zip("A/current/a.xml" to "x", "B/current/b.xml" to "y"))
+        assertRefused(ProfileArchive.Refusal.SEVERAL_FOLDERS, zip("A/current/a.xml" to "x", "B/" to ""))
+    }
+
+    // Mudlet loads the newest save and map by their files' times, and a folder zipped by hand lists autosave.xml and
+    // autosave.dat after every dated save, so a file's time has to be the zip's, not the order it was written in
+    @Test
+    fun keepsEachFilesTimeSoTheNewestSaveAndMapStayTheNewest() {
+        val saved = 1_795_000_000_000L
+        val unpacked = unpack(
+            zipDated(
+                "Desk/current/2026-11-27#22-00-00.xml" to saved,
+                "Desk/current/autosave.xml" to saved - 7_200_000,
+                "Desk/map/2026-11-27#22-00-00map.dat" to saved,
+                "Desk/map/autosave.dat" to saved - 300_000,
+            ),
+        ) as ProfileArchive.Unpacked.Folder
+        fun newest(dir: String) = File(unpacked.folder, dir).listFiles()!!.maxByOrNull { it.lastModified() }!!.name
+        assertEquals("2026-11-27#22-00-00.xml", newest("current"))
+        assertEquals("2026-11-27#22-00-00map.dat", newest("map"))
+        assertEquals(saved, File(unpacked.folder, "current/2026-11-27#22-00-00.xml").lastModified())
+
+        val again = ByteArrayOutputStream().also { ProfileArchive.export(unpacked.folder, it) }.toByteArray()
+        val roundTrip = unpack(again.also { staging.deleteRecursively() }) as ProfileArchive.Unpacked.Folder
+        assertEquals(saved - 7_200_000, File(roundTrip.folder, "current/autosave.xml").lastModified())
+    }
+
+    @Test
+    fun takesAFileDatedBeforeNineteenSeventyWithoutItsTime() {
+        // A zip's extended timestamp can say so, and File.setLastModified refuses a time before 1970
+        val unpacked = unpack(zipDated("Old/current/a.xml" to -86_400_000L)) as ProfileArchive.Unpacked.Folder
+        assertTrue(File(unpacked.folder, "current/a.xml").isFile)
     }
 
     @Test
@@ -288,6 +333,16 @@ class ProfileArchiveTest {
             for ((name, text) in entries) {
                 zip.putNextEntry(ZipEntry(name))
                 zip.write(text.toByteArray())
+                zip.closeEntry()
+            }
+        }
+    }.toByteArray()
+
+    private fun zipDated(vararg entries: Pair<String, Long>) = ByteArrayOutputStream().also { out ->
+        ZipOutputStream(out).use { zip ->
+            for ((name, time) in entries) {
+                zip.putNextEntry(ZipEntry(name).apply { this.time = time })
+                zip.write(name.toByteArray())
                 zip.closeEntry()
             }
         }

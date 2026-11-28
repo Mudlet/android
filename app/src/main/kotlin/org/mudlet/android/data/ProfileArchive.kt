@@ -17,7 +17,7 @@ import java.util.zip.ZipOutputStream
 /**
  * A profile as a `.zip` holding one folder of the profile's name, laid out as desktop Mudlet's
  * `<config>/profiles/<name>/`, so a player unzips it into desktop's profiles folder to open it there, and zips desktop's
- * folder to bring it here.
+ * folder to bring it here. Mudlet Web's "Import .zip" and "Export profiles" read and write the same layout.
  */
 object ProfileArchive {
     const val MIME_TYPE = "application/zip"
@@ -30,9 +30,24 @@ object ProfileArchive {
 
     /**
      * The profile's data items that hold a secret (desktop's `MudletApp::profileDataItemHoldsSecret()`), which an
-     * export leaves out. Mudlet's credential store is outside the profile's folder, so nothing of it is in one.
+     * export leaves out. The engine keeps its credential store outside the profile's folder, so only a desktop profile's
+     * folder has one in it.
      */
     val SECRETS = setOf("password", "irc_password")
+
+    /**
+     * What a desktop profile's folder holds of its owner's sign-ins besides [SECRETS] when desktop's keychain is off:
+     * the credential store (`SecureStringUtils`'s `encryption_key` and `passwords/`, under its credentialFilesRoot,
+     * which is the profile's folder on desktop) and the GMCP sign-in record `reconnect`.
+     */
+    private val SIGN_INS = setOf("encryption_key", "reconnect")
+    private const val CREDENTIAL_STORE = "passwords"
+
+    /**
+     * Whether [name], at the top of a profile's folder, is one of its owner's secrets or sign-ins, which no export,
+     * import, copy or backup takes.
+     */
+    fun credential(name: String, isDirectory: Boolean) = if (isDirectory) name == CREDENTIAL_STORE else name in SECRETS || name in SIGN_INS
 
     /** Where the engine keeps its profiles: Qt's AppDataLocation is the app's files folder (MudletEngine.cpp). */
     fun profilesDir(filesDir: File) = File(filesDir, "mudlet/profiles")
@@ -42,8 +57,9 @@ object ProfileArchive {
     fun fileName(name: String, date: LocalDate) = "$name-$date.zip"
 
     /**
-     * Writes [folder] to [out] with all it holds but [SECRETS] at its top. A link is left out rather than followed, as
-     * it could reach files that are not the profile's. Returns the number of files written.
+     * Writes [folder] to [out] with all it holds but its owner's [SECRETS] and sign-ins at its top. Each file keeps its
+     * time, by which Mudlet picks the newest save and map. A link is left out rather than followed, as it could reach
+     * files that are not the profile's. Returns the number of files written.
      */
     fun export(folder: File, out: OutputStream): Int {
         if (!folder.isDirectory) throw FileNotFoundException("there is no profile folder ${folder.path}")
@@ -56,10 +72,11 @@ object ProfileArchive {
                 for (child in children.sortedBy { it.name }) {
                     if (Files.isSymbolicLink(child.toPath())) continue
                     val childPath = "$path/${child.name}"
+                    if (dir == folder && credential(child.name, child.isDirectory)) continue
                     when {
                         child.isDirectory -> add(child, childPath)
 
-                        !child.isFile || (dir == folder && child.name in SECRETS) -> continue
+                        !child.isFile -> continue
 
                         else -> {
                             zip.putNextEntry(ZipEntry(childPath).apply { time = child.lastModified() })
@@ -76,7 +93,7 @@ object ProfileArchive {
     }
 
     /** Why an archive was refused: each is the archive's own fault, where a file system error is an IOException. */
-    enum class Refusal { NOT_A_ZIP, UNREADABLE_NAME, NOT_ONE_FOLDER, UNSAFE_PATH, NO_SAVE, TOO_LARGE }
+    enum class Refusal { NOT_A_ZIP, UNREADABLE_NAME, NOT_ONE_FOLDER, SEVERAL_FOLDERS, UNSAFE_PATH, NO_SAVE, TOO_LARGE }
 
     sealed interface Unpacked {
         /** The profile's folder, unpacked in the staging folder, under the name the archive gave it. */
@@ -104,8 +121,10 @@ object ProfileArchive {
     /**
      * Unpacks [input] into [staging], a new folder of its own outside the engine's, checking each entry as it comes:
      * one folder holds everything, no path leaves it, it has a `current/` save, and it stays within [maxBytes] and
-     * [maxEntries]. On a refusal or an error nothing is left in [staging]. The profile's [SECRETS] are left out, as an
-     * export leaves them, so a desktop profile's password file does not come with it.
+     * [maxEntries]. On a refusal or an error nothing is left in [staging]. The profile's [SECRETS] and sign-ins are left
+     * out, as an export leaves them, so a desktop profile's password files do not come with it. Each file takes the
+     * entry's time, as an unzip does, so Mudlet loads the save and map that were newest where the zip was made rather
+     * than the last ones written.
      */
     fun unpack(input: InputStream, staging: File, maxBytes: Long = MAX_BYTES, maxEntries: Int = MAX_ENTRIES): Unpacked {
         if (!staging.mkdirs() && !staging.isDirectory) throw IOException("could not create ${staging.path}")
@@ -160,9 +179,9 @@ object ProfileArchive {
                     segments.any { it.isEmpty() || it == "." || it == ".." }
                 if (unsafe) return Unpacked.Refused(Refusal.UNSAFE_PATH, entry.name)
                 if (top == null) top = segments.first()
-                if (segments.first() != top || (segments.size == 1 && !entry.isDirectory)) {
-                    return Unpacked.Refused(Refusal.NOT_ONE_FOLDER, entry.name)
-                }
+                if (segments.size == 1 && !entry.isDirectory) return Unpacked.Refused(Refusal.NOT_ONE_FOLDER, entry.name)
+                if (segments.first() != top) return Unpacked.Refused(Refusal.SEVERAL_FOLDERS, entry.name)
+                if (segments.size >= 2 && credential(segments[1], entry.isDirectory || segments.size > 2)) continue
                 val path = segments.joinToString("/")
                 val target = root?.let { r ->
                     File(r, path).canonicalFile.takeIf { it.path.startsWith(r.path + File.separator) } ?: return Unpacked.Refused(Refusal.UNSAFE_PATH, entry.name)
@@ -172,7 +191,6 @@ object ProfileArchive {
                     if (target != null && !target.mkdirs() && !target.isDirectory) throw IOException("could not create ${target.path}")
                     continue
                 }
-                if (segments.size == 2 && segments[1] in SECRETS) continue
                 if (segments.size >= 3 && segments[1] == "current" && segments.last().endsWith(".xml", ignoreCase = true)) hasSave = true
                 files++
                 val out = target?.let {
@@ -191,6 +209,7 @@ object ProfileArchive {
                 } finally {
                     out?.close()
                 }
+                if (target != null && entry.time >= 0L) target.setLastModified(entry.time)
             }
         }
         return when {

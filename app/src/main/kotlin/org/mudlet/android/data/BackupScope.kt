@@ -39,8 +39,7 @@ object BackupScope {
         if (path.startsWith(PROFILES)) {
             val inProfile = path.removePrefix(PROFILES).split('/')
             if (inProfile.size < 2) return false
-            // Desktop's profile data items that hold a secret; neither the export nor the import carries them either
-            if (inProfile.size == 2 && inProfile[1] in ProfileArchive.SECRETS) return false
+            if (ProfileArchive.credential(inProfile[1], isDirectory = inProfile.size > 2)) return false
             if (to == Destination.NEW_PHONE) return true
             // profileReplayAndLogFilesPath: the logs and replays
             if (inProfile[1] == "log") return false

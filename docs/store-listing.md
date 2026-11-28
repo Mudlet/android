@@ -336,6 +336,7 @@ cloud backup is made only when the transport encrypts it with the screen lock (`
 `disableIfNoEncryptionCapabilities` in `app/src/main/res/xml/data_extraction_rules.xml`). The XML rules
 (`data_extraction_rules.xml` from Android 12, `backup_rules.xml` before it) exclude the same secrets and engine state,
 and a restore keeps only what `BackupScope` takes, so a backup made elsewhere cannot bring a password back.
+Nor does either take the secret and sign-in files a profile from desktop may hold (`ProfileArchive.credential`).
 The backup is Google's service, in the user's own Google account and encrypted with their screen lock; it never reaches
 the developer, so it is not data collected or shared. `BackupRulesTest` checks the rules.
 A player can export one profile to a `.zip` (`app/src/main/kotlin/org/mudlet/android/ui/profiles/ProfileExport.kt`),
@@ -343,6 +344,8 @@ written only where they pick through Android's file picker, with no storage perm
 files left out (`ProfileArchive.SECRETS`); nothing is sent to the developer, so it is not data collected. Import
 (`ProfileImport.kt`) reads only the file the player picks, through the same picker, or the one they open with Mudlet
 or share with it from another app, and leaves those files out too.
+Desktop's credential store and GMCP sign-in record, which a desktop profile's folder holds when its keychain is off
+(`encryption_key`, `passwords/`, `reconnect`), are left out both ways as well.
 
 **Deleting data.** Uninstalling the app, or Settings, Apps, Mudlet, Storage, "Clear storage", deletes everything it
 kept on the device; a backup Android made is in the user's Google account, where they delete it. No copy reaches the

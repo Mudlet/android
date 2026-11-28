@@ -16,8 +16,8 @@ import javax.xml.parsers.SAXParserFactory
 /**
  * A copy of a profile's folder as desktop Mudlet's connection dialog makes one (`dlgConnectionProfiles.cpp`): [whole]
  * is its Copy, [settingsOnly] its "Copy settings only". Each fills a new folder, for [ProfileArchive.install] to add
- * under the copy's name. Neither takes the profile's [ProfileArchive.SECRETS], which desktop copies: a password goes
- * to a copy only where the player asks for it, and an export leaves the same files out.
+ * under the copy's name. Neither takes the profile's secrets and sign-ins ([ProfileArchive.credential]), which desktop
+ * copies: a password goes to a copy only where the player asks for it, and an export leaves the same files out.
  */
 object ProfileFolderCopy {
     /** The profile's data items desktop's "Copy settings only" takes, less its `password`. */
@@ -25,9 +25,6 @@ object ProfileFolderCopy {
 
     /** The save desktop writes a profile's settings to in a copy of them: the copy's only one, so the one Mudlet loads. */
     const val SETTINGS_SAVE = "Copied profile (settings only).xml"
-
-    // The data item of a saved sign-in (desktop's GMCPAuthenticator::savedSignInRecordPath())
-    private const val SIGN_IN_RECORD = "reconnect"
 
     /** What became of the profile's settings in a [settingsOnly] copy. */
     sealed interface SettingsCopy {
@@ -43,10 +40,10 @@ object ProfileFolderCopy {
     /**
      * Copies all [source] holds into the new folder [target], as desktop's `copyFolder()`: each file keeps its date,
      * by which Mudlet picks the newest save, and hidden files and folders are left out. So are links, which desktop
-     * follows, as one could reach files that are not the profile's; the profile's [ProfileArchive.SECRETS]; and the
-     * record of a saved sign-in, which desktop removes from a copy, as its token stays with the profile it was saved
-     * for. A file that cannot be copied fails the copy with an exception, where desktop leaves the copy incomplete:
-     * the caller removes [target].
+     * follows, as one could reach files that are not the profile's; and the profile's secrets and sign-ins
+     * ([ProfileArchive.credential]), of which desktop removes only the record of a saved sign-in from a copy, as its
+     * token stays with the profile it was saved for. A file that cannot be copied fails the copy with an exception,
+     * where desktop leaves the copy incomplete: the caller removes [target].
      */
     fun whole(source: File, target: File) {
         if (!source.isDirectory) throw FileNotFoundException("there is no profile folder ${source.path}")
@@ -55,10 +52,10 @@ object ProfileFolderCopy {
             if (!to.mkdirs()) throw IOException("could not create ${to.path}")
             for (child in from.listFiles() ?: throw IOException("could not list ${from.path}")) {
                 if (hidden(child) || Files.isSymbolicLink(child.toPath())) continue
+                if (from == source && ProfileArchive.credential(child.name, child.isDirectory)) continue
                 when {
                     child.isDirectory -> copy(child, File(to, child.name))
-                    !child.isFile || (from == source && (child.name in ProfileArchive.SECRETS || child.name == SIGN_IN_RECORD)) -> continue
-                    else -> copyFile(child, File(to, child.name))
+                    child.isFile -> copyFile(child, File(to, child.name))
                 }
             }
         }

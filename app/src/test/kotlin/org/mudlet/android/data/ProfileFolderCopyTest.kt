@@ -38,9 +38,12 @@ class ProfileFolderCopyTest {
         write(source, "password", "hunter2")
         write(source, "irc_password", "irc secret")
         write(source, "reconnect", "an account and its provider")
+        write(source, "encryption_key", "a key")
+        write(source, "passwords/0a1b2c.dat", "a stored password")
         // Only the profile's own data items: a package's file of the same name is the package's
         write(source, "mypackage/password", "a package's")
         write(source, "mypackage/reconnect", "a package's")
+        write(source, "mypackage/passwords/notes.txt", "a package's")
         write(source, ".hidden", "hidden")
         write(source, ".git/config", "hidden")
         File(source, "log").mkdirs()
@@ -58,6 +61,8 @@ class ProfileFolderCopyTest {
                 "map/2026-11-17#10-00-00map.dat",
                 "mypackage/",
                 "mypackage/password",
+                "mypackage/passwords/",
+                "mypackage/passwords/notes.txt",
                 "mypackage/reconnect",
                 "url",
             ),

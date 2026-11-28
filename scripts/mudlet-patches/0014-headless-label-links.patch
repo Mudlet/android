@@ -439,7 +439,7 @@ index 0c244c7..e345450 100644
  {
      mChangedLinks.clear();
 diff --git a/test/functional_tests/HeadlessSessionWindowsTest.cpp b/test/functional_tests/HeadlessSessionWindowsTest.cpp
-index 77f7e3d..46ede52 100644
+index c288000..7c621d9 100644
 --- a/test/functional_tests/HeadlessSessionWindowsTest.cpp
 +++ b/test/functional_tests/HeadlessSessionWindowsTest.cpp
 @@ -25,11 +25,14 @@
@@ -476,7 +476,7 @@ index 77f7e3d..46ede52 100644
  class HeadlessSessionWindowsTest : public QObject
  {
      Q_OBJECT
-@@ -1626,6 +1641,131 @@ setLabelOnLeave("u", function() seen[#seen + 1] = "u.leave" end) setLabelWheelCa
+@@ -1626,6 +1641,133 @@ setLabelOnLeave("u", function() seen[#seen + 1] = "u.leave" end) setLabelWheelCa
          QVERIFY(session.shutdown(false));
      }
  
@@ -498,15 +498,17 @@ index 77f7e3d..46ede52 100644
 +        });
 +        QSignalSpy prompted(&session, &THeadlessSession::commandLineTextRequested);
 +        QSignalSpy changes(&session, &THeadlessSession::scriptWindowsChanged);
++        // The web link goes in through arg(): moc took its // in this raw string for a comment, failing AutoMoc
 +        QVERIFY(session.runLua(qsl(R"lua(
 +headlessSent, headlessRan = {}, 0
 +registerAnonymousEventHandler("sysDataSendRequest", function(_, command) headlessSent[#headlessSent + 1] = command end)
 +tempAlias("^n$", [[send("north", false)]])
 +createLabel("lbl", 0, 0, 400, 40, 1)
-+echo("lbl", [[<a href="send:n">go</a> <a href="PROMPT:tell Bob ">tell</a> <a href="https://example.org/a?b=1&amp;c=2">site</a> <a href="headlessRan = headlessRan + 1">count</a> <a href="error('headless link error')">bad</a> <a href="mailto:bob@example.org">mail</a>]])
++echo("lbl", [[<a href="send:n">go</a> <a href="PROMPT:tell Bob ">tell</a> <a href="%1">site</a> <a href="headlessRan = headlessRan + 1">count</a> <a href="error('headless link error')">bad</a> <a href="mailto:bob@example.org">mail</a>]])
 +createLabel("plain", 0, 50, 100, 20, 1)
 +echo("plain", "no links here")
-+)lua")));
++)lua")
++                                       .arg(qsl("https://example.org/a?b=1&amp;c=2"))));
 +        QVERIFY(changes.wait(1000));
 +        changes.clear();
 +        const auto sent = [&session]() {

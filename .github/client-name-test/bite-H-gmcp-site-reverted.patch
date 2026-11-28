@@ -1,0 +1,13 @@
+diff --git a/src/ctelnet.cpp b/src/ctelnet.cpp
+index 3c7237cf6..d635d16c1 100644
+--- a/src/ctelnet.cpp
++++ b/src/ctelnet.cpp
+@@ -4019,7 +4019,7 @@ void cTelnet::processTelnetCommand(const std::string& telnetCommand)
+             output += TN_SB;
+             output += OPT_GMCP;
+             // MudletApp::buildSuffix() could, conceivably contain a non-ASCII character:
+-            output += encodeAndCookBytes(std::string(R"(Core.Hello { "client": ")") + MudletApp::clientName().toStdString() + R"(", "version": ")" + APP_VERSION
++            output += encodeAndCookBytes(std::string(R"(Core.Hello { "client": "Mudlet", "version": ")") + APP_VERSION
+                                          + MudletApp::buildSuffix().toUtf8().constData() + std::string(R"("})"));
+             output += TN_IAC;
+             output += TN_SE;

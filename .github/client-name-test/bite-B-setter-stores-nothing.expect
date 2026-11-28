@@ -1,0 +1,5 @@
+MudletAppClientNameTest::test_aSetNameIsKeptAsGiven
+MudletAppClientNameTest::test_namesRfc1010AllowsAreTaken(one letter)
+MudletAppClientNameTest::test_anyOtherNameIsRefusedAndTheLastOneKept(a space)
+TelnetClientNameTest::test_anAppsOwnNameGoesToEveryProtocolInDesktopsCase
+TMxpVersionTagTest::testVersionTagNamesTheAppThatEmbedsMudlet

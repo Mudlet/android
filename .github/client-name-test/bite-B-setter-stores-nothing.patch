@@ -1,0 +1,12 @@
+diff --git a/src/MudletApp.cpp b/src/MudletApp.cpp
+index df91098d5..6a18f1886 100644
+--- a/src/MudletApp.cpp
++++ b/src/MudletApp.cpp
+@@ -1297,7 +1297,6 @@ bool MudletApp::setClientName(const QString& name)
+         qWarning().noquote() << "MudletApp::setClientName() refused" << name << "as, in capitals, it is not a terminal name RFC 1010 allows";
+         return false;
+     }
+-    embedderClientName() = name;
+     return true;
+ }
+ 

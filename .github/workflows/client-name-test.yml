@@ -1,0 +1,172 @@
+name: client-name upstream tests (throwaway)
+
+# Throwaway, never for main: builds Mudlet development 0229ec5d3 as Mudlet's own Linux CI does, with and without
+# .github/client-name-test/change.patch (the upstream PR's commit), runs the new and the related existing tests on both
+# and compares them, then applies each bite-*.patch on the change and expects the test functions in its .expect red.
+on:
+  push:
+    branches: [ccr-14671218-tf96z6-client-name-upstream-test-ci]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  MUDLET_REF: 0229ec5d340bc3a3450f600fe96e09bc6b090073
+  EXISTING: TelnetNewEnvironTest|TelnetTerminalTypeCycleTest|TelnetAtcpMspTest|GMCPCharLoginTest|TOscTest|TMxpVersionTagTest
+  NEW: MudletAppClientNameTest|TelnetClientNameTest
+  BITTEN: MudletAppClientNameTest|TelnetClientNameTest|TMxpVersionTagTest
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        tree: [branch, base]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 300
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_MAXSIZE: 2G
+      CC: gcc-12
+      CXX: g++-12
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/checkout@v7
+        with:
+          repository: Mudlet/Mudlet
+          ref: ${{ env.MUDLET_REF }}
+          path: mudlet
+          fetch-depth: 0
+
+      - name: Submodules the GUI build needs
+        run: git -C mudlet submodule update --init --depth 1 3rdparty/edbee-lib 3rdparty/lcf 3rdparty/qt-tags-widget 3rdparty/qtkeychain
+
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.11.3'
+          dir: ${{ runner.temp }}
+          cache: false
+          modules: qt5compat qtmultimedia qtspeech qtwebsockets qthttpserver
+
+      - name: Dependencies (Mudlet's Linux CI list)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ccache ninja-build g++-12 libassimp-dev libboost-dev libcurl4-openssl-dev \
+            libglu1-mesa-dev libhunspell-dev liblua5.1-0-dev lua5.1 libonig-dev libpcre2-dev libpulse-dev libpugixml-dev \
+            libsecret-1-dev libspeechd-dev libsqlite3-dev libssl-dev libxkbcommon-x11-0 libxcb-render-util0-dev \
+            libxcb-image0-dev libyajl-dev libzip-dev qtkeychain-qt6-dev pcre2-utils pkg-config
+
+      - uses: actions/cache/restore@v6
+        with:
+          path: .ccache
+          key: ccache-client-name-${{ matrix.tree }}-${{ github.run_id }}
+          restore-keys: ccache-client-name-${{ matrix.tree }}-
+
+      - name: Apply the change
+        if: matrix.tree == 'branch'
+        run: git -C mudlet apply --index "$PWD/.github/client-name-test/change.patch" && git -C mudlet status --short
+
+      - name: Configure
+        run: |
+          cmake -S mudlet -B b -G Ninja -DCMAKE_BUILD_TYPE=Debug -DUSE_SANITIZER= -DBUILD_TESTING=ON \
+            -DUSE_UPDATER=OFF -DUSE_3DMAPPER=OFF -DWITH_SENTRY=OFF -DUSE_MCPSERVER=OFF -DUSE_FONTS=OFF \
+            -DUSE_BUNDLED_LUA_MODULES=ON -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build the unit tests and the telnet test group
+        run: cmake --build b --target unit_tests functional_telnet_tests -j 2
+
+      - name: Save ccache
+        if: ${{ !cancelled() }}
+        uses: actions/cache/save@v6
+        with:
+          path: .ccache
+          key: ccache-client-name-${{ matrix.tree }}-${{ github.run_id }}
+
+      - name: Run the tests
+        working-directory: b
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          tests="$EXISTING"
+          [ "${{ matrix.tree }}" = branch ] && tests="$tests|$NEW"
+          set +e
+          ctest -R "^($tests)\$" -V --timeout 900 2>&1 | tee ../ctest-${{ matrix.tree }}.log
+          status=${PIPESTATUS[0]}
+          set -e
+          # One line per test function and data row, "Class::function(row) RESULT", for the comparison job
+          grep -oE '(PASS|FAIL!|SKIP|XFAIL|XPASS) +: [A-Za-z]+::[A-Za-z_0-9]+\([^)]*\)' ../ctest-${{ matrix.tree }}.log \
+            | sed -E 's/^(\S+) +: (.*)$/\2 \1/' | sort -u > ../results-${{ matrix.tree }}.txt || true
+          grep -E 'Test +#|tests passed|Totals:' ../ctest-${{ matrix.tree }}.log || true
+          echo "ctest exit status: $status"
+          exit $status
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: results-${{ matrix.tree }}
+          path: |
+            results-${{ matrix.tree }}.txt
+            ctest-${{ matrix.tree }}.log
+
+      - name: Bites, each must build and then be red where its .expect says
+        if: ${{ matrix.tree == 'branch' && !cancelled() }}
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          status=0
+          for bite in .github/client-name-test/bite-*.patch; do
+            name=$(basename "$bite" .patch)
+            git -C mudlet apply "$PWD/$bite"
+            echo "::group::$name"
+            if ! cmake --build b --target unit_tests functional_telnet_tests -j 2; then
+              echo "::error::$name did not build, so it proves nothing"
+              status=1
+            else
+              (cd b && ctest -R "^($BITTEN)\$" -V --timeout 900 > "../$name.log" 2>&1) && echo "::error::$name: every test passed with the bite (vacuous)" && status=1
+              while IFS= read -r expected; do
+                if grep -F -- "FAIL!  : $expected" "$name.log" > /dev/null; then
+                  echo "BITE $name: red as meant: $expected"
+                else
+                  echo "::error::$name: $expected did not fail"
+                  status=1
+                fi
+              done < "${bite%.patch}.expect"
+            fi
+            echo "::endgroup::"
+            echo "BITE SUMMARY $name: $(grep -cE 'FAIL!  :' "$name.log") failing lines"
+            grep -oE 'FAIL!  : [A-Za-z]+::[A-Za-z_0-9]+\([^)]*\)' "$name.log" | sed "s/^/BITE FAILED $name /" || true
+            git -C mudlet apply -R "$PWD/$bite"
+          done
+          exit $status
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ matrix.tree == 'branch' && !cancelled() }}
+        with:
+          name: bite-logs
+          path: bite-*.log
+
+  compare:
+    needs: test
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: results-*
+          merge-multiple: true
+      - name: Each existing test function's result on base and branch
+        run: |
+          ls -l
+          echo "== differences, base (<) and branch (>), in the existing tests"
+          grep -vE "^($NEW)::" results-branch.txt > branch-existing.txt
+          diff results-base.txt branch-existing.txt && echo "none" || true
+          echo "== the new tests on the branch"
+          grep -E "^($NEW)::" results-branch.txt || true
+          echo "== counts"
+          for t in base branch; do echo "$t: $(grep -c ' PASS$' results-$t.txt) pass, $(grep -c ' FAIL!$' results-$t.txt) fail, $(grep -c ' SKIP$' results-$t.txt) skip"; done

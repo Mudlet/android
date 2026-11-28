@@ -1,0 +1,13 @@
+diff --git a/src/ctelnet.cpp b/src/ctelnet.cpp
+index 3c7237cf6..ddaf6a1b2 100644
+--- a/src/ctelnet.cpp
++++ b/src/ctelnet.cpp
+@@ -4791,7 +4791,7 @@ void cTelnet::processTelnetCommand(const std::string& telnetCommand)
+                 output += TN_SB;
+                 output += OPT_ATCP;
+                 // MudletApp::buildSuffix() *could* be a non-ASCII UTF-8 string:
+-                std::string atcpOptions = std::string("hello ") + MudletApp::clientName().toStdString() + " " + APP_VERSION + MudletApp::buildSuffix().toUtf8().constData()
++                std::string atcpOptions = std::string("hello Mudlet ") + std::string(APP_VERSION) + MudletApp::buildSuffix().toUtf8().constData()
+                                           + "\ncomposer 1\nchar_vitals 1\nroom_brief 1\nroom_exits 1\nmap_display 1\n";
+                 output += encodeAndCookBytes(atcpOptions);
+                 output += TN_IAC;

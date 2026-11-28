@@ -82,7 +82,7 @@ object EngineClient {
 
     /** The profile last opened, kept across UI process restarts: what Reconnect opens again while none is open. */
     var lastProfile by mutableStateOf<String?>(null)
-        private set
+        @VisibleForTesting internal set
 
     /** Whether Reconnect has something to do: [front]'s address, or, while no profile is open, [lastProfile]. */
     val canReconnect: Boolean get() = frontSession?.let { it.lastAddress != null } ?: (lastProfile != null)

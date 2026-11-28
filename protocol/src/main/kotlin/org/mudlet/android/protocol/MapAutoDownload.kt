@@ -69,6 +69,6 @@ class MapAutoDownload(decided: Boolean) {
     }
 
     // An offer from a host, with no download asked for since the profile loaded. The engine offers only http and https
-    // URLs with a host (Mudlet patch 0051); the host check is a second guard
+    // URLs with a host (Mudlet/Mudlet#13022); the host check is a second guard
     private fun downloadable(download: EngineMessage.MapDownload) = download.offered && download.state == MapDownloadState.NONE && download.host.isNotEmpty()
 }

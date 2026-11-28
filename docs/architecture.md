@@ -1101,8 +1101,8 @@ drawn by `ui/game/AppMap.kt`):
   from <host>…", read out as it begins, with Cancel while Mudlet can stop it, then how it ended as the bar says it,
   read out once as above; a refusal of `downloadMap` shows there as its failure. The button stays for the player's
   own download.
-  The engine offers only an `http` or `https` map with a host (Mudlet patch `0051-map-web-links-only.patch`, meant for
-  the desktop too), so the app's own host check is a second guard: a game cannot have either download read a file.
+  The engine offers only an `http` or `https` map with a host (Mudlet/Mudlet#13022, as on
+  the desktop), so the app's own host check is a second guard: a game cannot have either download read a file.
 
 ### Map files
 The full-screen map's folder button opens a menu that loads a map from a file, saves the map to one as Mudlet's own

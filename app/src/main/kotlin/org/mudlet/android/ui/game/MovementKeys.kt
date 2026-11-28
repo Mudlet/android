@@ -7,9 +7,9 @@ import kotlin.math.hypot
 import kotlin.math.roundToInt
 
 /**
- * A key of the movement pad. [command] is the word it sends, the short ones Mudlet's generic mapper follows the player
- * by; [numpad] the number pad's digit desktop players walk that way with, null for the four ways the number pad has no
- * key for.
+ * A key of the movement pad. [command] is its way's short English word, the key of Mudlet's generic mapper's `lang_dirs`
+ * whose word it sends (MapperDirections); [numpad] the number pad's digit desktop players walk that way with, null for
+ * the four ways the number pad has no key for.
  */
 internal enum class MovementKey(val command: String, val numpad: Char?) {
     NORTH("n", '8'),
@@ -29,7 +29,7 @@ internal enum class MovementKey(val command: String, val numpad: Char?) {
     /**
      * What a tap does in a profile with the key [bindings]: the binding on this way's number pad key runs where the
      * profile has one, as that key does for a desktop player, so that the profile's own walking is used; else
-     * [command] is sent.
+     * [command]'s word is sent.
      */
     fun press(bindings: Set<KeyBinding>): MovementPress {
         val digit = numpad ?: return MovementPress.Command(command)
@@ -53,7 +53,7 @@ internal enum class MovementKey(val command: String, val numpad: Char?) {
 
 /** What a tap on a [MovementKey] does. */
 internal sealed interface MovementPress {
-    /** Sends [line] as if typed. */
+    /** Sends the word for the way [line] names, as if typed. */
     data class Command(val line: String) : MovementPress
 
     /** Presses the key binding on [key], which types [text] on a keyboard. */

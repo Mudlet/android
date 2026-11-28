@@ -328,7 +328,7 @@ private fun ProfileGameScreen(
 
     fun walk(key: MovementKey) {
         when (val press = key.press(c.windows.keyBindings)) {
-            is MovementPress.Command -> sendNow(press.line)
+            is MovementPress.Command -> c.directions.word(press.line) { word -> if (word != null) sendNow(word) else scope.launch { snackbars.showSnackbar(notSent) } }
             is MovementPress.Binding -> if (!c.windows.pressKey(press.key, press.text)) scope.launch { snackbars.showSnackbar(notSent) }
         }
     }

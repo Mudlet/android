@@ -389,6 +389,17 @@ walking is used. Any other key, and up, down, in and out always, sends its short
 `sw`, `w`, `nw`, `u`, `d`, `in`, `out`: the ones Mudlet's generic mapper follows the player by) as if typed, so the
 profile's aliases see it and the history and the suggestions learn it.
 
+That word follows the game's language, never the app's: it is the generic mapper's for the way, as its speedwalk sends
+it (`MapperDirections`, `ui/MapperDirections.kt`). At each tap the pad reads `map.configs` and `map.configs.lang_dirs`
+with two `variables` requests and sends `lang_dirs[way]` while `use_translation` is true, so a game in Swedish gets
+`ö` for east once `map language swedish`, or the mapper itself on SvenskMUD, has set the words. Read at the tap, not
+kept, as the mapper switches language on a line from the game. No mapper (`There is no such table.`), translation
+off, or a word that is not a whole string with text in it sends the short word. Taps made while a read is out wait
+for it and go in order; a read not answered within a second sends what came and logs it, and the taps waiting when
+the link to the engine goes are not sent, and a snackbar says so. `MapperDirectionsTest` tries it on the JVM, and
+`MovementPadTest` on the game screen, where the fake engine answers the read as a profile without the mapper unless a
+test gives it the mapper's words (`FakeEngine.mapperWords`).
+
 The pad is on from the first start (`Settings.movementPad`), as the Swipe design below. `MovementPadLayout.shown()` keeps it away while the game
 hides input, when a tap would send a direction as the password; with a hardware keyboard that has letters attached,
 which walks as on the desktop; while the on-screen keyboard is up, which leaves the game's text too little room for
@@ -428,12 +439,13 @@ together, or the keys first on the left. Each sends what the Classic pad sends f
   edit of the room on either map changes them, and no room for the player, a refusal (a room the map does not have)
   or no map drawn bring back all twelve: the app's map is drawn only while it is up, in the corner (on by default),
   behind the text or in front. A button shows all twelve anyway, for a way the map does not know yet. No other
-  design asks the engine anything.
+  design asks the engine for the room.
 
 `MovementKeysTest` tries the swipe's ways, the list and the exits' names, and `PlayerExitsTest` what Room exits asks
 and keeps, on the JVM; `MovementPadDesignsTest`, `MovementPadDesignsPseudoLocaleTest` and the designs' tests in
 `TalkBackOrderTest` and `ScreenReaderTest` the designs on the game screen against the fake engine, Swipe as the pad a
 fresh install has; `ScreenshotTest` saves each design.
+`MovementPadLanguagesTest` shows the pad in each language Mudlet ships (`docs/translations.md`).
 
 ### How the app looks
 The app's own screens are Material 3 (`ui/theme/`), light or dark as the system is set, in Material's type and shape

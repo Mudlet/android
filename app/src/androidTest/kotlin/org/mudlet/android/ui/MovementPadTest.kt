@@ -55,9 +55,10 @@ import org.mudlet.android.ui.settings.SETTINGS_HUB_TAG
 /**
  * The game screen's movement pad against a fake engine, as the classic pad of twelve keys (MovementPadDesignsTest has the
  * Swipe pad, the design a player has from the start): it is there from the start, below the input line, and covers
- * neither the game's text nor the input line; a key sends its direction's word as typed, or presses the
- * profile's key binding on that direction's number pad key; it is away while the game hides input, with a hardware
- * keyboard and while the keyboard is up; and its own button and its switch in the settings put it away for good.
+ * neither the game's text nor the input line; a key sends its direction's word as typed, the generic mapper's for it
+ * where the profile has one, or presses the profile's key binding on that direction's number pad key; it is away while
+ * the game hides input, with a hardware keyboard and while the keyboard is up; and its own button and its switch in the
+ * settings put it away for good.
  * Keys are found by the names TalkBack reads and pressed through their accessibility actions.
  */
 @RunWith(AndroidJUnit4::class)
@@ -154,6 +155,20 @@ class MovementPadTest {
         session.assertNoRequest("pressKey", QUIET_MS)
         // As typed: the history has them, the last sent first
         compose.runOnIdle { assertEquals(KEYS.map { it.second }.reversed(), EngineClient.front.history.take(KEYS.size)) }
+    }
+
+    @Test
+    fun aKeySendsTheWordOfTheProfilesGenericMapperForItsWay() {
+        // As the mapper's speedwalk sends them, once `map language swedish`, or the mapper itself on SvenskMUD, set them
+        fake.engine.mapperWords = mapOf("e" to "ö", "east" to "öster", "out" to "ut", "d" to "ner")
+        waitFor(pad)
+        activate(key(R.string.movement_east))
+        assertEquals("ö", session.receive("send").getString("text"))
+        activate(key(R.string.movement_out))
+        assertEquals("ut", session.receive("send").getString("text"))
+        activate(key(R.string.movement_in))
+        assertEquals("a way it has no word for", "in", session.receive("send").getString("text"))
+        compose.runOnIdle { assertEquals(listOf("in", "ut", "ö"), EngineClient.front.history.take(3)) }
     }
 
     @Test

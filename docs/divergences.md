@@ -652,6 +652,8 @@ keyboard up is the slowest part of playing on one. The pad adds nothing a script
 presses the profile's key binding on the number pad key desktop players walk that way with, where the profile has one,
 and otherwise sends the direction's short word as if typed, as the keys with no number pad key always do. It is the
 app's own, shows for every game, and stays away with a hardware keyboard, with which the app walks as the desktop does.
+The short word is the generic mapper's for the way while the mapper translates, read from its `map.configs` at each
+tap, so the pad walks in the game's language as the mapper's speedwalk does (`MapperDirections`).
 
 ## The Sound button
 

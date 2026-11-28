@@ -22,6 +22,30 @@ text it was not drawn for.
   (`qm.qrc`) are already built into libmudlet, but nothing installs a `QTranslator` for them yet, so they stay
   English until that is added.
 
+## The movement pad's translations
+
+The movement pad (`docs/architecture.md`, "The movement pad") is translated here, ahead of Crowdin: its strings, and
+the four of the settings that its snackbar and its list of designs show (`settings_title`, `settings_appearance`,
+`settings_experimental`, `settings_choice_cancel`), are in the `values-<code>/strings.xml` of each language Mudlet
+desktop ships but its English and test ones, shaped as Crowdin's export is.
+
+- **The folders** are Crowdin's Android codes for Mudlet's languages: `ar_EG` and `ar_SA` are `values-ar-rEG` and
+  `values-ar-rSA` (the same Arabic in both), `he_IL` is `values-iw-rIL` (Android's old code for Hebrew, which it
+  reads for `he`), `zh_CN` and `zh_TW` are `values-zh-rCN` and `values-zh-rTW`, and the rest are the language and
+  region: `cs-rCZ`, `de-rDE`, `el-rGR`, `es-rES`, `fi-rFI`, `fr-rFR`, `it-rIT`, `ko-rKR`, `nl-rNL`, `pl-rPL`,
+  `pt-rBR`, `pt-rPT`, `ru-rRU`, `sv-rSE` and `tr-rTR`. Android 7 and later use a folder for the language's other
+  regions too, so `de-rDE` serves a phone in Austrian German.
+- **The words** are Mudlet's own (`translations/translated/mudlet_*.ts` in Mudlet/Mudlet) where it has them, such as
+  its compass directions, Cancel, Settings and Undo, and otherwise translated for the pad.
+- **They go to Crowdin before its first pull request**, which would otherwise replace these files with what Crowdin
+  has: `crowdin upload translations --auto-approve-imported`, with the CLI's variables below. Until then
+  `MovementPadTranslationsTest` (`app/src/test`) fails a pull request that takes one out; after, a wrong one is fixed
+  on Crowdin like any other, and these files are where its uploads merge.
+- **Each folder makes its language one the app offers**, twenty more, whose other screens are in English until
+  Crowdin translates them, as desktop lists a language however much of it is translated.
+- `MovementPadLanguagesTest` (`app/src/androidTest`) shows the pad in each: in the language, with its text whole, west
+  left of east where the language is written from the right, and the accessibility checks.
+
 ## The app's language
 
 - **The languages offered** are the English and each `values-<code>/` folder of `app/src/main/res` whose

@@ -3,18 +3,22 @@ package org.mudlet.android.ui
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.graphics.BitmapFactory
 import android.util.Log
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.core.content.edit
 import androidx.core.net.toUri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
+import org.mudlet.android.engine.EngineService
 import org.mudlet.android.protocol.AddonCommand
 import org.mudlet.android.protocol.ButtonBar
 import org.mudlet.android.protocol.EngineMessage
@@ -36,6 +40,7 @@ import org.mudlet.android.protocol.Requests
 import org.mudlet.android.protocol.RichText
 import org.mudlet.android.protocol.ScriptWindows
 import org.mudlet.android.protocol.TextBoxContent
+import org.mudlet.android.protocol.drawn
 
 /**
  * The script windows' part of a [ProfileSession] (docs/phase-f.md): the windows, button bars, commands and map the
@@ -45,6 +50,22 @@ import org.mudlet.android.protocol.TextBoxContent
 class ScriptWindowsClient internal constructor(private val session: ProfileSession) {
     var state by mutableStateOf(ScriptWindows())
         private set
+
+    /**
+     * The packages whose interface the player shows though they do not declare that it fits a phone, kept for the
+     * profile (docs/architecture.md, "Packages' interfaces on a phone").
+     */
+    var shownAnyway by mutableStateOf(readShownAnyway(session.app, session.name))
+        private set
+
+    /** What of [state] the game screen draws: less the windows and borders of packages made for larger screens that [shownAnyway] does not name. */
+    val drawn by derivedStateOf { state.drawn(shownAnyway) }
+
+    fun showAnyway(packageName: String, shown: Boolean) {
+        shownAnyway = if (shown) shownAnyway + packageName else shownAnyway - packageName
+        val key = shownAnywayKey(session.name)
+        prefs(session.app).edit { if (shownAnyway.isEmpty()) remove(key) else putStringSet(key, shownAnyway) }
+    }
 
     /** The profile's button bars and its packages' commands, each as the engine last sent them whole. */
     var buttonBars by mutableStateOf(emptyList<ButtonBar>())
@@ -506,6 +527,19 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
     companion object {
         /** Fitted or stacked, or by the game area's width: the setting docs/phase-f.md's "Layout" offers the player. */
         var layoutMode by mutableStateOf(LayoutMode.AUTO)
+
+        /** Forgets the packages the profile [name] showed anyway ([shownAnyway]), as when it is deleted. */
+        internal fun forgetShownAnyway(context: Context, name: String) = prefs(context).edit { remove(shownAnywayKey(name)) }
+
+        // A copy: the set SharedPreferences gives must not be changed
+        private fun readShownAnyway(context: Context, name: String): Set<String> = prefs(context).getStringSet(shownAnywayKey(name), null)?.toSet().orEmpty()
+
+        private fun prefs(context: Context): SharedPreferences = context.getSharedPreferences(EngineService.PREFS, Context.MODE_PRIVATE)
+
+        // A stored name (CLAUDE.md): by the profile's name ignoring case, as the engine takes it
+        private fun shownAnywayKey(name: String) = PREF_SHOWN_ANYWAY + name.lowercase()
+
+        private const val PREF_SHOWN_ANYWAY = "packageUiShown:"
 
         /** [message]'s PNG, decoded off the main thread; null for one that does not decode. */
         internal fun decode(message: EngineMessage.Image): ImageBitmap? = decodePng(message.png)

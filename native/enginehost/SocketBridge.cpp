@@ -1526,7 +1526,8 @@ void SocketBridge::packages()
                                     {QStringLiteral("author"), package.author},
                                     {QStringLiteral("version"), package.version},
                                     {QStringLiteral("description"), package.description},
-                                    {QStringLiteral("icon"), package.icon}});
+                                    {QStringLiteral("icon"), package.icon},
+                                    {QStringLiteral("mobile"), package.mobile}});
     }
     sendReply({{QStringLiteral("t"), QStringLiteral("packages")}, {QStringLiteral("packages"), packages}});
 }
@@ -2073,6 +2074,10 @@ QJsonObject SocketBridge::windowJson(const ScriptWindowInfo& window)
     if (!window.styleSheet.isEmpty()) {
         json.insert(QStringLiteral("styleSheet"), window.styleSheet);
     }
+    if (!window.packages.isEmpty()) {
+        json.insert(QStringLiteral("packages"), QJsonArray::fromStringList(window.packages));
+        json.insert(QStringLiteral("mobile"), window.mobile);
+    }
     return json;
 }
 
@@ -2212,17 +2217,25 @@ QJsonObject SocketBridge::windowTextMessage(const QString& window, const WindowT
 
 QJsonObject SocketBridge::mainAreaMessage(const MainArea& area)
 {
-    return {{QStringLiteral("t"), QStringLiteral("mainArea")},
-            {QStringLiteral("w"), area.size.width()},
-            {QStringLiteral("h"), area.size.height()},
-            {QStringLiteral("columns"), area.grid.width()},
-            {QStringLiteral("rows"), area.grid.height()},
-            {QStringLiteral("textX"), area.textRect.x()},
-            {QStringLiteral("textY"), area.textRect.y()},
-            {QStringLiteral("textW"), area.textRect.width()},
-            {QStringLiteral("textH"), area.textRect.height()},
-            {QStringLiteral("borderColor"), area.borderColor},
-            {QStringLiteral("adaptive"), area.adaptive}};
+    QJsonObject json{{QStringLiteral("t"), QStringLiteral("mainArea")},
+                     {QStringLiteral("w"), area.size.width()},
+                     {QStringLiteral("h"), area.size.height()},
+                     {QStringLiteral("columns"), area.grid.width()},
+                     {QStringLiteral("rows"), area.grid.height()},
+                     {QStringLiteral("textX"), area.textRect.x()},
+                     {QStringLiteral("textY"), area.textRect.y()},
+                     {QStringLiteral("textW"), area.textRect.width()},
+                     {QStringLiteral("textH"), area.textRect.height()},
+                     {QStringLiteral("borderColor"), area.borderColor},
+                     {QStringLiteral("adaptive"), area.adaptive}};
+    if (!area.looks.isEmpty()) {
+        QJsonArray looks;
+        for (const MainArea::Look& look : area.looks) {
+            looks.append(QJsonObject{{QStringLiteral("look"), look.look}, {QStringLiteral("packages"), QJsonArray::fromStringList(look.packages)}, {QStringLiteral("mobile"), look.mobile}});
+        }
+        json.insert(QStringLiteral("looks"), looks);
+    }
+    return json;
 }
 
 void SocketBridge::sendFrame(const QJsonObject& message)

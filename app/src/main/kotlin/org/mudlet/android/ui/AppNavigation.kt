@@ -258,7 +258,7 @@ fun AppNavigation(
             }
             composable(Routes.PACKAGES) { entry ->
                 val front = EngineClient.front
-                PackagesScreen(front.packages, front.repository, front.name, onBack = entry.whileShown { nav.navigateUp() })
+                PackagesScreen(front.packages, front.repository, front.windows, front.name, onBack = entry.whileShown { nav.navigateUp() })
             }
             composable(Routes.SCRIPTS) { entry ->
                 val front = EngineClient.front

@@ -246,7 +246,35 @@ ScriptWindowInfo windowInfo(const ScriptWindow& window)
         info.frameTabs = tabs;
     }
     info.styleSheet = window.styleSheet;
+    info.packages = window.packages;
+    info.mobile = window.mobile;
     return info;
+}
+
+QList<MainArea::Look> profileLooks(const THeadlessSession& session)
+{
+    using ProfileLook = THeadlessSession::ProfileLook;
+    static const std::pair<ProfileLook, const char*> looks[] = {
+            {ProfileLook::borderTop, "borderTop"},
+            {ProfileLook::borderRight, "borderRight"},
+            {ProfileLook::borderBottom, "borderBottom"},
+            {ProfileLook::borderLeft, "borderLeft"},
+            {ProfileLook::backgroundImage, "backgroundImage"},
+            {ProfileLook::appStyleSheet, "appStyleSheet"},
+            {ProfileLook::profileStyleSheet, "profileStyleSheet"},
+    };
+    QList<MainArea::Look> result;
+    for (const auto& [look, name] : looks) {
+        const QStringList packages = session.profileLookPackages(look);
+        if (packages.isEmpty()) {
+            continue;
+        }
+        const bool mobile = std::any_of(packages.cbegin(), packages.cend(), [&session](const QString& package) {
+            return session.packageMobile(package);
+        });
+        result.append({QString::fromLatin1(name), packages, mobile});
+    }
+    return result;
 }
 
 QString liveRegionName(THeadlessSession::LabelContent::LiveRegion liveRegion)
@@ -785,7 +813,16 @@ void MudletProfile::connectSession()
     connect(session, &THeadlessSession::buttonsChanged, this, &MudletProfile::pushButtonBars);
     connect(session, &THeadlessSession::addonCommandsChanged, this, &MudletProfile::pushCommands);
     connect(session, &THeadlessSession::packagesChanged, this, [this] {
+        mPackageMobile = packageMobileFlags();
         mFrontend->packagesChanged();
+    });
+    // Also packagesChanged when only a package's mobile flag changed, as the UI reads it from packages
+    connect(session, &THeadlessSession::packageUiChanged, this, [this] {
+        pushMainArea();
+        if (QList<std::pair<QString, bool>> flags = packageMobileFlags(); flags != mPackageMobile) {
+            mPackageMobile = std::move(flags);
+            mFrontend->packagesChanged();
+        }
     });
     connect(session, &THeadlessSession::packageInstallFinished, this, [this](const QString& path, THeadlessSession::PackageResult result, const QString& error) {
         mFrontend->packageInstalled(path, packageInstallResult(result), error);
@@ -877,7 +914,7 @@ void MudletProfile::connectSession()
         }
     });
     connect(session, &THeadlessSession::mainConsoleAreaChanged, this, [this](const QString&, const QSize& grid, const QRect& textRect) {
-        mFrontend->mainArea({mMainWindowSize, grid, textRect, colourCode(mSession->mainBorderColor(), false), mSession->adaptiveLayout()});
+        mFrontend->mainArea(mainArea(grid, textRect));
     });
     connect(session, &THeadlessSession::mainBorderColorChanged, this, &MudletProfile::pushMainArea);
     connect(session, &THeadlessSession::adaptiveLayoutChanged, this, &MudletProfile::pushMainArea);
@@ -1668,7 +1705,21 @@ void MudletProfile::pushWindowText(const QString& window)
 // Also when only the size the UI gave changed, which mainConsoleAreaChanged does not tell
 void MudletProfile::pushMainArea()
 {
-    mFrontend->mainArea({mMainWindowSize, mSession->mainConsoleGrid(), mSession->mainConsoleTextRect(), colourCode(mSession->mainBorderColor(), false), mSession->adaptiveLayout()});
+    mFrontend->mainArea(mainArea(mSession->mainConsoleGrid(), mSession->mainConsoleTextRect()));
+}
+
+MainArea MudletProfile::mainArea(const QSize& grid, const QRect& textRect) const
+{
+    return {mMainWindowSize, grid, textRect, colourCode(mSession->mainBorderColor(), false), mSession->adaptiveLayout(), profileLooks(*mSession)};
+}
+
+QList<std::pair<QString, bool>> MudletProfile::packageMobileFlags() const
+{
+    QList<std::pair<QString, bool>> flags;
+    for (const THeadlessSession::InstalledPackage& package : mSession->installedPackages()) {
+        flags.append({package.name, mSession->packageMobile(package.name)});
+    }
+    return flags;
 }
 
 void MudletProfile::pushButtonBars()
@@ -2628,7 +2679,7 @@ std::variant<QList<PackageInfo>, QString> MudletProfile::packages() const
     }
     QList<PackageInfo> packages;
     for (const THeadlessSession::InstalledPackage& package : mSession->installedPackages()) {
-        packages.append({package.name, package.title, package.author, package.version, package.description, package.icon});
+        packages.append({package.name, package.title, package.author, package.version, package.description, package.icon, mSession->packageMobile(package.name)});
     }
     return packages;
 }

@@ -125,7 +125,7 @@ def main():
                        links, app_state, script_windows, window_links,
                        script_labels, label_links, script_text_boxes, frame_tabs, button_bars, map_view, app_map,
                        map_layout, map_info, map_moves, map_rooms, map_edits, map_download, map_files, profile_settings, script_items, variables, sounds,
-                       clipboard, file_dialog, web_pages, script_speech, packages, deleted_profile_stays_gone, error_console, default_packages, key_bindings, scripts_stopped,
+                       clipboard, file_dialog, web_pages, script_speech, packages, package_ui, deleted_profile_stays_gone, error_console, default_packages, key_bindings, scripts_stopped,
                        replay_recording, time_stamps, line_updates, replay_playback):
             checks()
         checks = secure_offer
@@ -5915,7 +5915,7 @@ def packages():
     check(m.get("result") == "installed", f"a plain .xml package installs: {m}")
     m = ask({"t": "packages"})
     bare = next((p for p in m.get("packages", []) if p["name"] == "Plain"), None)
-    check(bare == {"name": "Plain", "title": "", "author": "", "version": "", "description": "", "icon": ""},
+    check(bare == {"name": "Plain", "title": "", "author": "", "version": "", "description": "", "icon": "", "mobile": False},
           f"with no details to show: {bare}")
 
     # The Package Manager refuses a removal while the profile saves, as each install's own save may still be doing from
@@ -5998,6 +5998,69 @@ def deleted_profile_stays_gone():
     t0 = time.monotonic()
     while ask({"t": "deleteProfile", "name": profile})["t"] != "profiles" and time.monotonic() - t0 < 30:
         time.sleep(0.2)
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
+
+def package_ui():
+    """Which packages made a window or a profile look, and whether they declare an interface that fits a phone: a
+    package's label, Geyser gauge and top border carry its name and mobile false, one with mobile = [[yes]] mobile true,
+    the profile's own label neither; packages carries each package's mobile; setPackageInfo(..., "mobile", "yes") turns
+    the first package's windows and border mobile, and packagesChanged follows."""
+    profile = "Package UI Test"
+    folder = os.path.join(TMP, "package-ui")
+    os.makedirs(folder, exist_ok=True)
+    proc, c = start_engine(profile)
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    c.ask({"t": "saveProfile", "name": profile, "host": "127.0.0.1", "port": 23, "tls": False, "login": "",
+           "autoReconnect": False}, collect=seen)
+    c.send({"t": "openProfile", "name": profile, "connect": False})
+    wait_status(c, "profile", lambda v: v == f"{profile} loaded", seen)
+
+    big = package_file("Big GUI", folder, {"title": "Big"}, script="\n".join([
+        'createLabel("bigLabel", 0, 0, 100, 20, 1)',
+        'Geyser.Gauge:new({name = "bigGauge", x = 0, y = 30, width = 100, height = 20})',
+        "setBorderTop(40)",
+    ]))
+    phone = package_file("Phone GUI", folder, {"title": "Phone", "mobile": "yes"}, script='createLabel("phoneLabel", 0, 60, 100, 20, 1)')
+    for path in (big, phone):
+        since = len(seen)
+        c.send({"t": "installPackage", "path": path})
+        m = seen_or_next(c, lambda m: m["t"] == "packageInstalled", seen, since, timeout=15)
+        check(m.get("result") == "installed", f"{os.path.basename(path)} installs: {m}")
+    c.send({"t": "runLua", "code": 'createLabel("ownLabel", 0, 90, 100, 20, 1)'})
+    seen_or_next(c, windows_with("ownLabel", "label"), seen, 0, what="the profile's own label")
+
+    def made(name):
+        w = window_of(seen, name, "label") or {}
+        return w.get("packages"), w.get("mobile")
+
+    check(made("bigLabel") == (["Big GUI"], False), f"a package's label names it, made for larger screens: {made('bigLabel')}")
+    gauge = [made(f"bigGauge_{part}") for part in ("back", "front", "text")]
+    check(gauge == [(["Big GUI"], False)] * 3, f"so do the labels of its Geyser gauge: {gauge}")
+    check(made("phoneLabel") == (["Phone GUI"], True), f"a package declaring mobile = [[yes]] fits a phone: {made('phoneLabel')}")
+    check(made("ownLabel") == (None, None), f"the profile's own label has neither: {made('ownLabel')}")
+
+    def border():
+        area = next((m for m in reversed(seen) if m["t"] == "mainArea"), {})
+        return next((look for look in area.get("looks", []) if look.get("look") == "borderTop"), None)
+
+    seen_or_none(c, lambda m: m["t"] == "mainArea" and m.get("looks"), seen, 0)
+    check(border() == {"look": "borderTop", "packages": ["Big GUI"], "mobile": False}, f"mainArea names the top border's package: {border()}")
+
+    listed = {p["name"]: p.get("mobile") for p in c.ask({"t": "packages"}, answers=("packages", "error"), collect=seen).get("packages", [])}
+    check((listed.get("Big GUI"), listed.get("Phone GUI")) == (False, True), f"packages carries each package's mobile: {listed}")
+
+    # Each wait times out alone, for one run to show each part missing
+    since = len(seen)
+    c.send({"t": "runLua", "code": 'setPackageInfo("Big GUI", "mobile", "yes")'})
+    seen_or_none(c, windows_with("bigLabel", "label", lambda w: w.get("mobile") is True), seen, since)
+    check(made("bigLabel") == (["Big GUI"], True), f"a declaration turns its windows mobile: {made('bigLabel')}")
+    changed = seen_or_none(c, lambda m: m["t"] == "packagesChanged", seen, since)
+    check(changed is not None, "packagesChanged follows, though no package was installed or removed")
+    seen_or_none(c, lambda m: m["t"] == "mainArea" and any(look.get("mobile") for look in m.get("looks", [])), seen, since)
+    check(border() == {"look": "borderTop", "packages": ["Big GUI"], "mobile": True}, f"and its border: {border()}")
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 

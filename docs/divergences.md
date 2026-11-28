@@ -325,6 +325,18 @@ The package manager asks before it removes a package (`docs/architecture.md`, "T
 Remove removes the packages selected at once. On a phone a tap meant to expand a package's description lands near its
 Remove button, and what a removal takes, the package's items and files, does not come back.
 
+## A package's interface made for larger screens
+
+The app leaves out the windows, gauges and borders a package made unless the package declares that its interface fits
+a phone (`mobile = [[yes]]` in its `config.lua`, or `setPackageInfo`), or the player turns on "Show its interface
+anyway" under it in the package manager (`docs/architecture.md`, "Packages' interfaces on a phone"); the desktop
+draws every package's. Its triggers, aliases, scripts, buttons and commands work as on the desktop, and a mapper always
+shows. Scripts see no difference: the windows stay, with the sizes they would have if drawn, and Mudlet's main window
+is told the size it would have. Most packages lay out for a desktop window: drawn on a phone, their labels and consoles
+cover the game's text, and a beginner who installed a game's interface, or was sent one over GMCP, would be left with a
+screen they cannot read or use and no idea why. Package authors who have made theirs fit a phone say so, and the player
+can still show any other.
+
 ## A telnet:// link from another app
 
 A `telnet://` link opened outside Mudlet connects on the desktop at once (`mudlet::handleTelnetUri`): to the profile

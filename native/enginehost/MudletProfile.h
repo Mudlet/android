@@ -235,6 +235,8 @@ private:
     void pushWindows(bool withText);
     void pushWindowText(const QString& window);
     void pushMainArea();
+    MainArea mainArea(const QSize& grid, const QRect& textRect) const;
+    QList<std::pair<QString, bool>> packageMobileFlags() const;
     void pushButtonBars();
     void pushCommands();
     void pushKeyBindings();
@@ -300,6 +302,8 @@ private:
     // The main window's size the UI gave, which the profile takes as it loads; empty for none, or once the profile
     // refused it. While it is set, applyScreenSize() tells the game the UI's console without resizing the main window
     QSize mMainWindowSize{0, 0};
+    // Each installed package's mobile flag as packagesChanged last told the UI
+    QList<std::pair<QString, bool>> mPackageMobile;
     std::optional<MainWindowDevice> mMainWindowDevice;
     // The size of the mapper window as pushMap() last had it: none while it did not show
     std::optional<QSize> mMapSize;

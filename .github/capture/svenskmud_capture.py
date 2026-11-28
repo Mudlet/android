@@ -16,6 +16,7 @@ NAMES = {1: "ECHO", 3: "SGA", 24: "TTYPE", 25: "EOR", 31: "NAWS", 42: "CHARSET",
 ACCEPT_WILL = {ECHO, SGA, EOR, GMCP, MSSP, MCCP2, MSP, MXP}
 ACCEPT_DO = {TTYPE, NAWS, CHARSET}
 HOST = sys.argv[1]
+STOP_WORDS = ("l\u00f6senord", "password", "(j/n)", "[j/n]", "\u00e4r du s\u00e4ker", "ny karakt\u00e4r", "nytt namn", "skapa")
 OUT = sys.argv[2]
 
 
@@ -30,7 +31,7 @@ def ports_from_website():
             continue
         print(f"website {url}: {len(page)} bytes")
         text = re.sub(r"<[^>]+>", " ", page)
-        for m in re.finditer(r"(?i).{0,80}(telnet|port|anslut|klient).{0,80}", text):
+        for m in re.finditer(r"(?i).{0,120}(telnet|port|anslut|klient|g\u00e4st|gast|guest|bes\u00f6k|prova|ny spelare|nya spelare).{0,120}", text):
             print("  website says:", " ".join(m.group(0).split()))
         for m in re.finditer(r"(?i)(?:svenskmud\.(?:com|se)[\s:]+|port\s*:?\s*)(\d{2,5})", page):
             found.append(int(m.group(1)))
@@ -44,7 +45,7 @@ def name(o):
     return NAMES.get(o, str(o))
 
 
-def capture(port, width, height, seconds, log):
+def capture(port, width, height, seconds, log, steps=()):
     s = socket.create_connection((HOST, port), timeout=10)
     s.settimeout(0.5)
     raw = bytearray()  # every byte after decompression, telnet included
@@ -60,7 +61,21 @@ def capture(port, width, height, seconds, log):
         events.append({"t": round(time.time() - start, 3), "sent": what, "hex": bytes(b).hex()})
 
     start = time.time()
+    steps = list(steps)
+    last_step = start
     while time.time() < end:
+        if steps:
+            want, say = steps[0]
+            low = bytes(marked).decode("utf-8", "replace").lower()
+            if any(w in low for w in STOP_WORDS):
+                events.append({"t": round(time.time() - start, 3), "note": "asked for a password or a confirmation: stopping"})
+                break
+            due = (time.time() - last_step >= want) if isinstance(want, float) else want.lower() in low[-400:]
+            if due:
+                last_step = time.time()
+                steps.pop(0)
+                marked += f"<SENT {say!r}>".encode()
+                send(list((say + "\r\n").encode()), "text " + say)
         try:
             chunk = s.recv(65536)
         except socket.timeout:
@@ -179,7 +194,7 @@ def main():
     if port is None:
         sys.exit("no port answered")
     summary = {"host": HOST, "port": port, "runs": []}
-    for width in (85, 100, 80):
+    for width in (85,):
         with open(f"{OUT}/text-{width}.txt", "w", encoding="latin-1") as log:
             raw, marked, events = capture(port, width, 40, float(__import__("os").environ.get("CAPTURE_SECONDS", "12")), log)
         with open(f"{OUT}/raw-{width}.bin", "wb") as f:
@@ -197,6 +212,20 @@ def main():
             row = data[off:off + 32]
             print(f"{off:05x} {row.hex(' ')}  {''.join(chr(c) if 32 <= c < 127 else '.' for c in row)}")
         time.sleep(float(__import__("os").environ.get("CAPTURE_GAP", "2")))
+    for guest in ("g\u00e4st", "guest"):
+        with open(f"{OUT}/text-{guest}.txt", "w", encoding="latin-1") as log:
+            raw, marked, events = capture(port, 85, 40, 25, log, [("heter du", guest), (5.0, "titta"), (5.0, "sluta")])
+        with open(f"{OUT}/raw-{guest}.bin", "wb") as f:
+            f.write(raw)
+        print(f"\n===== name {guest!r}: {len(raw)} bytes =====")
+        for e in events:
+            print("  ", json.dumps(e, ensure_ascii=False))
+        for n, line in enumerate(bytes(marked).split(b"\n")):
+            print(f"{n:3d} {len(line):3d} {line!r}")
+        data = bytes(raw)
+        for off in range(0, min(len(data), 8000), 32):
+            row = data[off:off + 32]
+            print(f"{off:05x} {row.hex(' ')}  {''.join(chr(c) if 32 <= c < 127 else '.' for c in row)}")
     with open(f"{OUT}/summary.json", "w") as f:
         json.dump(summary, f, indent=1, ensure_ascii=False)
 

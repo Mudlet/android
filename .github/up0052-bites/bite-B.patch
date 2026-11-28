@@ -1,0 +1,28 @@
+--- a/src/TLuaInterpreter.cpp
++++ b/src/TLuaInterpreter.cpp
+@@ -495,7 +495,7 @@
+         qWarning().noquote() << qsl("TLuaInterpreter: another Mudlet still holds %1, so the built-in Lua files are unpacked without it").arg(lock.fileName());
+     }
+     if (holdsBuiltinLuaFiles(folder, files)) {
+-        markBuiltinLuaCopyUsed(folder);
++        markBuiltinLuaCopyInUse(folder); // Bite B: the pool's thread starts the in-use timer
+         removeOtherBuiltinLuaCopies(cacheLocation, folderName);
+         return luaGlobal;
+     }
+@@ -524,7 +524,7 @@
+             return {};
+         }
+     }
+-    markBuiltinLuaCopyUsed(folder);
++    markBuiltinLuaCopyInUse(folder); // Bite B: the pool's thread starts the in-use timer
+     removeOtherBuiltinLuaCopies(cacheLocation, folderName);
+     return luaGlobal;
+ }
+@@ -8778,7 +8778,6 @@
+         mPossiblePaths.prepend(builtinLuaGlobal);
+         const QString unpackedLuaGlobal = unpackedBuiltinLuaGlobal(QStandardPaths::writableLocation(QStandardPaths::CacheLocation));
+         if (!unpackedLuaGlobal.isEmpty()) {
+-            markBuiltinLuaCopyInUse(QFileInfo(unpackedLuaGlobal).absolutePath());
+             mPossiblePaths.prepend(unpackedLuaGlobal);
+         }
+     }

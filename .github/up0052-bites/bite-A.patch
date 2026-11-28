@@ -1,0 +1,13 @@
+--- a/src/TLuaInterpreter.cpp
++++ b/src/TLuaInterpreter.cpp
+@@ -7528,8 +7528,9 @@
+     Q_INIT_RESOURCE(mudlet_lua);
+ #endif
+     // Read on this thread, as Qt on Android keeps the folders it has looked up in a map it does not lock
++    // Bite A: the worker is gone
+     QThreadPool::globalInstance()->start([cacheLocation = QStandardPaths::writableLocation(QStandardPaths::CacheLocation)] {
+-        unpackedBuiltinLuaGlobal(cacheLocation);
++        Q_UNUSED(cacheLocation)
+     });
+ #endif
+ }

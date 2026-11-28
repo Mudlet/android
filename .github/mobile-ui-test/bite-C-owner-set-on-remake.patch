@@ -1,0 +1,13 @@
+diff --git a/src/TLuaInterpreterUI.cpp b/src/TLuaInterpreterUI.cpp
+index 9831c5337..7c8f61d09 100644
+--- a/src/TLuaInterpreterUI.cpp
++++ b/src/TLuaInterpreterUI.cpp
+@@ -184,7 +184,7 @@ static QStringList packagesOfCaller(lua_State* L, Host& host)
+ // A window there before the call keeps the makers it had
+ static void noteMakers(lua_State* L, Host& host, const TWindowRegistry::MadeKind kind, const QString& name, const bool existed)
+ {
+-    if (!existed && host.windowRegistry().hasWindow(kind, name)) {
++    if (host.windowRegistry().hasWindow(kind, name)) {
+         host.windowRegistry().setMakers(kind, name, packagesOfCaller(L, host));
+     }
+ }

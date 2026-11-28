@@ -1,0 +1,23 @@
+diff --git a/src/TLuaInterpreterUI.cpp b/src/TLuaInterpreterUI.cpp
+index 9831c5337..e62a57b77 100644
+--- a/src/TLuaInterpreterUI.cpp
++++ b/src/TLuaInterpreterUI.cpp
+@@ -150,9 +150,6 @@ static QStringList packagesOfCaller(lua_State* L, Host& host)
+         }
+         const QSet<QString> owners = ownersOfFrame(L, host, level, frame);
+         if (owners.isEmpty()) {
+-            if (namesAFileOrItem(frame.source)) {
+-                continue;
+-            }
+             break;
+         }
+         if (owners.contains(QString())) {
+@@ -160,7 +157,7 @@ static QStringList packagesOfCaller(lua_State* L, Host& host)
+         }
+         if (callers.isEmpty()) {
+             callers = owners;
+-            continue;
++            break;
+         }
+         if (callers.intersects(owners)) {
+             continue;

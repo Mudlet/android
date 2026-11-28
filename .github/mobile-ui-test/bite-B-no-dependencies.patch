@@ -1,0 +1,14 @@
+diff --git a/src/Host.cpp b/src/Host.cpp
+index 4707c7788..21a1557ec 100644
+--- a/src/Host.cpp
++++ b/src/Host.cpp
+@@ -5176,6 +5176,9 @@ bool Host::packageDeclaresMobile(const QString& name) const
+ 
+ QStringList Host::packageDependencies(const QString& name) const
+ {
++    if (!name.isNull()) {
++        return {};
++    }
+     QStringList dependencies;
+     // The package exporter joins them with commas
+     for (const QString& dependency : packageOrModuleInfo(*this, name).value(qsl("dependencies")).split(QLatin1Char(','))) {

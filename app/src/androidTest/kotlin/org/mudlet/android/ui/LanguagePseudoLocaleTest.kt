@@ -13,12 +13,14 @@ import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.compose.ui.text.TextLayoutResult
@@ -77,6 +79,8 @@ class LanguagePseudoLocaleTest(private val locale: String) {
         activate(row)
         waitFor(list)
         val systemDefault = hasText(string(R.string.settings_language_system)) and hasAnyAncestor(isDialog()) and hasClickAction()
+        // The list opens at the language chosen, which can be rows away from the first
+        compose.onNode(hasScrollToNodeAction() and hasAnyAncestor(isDialog())).performScrollToNode(systemDefault)
         compose.onNode(systemDefault).assertIsDisplayed()
         assertTextFits("the list of languages", list)
     }

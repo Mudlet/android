@@ -283,6 +283,8 @@ copy and warns; the app makes the copy beside the profiles and adds it whole or 
 space sooner and a copy without its map looks like a profile that lost one. The desktop names the copy itself and
 lets the player rename it; a profile's name cannot change in the app, so its dialog offers the desktop's name and asks
 first. A game that is open is copied once it has closed and saved, as it is exported.
+The desktop also copies its credential store (`encryption_key`, `passwords/`) when its keychain is off; the app leaves
+it out, with the sign-in record `reconnect` that the desktop removes, as an export and the backup do.
 
 ## The games the profile list offers
 

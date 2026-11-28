@@ -96,6 +96,8 @@ class BackupRulesTest {
             "mudlet/profiles/My Game/media/bell.wav",
             // A package's own file of a secret's name is the package's
             "mudlet/profiles/My Game/mypackage/password",
+            "mudlet/profiles/My Game/mypackage/encryption_key",
+            "mudlet/profiles/My Game/mypackage/passwords/notes.txt",
             "mudlet/profiles/My Game/mypackage/log/notes.txt",
             "mudlet/profiles/log/current/2026-11-18#10-00-00.xml",
             "mudlet/Mudlet.ini",
@@ -115,6 +117,10 @@ class BackupRulesTest {
             "engine-stopped",
             "mudlet/profiles/My Game/password",
             "mudlet/profiles/My Game/irc_password",
+            // Desktop's credential store and saved sign-in, in a profile brought from a desktop with its keychain off
+            "mudlet/profiles/My Game/encryption_key",
+            "mudlet/profiles/My Game/passwords/0a1b2c.dat",
+            "mudlet/profiles/My Game/reconnect",
             "mudlet/profiles/../../passwords/profiles.json",
             "mudlet/profiles/./password",
             "mudlet/../passwords/profiles.json",

@@ -44,8 +44,11 @@ object ProfileArchive {
     private val SIGN_INS = setOf("encryption_key", "reconnect")
     private const val CREDENTIAL_STORE = "passwords"
 
-    /** Whether [name], at the top of a profile's folder, is one of its owner's secrets or sign-ins. */
-    private fun credential(name: String, isDirectory: Boolean) = if (isDirectory) name == CREDENTIAL_STORE else name in SECRETS || name in SIGN_INS
+    /**
+     * Whether [name], at the top of a profile's folder, is one of its owner's secrets or sign-ins, which no export,
+     * import, copy or backup takes.
+     */
+    fun credential(name: String, isDirectory: Boolean) = if (isDirectory) name == CREDENTIAL_STORE else name in SECRETS || name in SIGN_INS
 
     /** Where the engine keeps its profiles: Qt's AppDataLocation is the app's files folder (MudletEngine.cpp). */
     fun profilesDir(filesDir: File) = File(filesDir, "mudlet/profiles")

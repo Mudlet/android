@@ -594,7 +594,7 @@ added later travels only once it is named there:
 | SharedPreferences `settings` | yes | yes | the player's settings |
 | `files/passwords/` (`PasswordStore`) | no | no | its key stays in this device's KeyStore |
 | `files/settings/` (QtKeychain: Mudlet's sign-in tokens, under a KeyStore key of their own) | no | no | as the passwords |
-| `profiles/<name>/password`, `irc_password` | no | no | desktop's plain secret files; the engine does not write them here, and import and export drop them |
+| `profiles/<name>/password`, `irc_password`, `encryption_key`, `passwords/`, `reconnect` | no | no | desktop's secret files and sign-ins (`ProfileArchive.credential`); the engine does not write them here, and import, export and Copy drop them |
 | `files/engine-session.json`, `files/engine-stopped` | no | no | this device's engine runs: restored, a new phone would reopen and reconnect games at its first start, or keep the engine stopped |
 | SharedPreferences `engine` | no | no | `qpaPlatform` is the self-test's choice of platform for this device; `lastProfile` and `lastHost:` and the rest are where this device last went, and the profile list's own address stands in for them |
 | SharedPreferences `ui` | no | no | what this device asked and showed once: the notification permission (carried over, a new phone where it is not granted would never ask), the UI tour, an engine Android stopped, a crash report, the test build's update check, the feature callouts dismissed and how often each showed |

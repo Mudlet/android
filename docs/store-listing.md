@@ -336,6 +336,7 @@ cloud backup is made only when the transport encrypts it with the screen lock (`
 `disableIfNoEncryptionCapabilities` in `app/src/main/res/xml/data_extraction_rules.xml`). The XML rules
 (`data_extraction_rules.xml` from Android 12, `backup_rules.xml` before it) exclude the same secrets and engine state,
 and a restore keeps only what `BackupScope` takes, so a backup made elsewhere cannot bring a password back.
+Nor does either take the secret and sign-in files a profile from desktop may hold (`ProfileArchive.credential`).
 The backup is Google's service, in the user's own Google account and encrypted with their screen lock; it never reaches
 the developer, so it is not data collected or shared. `BackupRulesTest` checks the rules.
 A player can export one profile to a `.zip` (`app/src/main/kotlin/org/mudlet/android/ui/profiles/ProfileExport.kt`),

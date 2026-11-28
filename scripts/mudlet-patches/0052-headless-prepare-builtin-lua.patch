@@ -20,7 +20,7 @@ profile is open, and a profile opened as it is being unpacked loads from that on
 unpacked).
 
 Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
-Upstream: not opened yet
+Upstream: Mudlet/Mudlet#13039
 
 diff --git a/docs/headless.md b/docs/headless.md
 index 962cb4d3a..3980003ab 100644

@@ -121,7 +121,7 @@ def main():
     try:
         for checks in (engine_basics, tls_checks, profile_requests):
             checks(port)
-        for checks in (bridge_refusals, builtin_lua_ready, input_line, console, screen_and_main_window, start_sizes, main_window_info, starter_ui_welcome,
+        for checks in (bridge_refusals, builtin_lua_ready, input_line, console, client_name, screen_and_main_window, start_sizes, main_window_info, starter_ui_welcome,
                        links, app_state, script_windows, window_links,
                        script_labels, label_links, script_text_boxes, frame_tabs, button_bars, map_view, app_map,
                        map_layout, map_info, map_moves, map_rooms, map_edits, map_download, map_files, profile_settings, script_items, variables, sounds,
@@ -1489,6 +1489,80 @@ def console():
     colours = [m["value"] for m in msgs if m["t"] == "status" and m["key"] == "consoleColors"]
     check(len(colours) == 1 and colours[0].endswith(" #0a141e"), f"a UI that attaches is told the colours: {colours}")
     check(not any(m["t"] == "announce" for m in msgs), "but not the announcements it missed")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
+
+def answered(option, since, starts=b"", timeout=10):
+    """The body of the first IAC SB <option> ... IAC SE a client sent from fake_telnet.SUBNEGOTIATIONS[since] on that
+    starts with starts, or None."""
+    deadline = time.monotonic() + timeout
+    while True:
+        for got, body in fake_telnet.SUBNEGOTIATIONS[since:]:
+            if got == option and body.startswith(starts):
+                return body
+        if time.monotonic() >= deadline:
+            return None
+        time.sleep(0.05)
+
+
+def value_after(body, name, separator, ends):
+    """In a NEW-ENVIRON or MSDP body, the value after name and separator up to the next of the bytes ends, or None."""
+    found = body is not None and re.search(re.escape(name + bytes([separator])) + b"([^" + re.escape(ends) + b"]*)", body)
+    return found.group(1) if found else None
+
+
+def mxp_version_told(since, timeout=10):
+    """The CLIENT of the MXP <VERSION> reply the game got from fake_telnet.RECEIVED[since] on, or None."""
+    deadline = time.monotonic() + timeout
+    while True:
+        for line in fake_telnet.RECEIVED[since:]:
+            found = re.search(r"<VERSION MXP=1\.0 CLIENT=(\S+) VERSION=", line)
+            if found:
+                return found.group(1)
+        if time.monotonic() >= deadline:
+            return None
+        time.sleep(0.05)
+
+
+def client_name():
+    """The name the game is told the app goes by, in desktop Mudlet's case: MUDLET-ANDROID in TTYPE and NEW-ENVIRON,
+    Mudlet-Android in GMCP and MXP, and in MSDP and ATCP once a script has turned MSDP on and GMCP off."""
+    game = fake_telnet.start_in_thread(fake_telnet.LOGIN_BANNER)
+    proc, c = start_engine("Client Name Test")
+    msgs = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=msgs)
+    c.send({"t": "connect", "host": "127.0.0.1", "port": game})
+    wait_status(c, "connection", lambda v: v == "connected", msgs)
+    # Else the game's answer would continue the open "Login: " line
+    c.wait_for(shown("Login: "), timeout=10, collect=msgs)
+
+    since, received = len(fake_telnet.SUBNEGOTIATIONS), len(fake_telnet.RECEIVED)
+    c.send({"t": "send", "text": "identify"})
+    c.wait_for(shown("Identify sent"), collect=msgs)
+    ttype = answered(fake_telnet.TTYPE, since, bytes([fake_telnet.IS]))
+    check(ttype == bytes([fake_telnet.IS]) + b"MUDLET-ANDROID", f"TTYPE's first answer names the app: {ttype!r}")
+    environ = value_after(answered(fake_telnet.NEW_ENVIRON, since, bytes([fake_telnet.IS])), b"CLIENT_NAME",
+                          fake_telnet.ENVIRON_VAL, bytes([fake_telnet.ENVIRON_VAR, fake_telnet.ENVIRON_USERVAR]))
+    check(environ == b"MUDLET-ANDROID", f"NEW-ENVIRON's CLIENT_NAME names the app: {environ!r}")
+    hello = answered(fake_telnet.GMCP, since, b"Core.Hello ")
+    client = json.loads(hello[len(b"Core.Hello "):]).get("client") if hello else None
+    check(client == "Mudlet-Android", f"GMCP's Core.Hello names the app: {hello!r}")
+    client = mxp_version_told(received)
+    check(client == "Mudlet-Android", f"MXP's <VERSION> reply names the app: {client!r}")
+
+    c.send({"t": "runLua", "id": "protocols", "code": 'setConfig("enableMSDP", true) setConfig("enableGMCP", false)'})
+    m = wait_status(c, "luaResult", lambda v: True, msgs)
+    check(m["value"] == "ran", f"a script turns MSDP on and GMCP off: {m['value']}")
+    since = len(fake_telnet.SUBNEGOTIATIONS)
+    c.send({"t": "send", "text": "identify"})
+    c.wait_for(shown("Identify sent"), collect=msgs)
+    msdp = value_after(answered(fake_telnet.MSDP, since, bytes([fake_telnet.MSDP_VAR]) + b"CLIENT_NAME"), b"CLIENT_NAME",
+                       fake_telnet.MSDP_VAL, bytes([fake_telnet.MSDP_VAR]))
+    check(msdp == b"Mudlet-Android", f"MSDP's CLIENT_NAME names the app: {msdp!r}")
+    atcp = answered(fake_telnet.ATCP, since, b"hello ")
+    check(atcp is not None and atcp.startswith(b"hello Mudlet-Android "), f"ATCP's hello names the app: {atcp[:40] if atcp else atcp!r}")
+
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 

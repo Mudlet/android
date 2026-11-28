@@ -40,6 +40,7 @@ import org.mudlet.android.protocol.Requests
 import org.mudlet.android.protocol.StartSizes
 import org.mudlet.android.protocol.Transport
 import org.mudlet.android.ui.game.Announcer
+import org.mudlet.android.ui.game.CommandSuggestions
 import org.mudlet.android.ui.game.ScriptWebPages
 import java.io.IOException
 import java.io.InputStream
@@ -81,7 +82,7 @@ object EngineClient {
 
     /** The profile last opened, kept across UI process restarts: what Reconnect opens again while none is open. */
     var lastProfile by mutableStateOf<String?>(null)
-        private set
+        @VisibleForTesting internal set
 
     /** Whether Reconnect has something to do: [front]'s address, or, while no profile is open, [lastProfile]. */
     val canReconnect: Boolean get() = frontSession?.let { it.lastAddress != null } ?: (lastProfile != null)
@@ -387,13 +388,24 @@ object EngineClient {
     }
 
     fun deleteProfile(name: String, onAnswer: (error: String?) -> Unit) = profileRequest({ error ->
-        if (error == null) {
-            Settings.setAwaitsDefaults(name, false)
-            Settings.setAwaitsInputClear(name, false)
-            AppMapClient.forgetAutoDownload(app, name)
-        }
+        if (error == null) forgetDeleted(name)
         onAnswer(error)
     }) { Requests.deleteProfile(name, it) }
+
+    // What the app keeps by the name of [name], deleted, so that a profile added again of that name, a game's as the
+    // list offers it again, starts as a new one does
+    private fun forgetDeleted(name: String) {
+        Settings.setAwaitsDefaults(name, false)
+        Settings.setAwaitsInputClear(name, false)
+        AppMapClient.forgetAutoDownload(app, name)
+        ProfileSession.forgetAddress(prefs(), name)
+        ConsoleZoomClient.forget(prefs(), name)
+        CommandSuggestions.forget(app, name)
+        if (lastProfile.equals(name, ignoreCase = true)) {
+            lastProfile = null
+            prefs().edit { remove(PREF_LAST_PROFILE) }
+        }
+    }
 
     /** Asks the engine to list its profiles again, as it does not see one added beside it, as an import adds one. */
     fun refreshProfiles(onAnswer: (error: String?) -> Unit) = profileRequest(onAnswer) { Requests.listProfiles(it) }

@@ -370,10 +370,12 @@ fun ProfileEditor(name: String?, onClose: () -> Unit, fromLink: Profile? = null,
                     ProfileCopy(name, open, passwordStored)
                     ProfileLogs(name)
                     HorizontalDivider(Modifier.padding(top = 16.dp))
+                    // As desktop's Remove: the engine refuses to delete a profile in use
+                    if (open) Text(stringResource(R.string.profile_delete_while_open, name), Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodyMedium)
                     OutlinedButton(
                         { confirmDelete = true },
                         Modifier.padding(top = 8.dp),
-                        enabled = !waiting,
+                        enabled = !waiting && !open,
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
                     ) { Text(stringResource(R.string.profile_delete)) }
                 }
@@ -399,7 +401,10 @@ fun ProfileEditor(name: String?, onClose: () -> Unit, fromLink: Profile? = null,
                             // Or a new profile of this name would log in with it
                             !passwords.forget(name) || !passwords.forget(name, PasswordStore.Kind.PROXY) -> error = passwordNotForgotten
 
-                            else -> onClose()
+                            else -> {
+                                DeletedProfile.name = name
+                                onClose()
+                            }
                         }
                     }
                 }) { Text(stringResource(R.string.profile_delete)) }

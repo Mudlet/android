@@ -67,6 +67,19 @@ object CommandSuggestions {
         state.linesShown(shown)
     }
 
+    /** Deletes the profile [profile]'s suggestions and pinned commands, for a deleted profile, and drops them from memory. */
+    fun forget(context: Context, profile: String) {
+        registry.remove(profile)
+        sessions.remove(profile)?.discard()
+        pins.remove(profile)
+        val dir = dir(context)
+        // After the discard on the one worker thread, and after any pin asked for before: neither writes again
+        worker.schedule(0) {
+            val left = listOf(SuggestFile.forProfile(dir, profile), SuggestFile.pinsForProfile(dir, profile)).count { !it.delete() }
+            if (left > 0) Log.e(TAG, "a deleted profile's suggestion files were not deleted: $left")
+        }
+    }
+
     /** Saves what each profile learned since its last save, as the app leaves the front and may be killed. */
     fun saveAll() = sessions.values.forEach(SuggestionSession::save)
 

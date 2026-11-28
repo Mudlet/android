@@ -21,6 +21,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -64,7 +65,8 @@ import org.mudlet.android.update.PtbUpdates
  * a tap on an open game does (docs/multi-profile.md, "The switcher"). A tap on one of Mudlet's games adds it as a
  * profile of its name, then connects the same way. Its top bar opens the settings and the About screen. [selected] is
  * the profile whose editor is open beside the list, if one is. A PTB from GitHub tells of a newer one above the list
- * ([PtbUpdateNotice]).
+ * ([PtbUpdateNotice]). After a game's profile is deleted, a line above the list tells that the game stays offered, as
+ * desktop's dialog does, since the list itself shows no sign of what was deleted ([DeletedProfile]).
  */
 @Composable
 fun ProfileListScreen(
@@ -97,8 +99,18 @@ fun ProfileListScreen(
     LaunchedEffect(error) {
         if (error != null) list.animateScrollToItem(0)
     }
+    DisposableEffect(Unit) { onDispose { DeletedProfile.name = null } }
+    // Only once the profiles are known, as those already added are left out
+    val offered = profiles?.let { DefaultGames.offered(defaultGames, it) }.orEmpty()
+    val deletedGame = DeletedProfile.name?.let { name -> offered.firstOrNull { it.name.equals(name, ignoreCase = true) } }
+    fun edit(name: String?) {
+        DeletedProfile.name = null
+        onEditProfile(name)
+    }
+
     fun connect(name: String) {
         error = null
+        DeletedProfile.name = null
         // Without alongside, the engine would close the games open
         val open = if (games.isEmpty()) EngineClient::openProfile else EngineClient::openProfileAlongside
         open(name, passwords.get(name)) { refused ->
@@ -109,6 +121,7 @@ fun ProfileListScreen(
     fun connectGame(game: DefaultGame) {
         if (adding) return
         info = null
+        DeletedProfile.name = null
         val existing = DefaultGames.profileFor(game, profiles.orEmpty())
         if (existing != null) return connect(existing.name)
         error = null
@@ -128,7 +141,7 @@ fun ProfileListScreen(
         floatingActionButton = {
             val add = stringResource(R.string.profiles_add)
             ExtendedFloatingActionButton(
-                onClick = { onEditProfile(null) },
+                onClick = { edit(null) },
                 // Material clears the text's semantics, so the icon names the button for TalkBack
                 icon = { Icon(painterResource(R.drawable.ic_add), contentDescription = add) },
                 text = { Text(add) },
@@ -139,6 +152,13 @@ fun ProfileListScreen(
             // Above the list, not in it: a lazy list keeps its first visible item in place when an item is put before
             // it, so a notice that comes while the list shows would be out of sight
             if (PtbUpdates.notice != null) PtbUpdateNotice(Modifier.padding(start = 16.dp, top = 8.dp, end = 16.dp))
+            deletedGame?.let {
+                Text(
+                    stringResource(R.string.profile_deleted_game_stays, it.name),
+                    Modifier.padding(start = 16.dp, top = 8.dp, end = 16.dp).semantics { liveRegion = LiveRegionMode.Polite },
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+            }
             LazyColumn(
                 Modifier.weight(1f).fillMaxWidth(),
                 list,
@@ -177,7 +197,7 @@ fun ProfileListScreen(
                             profiles.size,
                             selected = profile.name == selected,
                             onConnect = { connect(profile.name) },
-                            onEdit = { onEditProfile(profile.name) },
+                            onEdit = { edit(profile.name) },
                         )
                     }
                 }
@@ -185,8 +205,6 @@ fun ProfileListScreen(
                 if (onOpenSelfTest != null) {
                     item { OutlinedButton(onOpenSelfTest, Modifier.padding(top = 12.dp)) { Text(stringResource(R.string.selftest_title)) } }
                 }
-                // Only once the profiles are known, as those already added are left out
-                val offered = profiles?.let { DefaultGames.offered(defaultGames, it) }.orEmpty()
                 if (offered.isNotEmpty()) {
                     item { SectionHeader(stringResource(R.string.default_games_title)) }
                     itemsIndexed(offered, key = { _, game -> "default:" + game.name }) { i, game ->
@@ -200,6 +218,11 @@ fun ProfileListScreen(
     defaultGames.firstOrNull { it.name == info }?.let { game ->
         DefaultGameInfo(game, onConnect = { connectGame(game) }, onDismiss = { info = null })
     }
+}
+
+/** The profile last deleted, by name, until the list is left or used. Main thread only. */
+internal object DeletedProfile {
+    var name by mutableStateOf<String?>(null)
 }
 
 @Composable

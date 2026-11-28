@@ -36,6 +36,9 @@ class SuggestFile(val file: File) : SuggestStore {
         }
     }
 
+    /** Deletes what is saved, if anything is; false if the file is still there. */
+    fun delete(): Boolean = file.delete() || !file.exists()
+
     companion object {
         /** The suggestions' file for [profile] in [dir]: its name URL-encoded, so any profile name is one file name. */
         fun forProfile(dir: File, profile: String) = named(dir, profile, ".txt")

@@ -14,7 +14,7 @@ import java.util.Locale
  * `setFontSize()` would ([ProfileSession.runAppLua]). Main thread only.
  */
 internal class ConsoleZoomClient(profile: String, private val prefs: () -> SharedPreferences, private val runLua: (String) -> Boolean) {
-    private val prefix = PREF_PREFIX + encode(profile.lowercase(Locale.ROOT)) + ":"
+    private val prefix = prefixOf(profile)
     private val zooms = mutableStateMapOf<String, ConsoleZoom>()
 
     init {
@@ -65,6 +65,14 @@ internal class ConsoleZoomClient(profile: String, private val prefs: () -> Share
 
     companion object {
         private const val PREF_PREFIX = "consoleZoom:"
+
+        /** Forgets the sizes kept for every console of the profile [profile], deleted. */
+        fun forget(prefs: SharedPreferences, profile: String) {
+            val prefix = prefixOf(profile)
+            prefs.edit { prefs.all.keys.filter { it.startsWith(prefix) }.forEach { remove(it) } }
+        }
+
+        private fun prefixOf(profile: String) = PREF_PREFIX + encode(profile.lowercase(Locale.ROOT)) + ":"
 
         /** Whether the player may pinch the console [name], which the engine reports at [reported] points. */
         fun zoomable(name: String, reported: Int): Boolean = reported > 0 && name.isNotEmpty() && name != MAIN_CONSOLE

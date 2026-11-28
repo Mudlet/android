@@ -2,6 +2,7 @@ package org.mudlet.android.suggest
 
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
@@ -33,6 +34,23 @@ class SuggestFileTest {
     @Test
     fun nothingSavedLoadsNothing() {
         assertNull(SuggestFile.forProfile(dir, "new").load { fail("read with no file") })
+    }
+
+    @Test
+    fun deleteRemovesWhatWasSavedAndNothingSavedIsNoError() {
+        val file = SuggestFile.forProfile(dir, "Gone")
+        file.save { it.write("look") }
+        assertTrue(file.delete())
+        assertFalse(file.file.exists())
+        assertTrue("nothing saved is nothing left", file.delete())
+    }
+
+    @Test
+    fun deleteSaysWhatItCouldNotDelete() {
+        val file = SuggestFile.forProfile(dir, "Kept")
+        // A folder that is not empty, where the file would be, is still there after a delete
+        assertTrue(File(file.file, "inside").let { it.parentFile!!.mkdirs() && it.createNewFile() })
+        assertFalse(file.delete())
     }
 
     @Test

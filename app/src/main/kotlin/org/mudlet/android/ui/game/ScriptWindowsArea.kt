@@ -237,7 +237,9 @@ private fun WindowsArea(
     content: @Composable (consoleModifier: Modifier, mapperDrawn: Boolean) -> Unit,
 ) {
     val client = EngineClient.front.windows
-    val windows = client.drawn
+    val windows = client.drawn.let { d ->
+        if (d === client.state) d else d.copy(windows = client.state.windows.filter { w -> w.kind == org.mudlet.android.protocol.WindowKind.LABEL || d.windows.any { it.key == w.key } })
+    }
     val metrics = rememberConsoleMetrics(textSizeSp)
     val density = LocalDensity.current
     val headerHeight = with(density) { HEADER_HEIGHT.toPx() }
@@ -259,7 +261,7 @@ private fun WindowsArea(
         val layout = remember(asShown, windows) { if (windows === client.state) asShown else layoutOf(windows) }
         // A new engine instance has none of what the last was told
         val attaches = EngineClient.front.attaches
-        LaunchedEffect(asShown.mainWindowSize, attaches) { asShown.mainWindowSize?.let(client::setMainWindowSize) }
+        LaunchedEffect(layout.mainWindowSize, attaches) { layout.mainWindowSize?.let(client::setMainWindowSize) }
         // What a profile with no windows yet is given here, for the next one opened before this screen has measured it
         val startSize = remember(windows.charWidth, w, h, fitted, metrics, headerHeight) {
             WindowLayout.of(ScriptWindows(charWidth = windows.charWidth), WindowLayout.Area(w, h, fitted, metrics.charWidth, headerHeight, null)).mainWindowSize

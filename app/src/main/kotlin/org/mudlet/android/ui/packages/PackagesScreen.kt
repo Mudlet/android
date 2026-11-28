@@ -308,7 +308,7 @@ private fun InstalledRow(item: InstalledPackage, shownAnyway: Boolean?, onShownA
 @Composable
 private fun LargerScreensRow(name: String, shown: Boolean, onShown: (Boolean) -> Unit) {
     val named = stringResource(R.string.packages_ui_show_anyway_named, name)
-    Column(Modifier.widthIn(max = MAX_WIDTH).fillMaxWidth().padding(start = 72.dp, end = 16.dp, bottom = 8.dp)) {
+    Column(Modifier.widthIn(max = MAX_WIDTH).fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 8.dp)) {
         Text(stringResource(R.string.packages_ui_larger_screens), style = MaterialTheme.typography.bodySmall)
         Row(
             Modifier

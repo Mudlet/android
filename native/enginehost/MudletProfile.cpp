@@ -821,7 +821,6 @@ void MudletProfile::connectSession()
         pushMainArea();
         if (QList<std::pair<QString, bool>> flags = packageMobileFlags(); flags != mPackageMobile) {
             mPackageMobile = std::move(flags);
-            mFrontend->packagesChanged();
         }
     });
     connect(session, &THeadlessSession::packageInstallFinished, this, [this](const QString& path, THeadlessSession::PackageResult result, const QString& error) {

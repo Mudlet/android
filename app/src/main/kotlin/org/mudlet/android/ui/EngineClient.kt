@@ -40,7 +40,6 @@ import org.mudlet.android.protocol.Requests
 import org.mudlet.android.protocol.StartSizes
 import org.mudlet.android.protocol.Transport
 import org.mudlet.android.ui.game.Announcer
-import org.mudlet.android.ui.game.CommandSuggestions
 import org.mudlet.android.ui.game.ScriptWebPages
 import java.io.IOException
 import java.io.InputStream
@@ -398,13 +397,6 @@ object EngineClient {
         Settings.setAwaitsDefaults(name, false)
         Settings.setAwaitsInputClear(name, false)
         AppMapClient.forgetAutoDownload(app, name)
-        ProfileSession.forgetAddress(prefs(), name)
-        ConsoleZoomClient.forget(prefs(), name)
-        CommandSuggestions.forget(app, name)
-        if (lastProfile.equals(name, ignoreCase = true)) {
-            lastProfile = null
-            prefs().edit { remove(PREF_LAST_PROFILE) }
-        }
     }
 
     /** Asks the engine to list its profiles again, as it does not see one added beside it, as an import adds one. */

@@ -375,7 +375,7 @@ fun ProfileEditor(name: String?, onClose: () -> Unit, fromLink: Profile? = null,
                     OutlinedButton(
                         { confirmDelete = true },
                         Modifier.padding(top = 8.dp),
-                        enabled = !waiting && !open,
+                        enabled = !waiting,
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
                     ) { Text(stringResource(R.string.profile_delete)) }
                 }
@@ -401,10 +401,7 @@ fun ProfileEditor(name: String?, onClose: () -> Unit, fromLink: Profile? = null,
                             // Or a new profile of this name would log in with it
                             !passwords.forget(name) || !passwords.forget(name, PasswordStore.Kind.PROXY) -> error = passwordNotForgotten
 
-                            else -> {
-                                DeletedProfile.name = name
-                                onClose()
-                            }
+                            else -> onClose()
                         }
                     }
                 }) { Text(stringResource(R.string.profile_delete)) }

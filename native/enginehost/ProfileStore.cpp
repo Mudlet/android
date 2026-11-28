@@ -103,7 +103,7 @@ QString ProfileStore::save(const Profile& profile, bool isNew)
 
 QString ProfileStore::remove(const QString& folder)
 {
-    if (!QDir(folderPath(folder)).removeRecursively()) {
+    if (!QDir(QDir(folderPath(folder)).filePath(QStringLiteral("current"))).removeRecursively()) {
         // What could be removed is gone, so what is left is listed as it now is
         return QStringLiteral("could not delete all of %1").arg(folderPath(folder));
     }

@@ -1,6 +1,7 @@
 package org.mudlet.android.ui
 
 import android.Manifest
+import android.content.Context
 import android.net.Uri
 import android.os.Build
 import androidx.annotation.StringRes
@@ -38,6 +39,7 @@ import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.compose.ui.text.AnnotatedString
+import androidx.core.content.edit
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
 import org.json.JSONObject
@@ -57,13 +59,16 @@ import org.mudlet.android.data.PasswordStore
 import org.mudlet.android.data.ProfileArchive
 import org.mudlet.android.data.ProfileFolderCopy
 import org.mudlet.android.data.Settings
+import org.mudlet.android.engine.EngineService
 import org.mudlet.android.protocol.Profile
+import org.mudlet.android.ui.game.CommandSuggestions
 import org.mudlet.android.ui.game.GAME_TITLE_TAG
 import org.mudlet.android.ui.profiles.Copies
 import org.mudlet.android.ui.profiles.CopyKind
 import org.mudlet.android.ui.profiles.CopyState
 import org.mudlet.android.ui.profiles.DefaultGame
 import org.mudlet.android.ui.profiles.DefaultGames
+import org.mudlet.android.ui.profiles.DeletedProfile
 import org.mudlet.android.ui.profiles.Exports
 import org.mudlet.android.ui.profiles.Imports
 import org.mudlet.android.ui.profiles.copyProfile
@@ -108,6 +113,9 @@ class ProfilesTest {
             Settings.setAwaitsDefaults(it, false)
             Settings.setAwaitsInputClear(it, false)
         }
+        enginePrefs().edit(commit = true) { STICKMUD_KEYS.forEach { remove(it) } }
+        suggestFiles().forEach { it.delete() }
+        compose.runOnIdle { DeletedProfile.name = null }
     }
 
     @Test
@@ -862,6 +870,66 @@ class ProfilesTest {
     }
 
     @Test
+    fun deletingAProfileForgetsItsAddressConsoleSizesAndLastUse() {
+        val stick = game(STICKMUD)
+        // What playing the game left in the engine's preferences, beside its passwords and the engine's own folder
+        enginePrefs().edit(commit = true) {
+            putString("lastProfile", STICKMUD)
+            putString("lastHost:$STICKMUD", stick.host)
+            putInt("lastPort:$STICKMUD", stick.port)
+            putBoolean("lastTls:$STICKMUD", true)
+            putString("consoleZoom:stickmud:chat", "20,0")
+            putBoolean("mapAutoDownload:stickmud", true)
+        }
+        compose.runOnIdle { EngineClient.lastProfile = STICKMUD }
+        deleteStickMud()
+        compose.runOnIdle {
+            val left = enginePrefs().all.keys.filter { it in STICKMUD_KEYS }
+            assertEquals("the app keeps nothing more by the deleted profile's name", emptyList<String>(), left)
+            assertNull("Reconnect has no deleted profile to open again", EngineClient.lastProfile)
+        }
+    }
+
+    @Test
+    fun deletingAProfileDeletesItsCommandSuggestionsAndPins() {
+        suggestFiles().forEach {
+            it.parentFile?.mkdirs()
+            it.writeText("look\n")
+        }
+        deleteStickMud()
+        // On the suggestions' worker thread
+        compose.waitUntil(10_000) { suggestFiles().none(File::exists) }
+    }
+
+    @Test
+    fun deletingAGamesProfileSaysTheGameStaysInTheListUntilTheListIsUsed() {
+        val stick = game(STICKMUD)
+        deleteStickMud()
+        val notice = string(R.string.profile_deleted_game_stays, STICKMUD)
+        waitFor(hasText(notice))
+        compose.onNodeWithText(notice).assertIsDisplayed()
+        compose.onRoot().tryPerformAccessibilityChecks()
+        scrollToGame(gameRow(stick))
+        activate(gameRow(stick))
+        engine.refuse(engine.receive("saveProfile"), "the disk is full")
+        compose.onNodeWithText(notice).assertDoesNotExist()
+    }
+
+    @Test
+    fun keepsDeleteOffWhileTheGameIsOpenAndSaysWhy() {
+        val alpha = openedByTheEngine(ALPHA)
+        editOpenGame("Alpha")
+        alpha.proxy(false, "", 0, "", alpha.receive("getProxy").get("id"))
+        unfold(R.string.profile_manage_section)
+        val why = hasText(string(R.string.profile_delete_while_open, "Alpha"))
+        scrollIntoView(why)
+        compose.onNode(why).assertIsDisplayed()
+        compose.onNode(hasText(string(R.string.profile_delete)) and hasClickAction()).performScrollTo().assertIsNotEnabled()
+        compose.onRoot().tryPerformAccessibilityChecks()
+        engine.assertNoRequest("deleteProfile", 500)
+    }
+
+    @Test
     fun opensAProfileWithItsStoredPasswordAndGoesToTheGame() {
         assertTrue(passwords.set("Alpha", "alpha secret"))
         assertTrue(passwords.set("Alpha", "proxy secret", PasswordStore.Kind.PROXY))
@@ -1088,6 +1156,22 @@ class ProfilesTest {
 
     private fun string(@StringRes id: Int, vararg args: Any) = compose.activity.getString(id, *args)
 
+    private fun enginePrefs() = compose.activity.getSharedPreferences(EngineService.PREFS, Context.MODE_PRIVATE)
+
+    // StickMUD's profile, listed beside Alpha, deleted from its editor; the engine answers with Alpha alone
+    private fun deleteStickMud() {
+        listed(game(STICKMUD).newProfile(), ALPHA)
+        activate(hasContentDescription(string(R.string.profile_edit, STICKMUD)))
+        unfold(R.string.profile_manage_section)
+        activate(hasText(string(R.string.profile_delete)))
+        activate(hasText(string(R.string.profile_delete)) and hasAnyAncestor(isDialog()))
+        engine.profiles(listOf(ALPHA), engine.receive("deleteProfile"))
+        // Alpha's Edit shows throughout beside a tablet's editor; a runOnIdle after this follows the answer's handling
+        compose.waitUntil(10_000) { EngineClient.profiles == listOf(ALPHA) }
+    }
+
+    private fun suggestFiles() = CommandSuggestions.dir(compose.activity).let { listOf(File(it, "$STICKMUD.txt"), File(it, "$STICKMUD.pins")) }
+
     private fun field(@StringRes label: Int) = compose.onNode(hasSetTextAction() and hasText(string(label)))
 
     // Through the field's accessibility action, as TalkBack sets text: no keyboard comes up to cover the editor
@@ -1129,6 +1213,9 @@ class ProfilesTest {
         // Two of Mudlet's games (app/src/main/assets/games), StickMUD's connection secure
         const val ACHAEA = "Achaea"
         const val STICKMUD = "StickMUD"
+
+        // What the app keeps by StickMUD's name in the engine's preferences
+        val STICKMUD_KEYS = listOf("lastProfile", "lastHost:$STICKMUD", "lastPort:$STICKMUD", "lastTls:$STICKMUD", "consoleZoom:stickmud:chat", "mapAutoDownload:stickmud")
 
         // A profile folder the fake engine knows nothing of, made and removed by the export test
         const val EXPORTED = "Export Test"

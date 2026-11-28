@@ -508,6 +508,16 @@ password: "Log in automatically" (the character name and password; open from the
 the log files and, apart and last, Delete). "Advanced" opens by itself when a proxy Save waits for needs putting right.
 What is open lasts through a rotation, and a folded field is saved as a shown one is.
 
+Delete is off while the game is open, with a line that says to close it first, as desktop's Remove is for a profile in
+use and as the engine would refuse it. Once the engine has deleted a profile, the editor forgets its passwords and
+`EngineClient.forgetDeleted` the rest the app keeps by its name: its last address, its consoles' sizes, its map download
+choice, its command suggestions and pinned commands (deleted on their worker, where a save still waiting is dropped), the
+settings it was still to be given, and `lastProfile` if it was that one, so Reconnect does not open it again. A profile
+added again of that name, a game's as the list offers it again, so starts as a new one does. For a game's profile a line
+above the list says so, desktop's "Removed everything saved for …" (`DeletedProfile`), until the list is used or left,
+as the list itself shows no sign of what went. Mudlet's GMCP sign-in token for the game, kept by QtKeychain, stays until
+a sign-in replaces it: desktop's Remove forgets it, and the engine has no request for that yet.
+
 Below the profiles, under "More games", the list offers the games of Mudlet's connection dialog
 (`ui/profiles/DefaultGames.kt`, from `assets/games/games.json` and its logos, which `scripts/sync-mudlet-games.py`
 copies from Mudlet's `src/TGameDetails.h` at a pinned commit), each with its logo, name and the first paragraph of its

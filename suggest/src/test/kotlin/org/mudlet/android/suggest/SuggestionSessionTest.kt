@@ -278,6 +278,19 @@ class SuggestionSessionTest {
     }
 
     @Test
+    fun aDiscardedSessionSavesNothingMore() {
+        val session = session()
+        worker.advance()
+        session.sent("look")
+        session.discard()
+        worker.advance(SuggestionSession.SAVE_DELAY_MS)
+        session.save()
+        worker.advance()
+        assertEquals("the save the send asked for is not written after the discard", 0, store.saves)
+        assertNull(store.text)
+    }
+
+    @Test
     fun openLoadsOnce() {
         store.text = savedWith("look")
         val session = session()

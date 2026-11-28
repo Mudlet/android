@@ -45,6 +45,7 @@ class SuggestionSession(
 
     // The worker's
     private var loadFailed = false
+    private var discarded = false
     private var changed = false
     private var savePending = false
     private val echoes = ArrayDeque<Echo>()
@@ -154,6 +155,16 @@ class SuggestionSession(
         worker.schedule(0) { saveIfChanged() }
     }
 
+    /**
+     * Saves nothing from now on, for a deleted profile: a save already waiting on [worker] would write the file back
+     * after the app deletes it. A task the caller schedules on [worker] after this runs after it.
+     */
+    fun discard() {
+        dropPendingAnswer()
+        dropPendingSearch()
+        worker.schedule(0) { discarded = true }
+    }
+
     private fun learned() {
         changed = true
         if (savePending) return
@@ -165,7 +176,7 @@ class SuggestionSession(
     }
 
     private fun saveIfChanged() {
-        if (!changed || loadFailed) return
+        if (!changed || loadFailed || discarded) return
         try {
             store.save(suggester::save)
             changed = false

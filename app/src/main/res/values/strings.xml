@@ -215,6 +215,10 @@
     <string name="profile_delete_text">Its settings, scripts and everything else Mudlet keeps for it on this device are deleted too.</string>
     <!-- The button of the delete confirmation dialog that keeps the profile -->
     <string name="profile_delete_cancel">Cancel</string>
+    <!-- Shown in the profile editor above its disabled Delete button while the game is open; %1$s is the profile's name -->
+    <string name="profile_delete_while_open">%1$s is open. Close the game to delete it.</string>
+    <!-- Shown above the list of profiles after the profile of one of Mudlet's games was deleted, as the list offers the game again; %1$s is the game's name, e.g. Achaea -->
+    <string name="profile_deleted_game_stays">Removed everything saved for %1$s. The game itself stays in the list, ready to play again.</string>
     <!-- The heading of the profile editor's part that saves the profile to a file -->
     <string name="profile_export_title">Export</string>
     <!-- Under the profile editor's Export heading: what the exported file holds, where it opens (Mudlet Web is the browser edition of Mudlet) and that passwords are not in it -->

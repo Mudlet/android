@@ -125,7 +125,7 @@ def main():
                        links, app_state, script_windows, window_links,
                        script_labels, label_links, script_text_boxes, frame_tabs, button_bars, map_view, app_map,
                        map_layout, map_info, map_moves, map_rooms, map_edits, map_download, map_files, profile_settings, script_items, variables, sounds,
-                       clipboard, file_dialog, web_pages, script_speech, packages, error_console, default_packages, key_bindings, scripts_stopped,
+                       clipboard, file_dialog, web_pages, script_speech, packages, deleted_profile_stays_gone, error_console, default_packages, key_bindings, scripts_stopped,
                        replay_recording, time_stamps, line_updates, replay_playback):
             checks()
         checks = secure_offer
@@ -5942,6 +5942,62 @@ def packages():
     for kind, field in (("installPackage", "path"), ("uninstallPackage", "name")):
         m = ask({"t": kind, field: ""})
         check(m.get("message") == f"{kind}: {field} must not be empty", f"{kind} with no {field} is refused: {m}")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
+
+def deleted_profile_stays_gone():
+    """A profile deleted once it is closed, with a package installed, as a game's profile the player has played: its
+    folder goes, and an engine started again lists it no more; a profile saved again of its name starts with none of
+    what the deleted one had."""
+    profile = "Deleted Game"
+    folder = os.path.join(TMP, "deleted-profile")
+    os.makedirs(folder, exist_ok=True)
+    home = os.path.join(CONFIG, "profiles", profile)
+    proc, c = start_engine()
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+
+    def ask(request):
+        return c.ask(request, answers=("profiles", "packages", "error"), collect=seen)
+
+    def open_loaded():
+        ask({"t": "saveProfile", "name": profile, "host": "127.0.0.1", "port": 23, "tls": False, "login": "", "autoReconnect": False})
+        c.send({"t": "openProfile", "name": profile, "connect": False})
+        wait_status(c, "profile", lambda v: v == f"{profile} loaded", seen)
+
+    open_loaded()
+    since = len(seen)
+    c.send({"t": "installPackage", "path": package_file("Gone Pack", folder, {"title": "A package of the deleted profile"})})
+    m = seen_or_next(c, lambda m: m["t"] == "packageInstalled", seen, since, timeout=15)
+    check(m.get("result") == "installed", f"the profile has a package of its own: {m}")
+    c.send({"t": "closeProfile", "name": profile})
+    # Refused until the profile has closed
+    t0 = time.monotonic()
+    while True:
+        m = ask({"t": "deleteProfile", "name": profile})
+        if m["t"] == "profiles" or time.monotonic() - t0 > 30:
+            break
+        time.sleep(0.2)
+    check(m["t"] == "profiles" and profile not in [p["name"] for p in m.get("profiles", [])] and not os.path.exists(home),
+          f"deleteProfile answers without it, and its folder goes: {m.get('t')} {m.get('message', '')}")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
+    proc, c = start_engine()
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    m = ask({"t": "listProfiles"})
+    check(profile not in [p["name"] for p in m.get("profiles", [])] and not os.path.exists(home),
+          f"an engine started again lists it no more, nor makes its folder: {m.get('t')}")
+    open_loaded()
+    m = ask({"t": "packages"})
+    check(m["t"] == "packages" and "Gone Pack" not in [p["name"] for p in m.get("packages", [])],
+          f"a profile saved again of its name has none of the deleted one's packages: {m}")
+    c.send({"t": "closeProfile", "name": profile})
+    t0 = time.monotonic()
+    while ask({"t": "deleteProfile", "name": profile})["t"] != "profiles" and time.monotonic() - t0 < 30:
+        time.sleep(0.2)
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 

@@ -57,7 +57,7 @@ game" in the empty map's right-click menu and a button in the profile's mapper s
 game expects the map the game offers, and the desktop's offer is in menus and settings a touch player rarely finds. It
 could go to the desktop as an option.
 Like the button, it downloads only from the web: the engine refuses a `Client.Map` that is not an `http` or `https`
-URL with a host (Mudlet patch `0051-map-web-links-only.patch`, meant for the desktop too).
+URL with a host, as the desktop does (Mudlet/Mudlet#13022).
 
 ## The map info box
 

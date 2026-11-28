@@ -24,7 +24,7 @@ Tested by MainWindowInfo_spec.lua, HeadlessSessionAreaTest, and Mudlet/android's
 event raised for a class change only, and adaptive in mainArea after setAdaptiveLayout()).
 
 Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
-Upstream: not opened yet
+Upstream: Mudlet/Mudlet#13023
 
 diff --git a/docs/headless.md b/docs/headless.md
 index 18ca792e6..493112bfa 100644

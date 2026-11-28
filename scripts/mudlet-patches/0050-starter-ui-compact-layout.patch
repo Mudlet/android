@@ -20,7 +20,7 @@ opening and closing their tabs over the console, unread counts and screen reader
 less than 48 logical pixels tall at any scale, the dock back on the right, and a moved dock left alone).
 
 Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
-Upstream: not opened yet
+Upstream: Mudlet/Mudlet#13023
 
 diff --git a/src/mudlet-lua/tests/UI_spec.lua b/src/mudlet-lua/tests/UI_spec.lua
 index 1ab96c9..f41cd91 100644
